@@ -10,6 +10,7 @@
     "start": "node dist/index.js",
     "start:prod": "cross-env NODE_ENV=production node dist/index.js",
     "typecheck": "tsc --noEmit",
+    "test:smoke": "cross-env NODE_ENV=test tsx src/scripts/smoke-auth.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

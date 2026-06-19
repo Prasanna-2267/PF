@@ -4,7 +4,7 @@ import { logger } from '../lib/logger.js';
 
 export type MailInput = { to: string; subject: string; html: string; text?: string };
 
-interface Mailer {
+export interface Mailer {
   send(input: MailInput): Promise<void>;
 }
 
@@ -40,10 +40,15 @@ function createMailer(): Mailer {
   return new ConsoleMailer();
 }
 
-export const mailer = createMailer();
+let activeMailer: Mailer = createMailer();
+
+/** Override the mailer (used by tests to capture OTPs). */
+export function setMailer(mailer: Mailer): void {
+  activeMailer = mailer;
+}
 
 export async function sendOtpEmail(to: string, code: string): Promise<void> {
-  await mailer.send({
+  await activeMailer.send({
     to,
     subject: 'Your Parallax Flow verification code',
     text: `Your verification code is ${code}. It expires in 10 minutes.`,

@@ -1,14 +1,18 @@
 import pino from 'pino';
-import { isDev } from '../config/env.js';
+import { env, isDev } from '../config/env.js';
+
+const isTest = env.NODE_ENV === 'test';
 
 export const logger = pino(
-  isDev
-    ? {
-        level: 'debug',
-        transport: {
-          target: 'pino-pretty',
-          options: { colorize: true, translateTime: 'SYS:HH:MM:ss', ignore: 'pid,hostname' },
-        },
-      }
-    : { level: 'info' },
+  isTest
+    ? { level: 'silent' }
+    : isDev
+      ? {
+          level: 'debug',
+          transport: {
+            target: 'pino-pretty',
+            options: { colorize: true, translateTime: 'SYS:HH:MM:ss', ignore: 'pid,hostname' },
+          },
+        }
+      : { level: 'info' },
 );
