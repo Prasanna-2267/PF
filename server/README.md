@@ -5,7 +5,7 @@ Express + TypeScript API for Parallax Flow.
 ## Prerequisites
 
 - Node.js 20+ (tested on 24)
-- MongoDB and Redis running locally (optional in Phase 0; required from Phase 1)
+- A MongoDB connection (MongoDB Atlas free tier recommended — no install — or a local MongoDB). Required from Phase 1.
 
 ## Setup
 
@@ -35,8 +35,9 @@ The API starts on `http://localhost:4000`. Health check: `GET /health`.
 Config is loaded layered, most-specific first (the host/script environment always
 wins over files): `.env.<NODE_ENV>.local` → `.env.<NODE_ENV>` → `.env.local` → `.env`.
 
-- **Dev**: `npm run dev` (uses safe localhost defaults; create `.env` or
-  `.env.development` for overrides). Start MongoDB + Redis locally from Phase 1.
+- **Dev**: `npm run dev`. Set `MONGODB_URI` in `.env` (Atlas or local) from
+  Phase 1. Leave mail vars blank to print OTPs to the server log instead of
+  sending email. JWT secrets are optional in dev (a temporary one is used).
 - **Prod**: `npm run build` then `npm run start:prod`. Provide secrets via host
   env vars or `.env.production` (never committed). `NODE_ENV=production` switches
   off pretty logging and enables prod behavior.
@@ -45,13 +46,13 @@ wins over files): `.env.<NODE_ENV>.local` → `.env.<NODE_ENV>` → `.env.local`
 
 ```
 src/
-├── index.ts        # entry: HTTP + Socket.io, DB/Redis connect, graceful shutdown
+├── index.ts        # entry: HTTP + Socket.io, Mongo connect, graceful shutdown
 ├── app.ts          # express app + middleware + route mounting
-├── config/env.ts   # validated environment
-├── lib/            # logger, db (mongoose), redis
-├── middleware/     # error handling (auth/rbac/rate-limit added in Phase 1+)
-├── modules/        # feature modules (added per phase)
-└── services/       # pdf, watermark, payments, ai-grade, mail (added per phase)
+├── config/         # env (Zod) + auth (secrets, token TTLs, cookie opts)
+├── lib/            # logger, db (mongoose)
+├── middleware/     # error/asyncHandler, requireAuth (single-device), requireRole
+├── modules/        # feature modules — auth (done); more per phase
+└── services/       # mail (done); pdf, watermark, payments, ai-grade per phase
 ```
 
 See `../docs/ARCHITECTURE.md` and `../docs/SECURITY.md` for the full design.

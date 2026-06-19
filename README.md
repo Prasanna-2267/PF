@@ -9,7 +9,7 @@ A secure, India-first learning platform for competitive-exam students (CA, NEET,
 | Frontend | React + Vite + TypeScript + Tailwind CSS + PDF.js |
 | Backend | Node.js + Express + TypeScript + Mongoose |
 | Database | MongoDB (local for dev, Atlas for prod) |
-| Cache / sessions | Redis |
+| Sessions / OTP | MongoDB (TTL indexes); Redis added later at scale |
 | Object storage | Cloudflare R2 (private) |
 | Auth | JWT (access + refresh), Google OAuth, email OTP |
 | Realtime | Socket.io (single-device enforcement) |

@@ -20,7 +20,6 @@ const schema = z.object({
   CLIENT_ORIGIN: z.string().url().default('http://localhost:5173'),
 
   MONGODB_URI: z.string().min(1).default('mongodb://127.0.0.1:27017/parallax_flow'),
-  REDIS_URL: z.string().min(1).default('redis://127.0.0.1:6379'),
 
   // Phase 1+ (optional until those phases wire them in)
   JWT_ACCESS_SECRET: z.string().optional(),

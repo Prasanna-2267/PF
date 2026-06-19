@@ -10,18 +10,21 @@ Parallax Flow is a MERN + TypeScript platform with three product surfaces for st
 ┌─────────────┐     ┌──────────────────────┐     ┌─────────────┐
 │  React SPA  │────▶│  Express API (TS)    │────▶│  MongoDB    │
 │  Vite + TS  │◀────│                      │◀────│  (Mongoose) │
-│  PDF.js     │     │  modules:            │     └─────────────┘
-│             │     │   auth, content,     │     ┌─────────────┐
-│  Socket.io  │◀───▶│   lessons, commerce, │────▶│  Redis      │
-└─────────────┘     │   tracker, questions │     │ sessions,   │
-                    │  services:           │     │ cache, rate │
-                    │   pdf, watermark,    │     │ limit, OTP  │
-                    │   payments, ai-grade │     └─────────────┘
-                    └──────────┬───────────┘     ┌─────────────┐
-                               └────────────────▶│ Cloudflare  │
-                                                  │ R2 (private)│
+│  PDF.js     │     │  modules:            │     │             │
+│             │     │   auth, content,     │     │ data + OTP  │
+│  Socket.io  │◀───▶│   lessons, commerce, │     │ (TTL) +     │
+└─────────────┘     │   tracker, questions │     │ sessions    │
+                    │  services:           │     └─────────────┘
+                    │   pdf, watermark,    │     ┌─────────────┐
+                    │   payments, ai-grade │────▶│ Cloudflare  │
+                    └──────────────────────┘     │ R2 (private)│
                                                   └─────────────┘
 ```
+
+> **Redis is intentionally omitted at current scale.** OTP codes (TTL index),
+> single-device sessions, and rate-limiting all live in MongoDB / in-memory.
+> Add Redis later for shared cache/sessions/rate-limit when running multiple
+> API instances — no schema rework needed.
 
 ## 2. Why no `shared/` package
 
@@ -69,10 +72,10 @@ ExamCategory (CA, NEET, JEE …)        ← admin-customizable
 
 ```
 server/src/
-├── index.ts              # process entry: connect DB/Redis, start HTTP + Socket.io
+├── index.ts              # process entry: connect Mongo, start HTTP + Socket.io
 ├── app.ts                # express app, middleware pipeline, route mounting
-├── config/env.ts         # typed, validated env (Zod)
-├── lib/                  # db (mongoose), redis, logger
+├── config/{env,auth}.ts  # typed/validated env (Zod); auth secrets + token config
+├── lib/                  # db (mongoose), logger
 ├── middleware/           # auth, rbac, error handler, rate limit, single-device
 ├── modules/
 │   ├── auth/             # signup, login, OTP, Google SSO, refresh, devices
@@ -101,7 +104,7 @@ Server state via **React Query**; light client state via **Zustand**. Styling wi
 
 ## 7. Key flows
 
-- **Auth**: JWT access (short-lived) + refresh (httpOnly cookie). On login a new `deviceId` is issued and becomes the user's only valid device; the previous device is force-logged-out over Socket.io. See `SECURITY.md`.
+- **Auth**: JWT access (short-lived) + refresh (httpOnly cookie). On login a new `deviceId` is issued and a single `Session` doc is kept per user (others deleted), so the previous device's next request is rejected; Socket.io additionally pushes an instant logout (Phase 1c). See `SECURITY.md`.
 - **Secure PDF**: never serve the raw file. API checks auth + single-device + entitlement, then streams **watermarked page images** behind short-lived signed tokens. See `SECURITY.md`.
 - **Commerce**: Razorpay order created server-side → client checkout → webhook/verify → `Order` marked paid → entitlement check unlocks lessons.
 - **Tracker**: unified check-in starts a `StudySession` and marks the daily `CheckIn` (streak); check-out (or auto check-out on inactivity/logout) closes the session and logs minutes against the daily target.
@@ -115,9 +118,9 @@ client via Vite mode.
 - **Server env loading** (layered, most-specific first; host/script env always wins):
   `.env.<NODE_ENV>.local` → `.env.<NODE_ENV>` → `.env.local` → `.env`. Built with
   `tsc` to `dist/` and run with `node` in prod.
-- **Dev**: local MongoDB + local Redis; R2/Razorpay/OpenAI via test credentials.
-  `server: npm run dev` (tsx watch), `client: npm run dev` (Vite proxies `/api`).
-- **Prod**: MongoDB Atlas + managed Redis; secrets via host env vars (never commit
+- **Dev**: MongoDB (Atlas free tier recommended, or local); R2/Razorpay/OpenAI via
+  test credentials. `server: npm run dev` (tsx watch), `client: npm run dev` (Vite proxies `/api`).
+- **Prod**: MongoDB Atlas; secrets via host env vars (never commit
   real env files — only `*.example`). `server: npm run build && npm run start:prod`,
   `client: npm run build` (set `VITE_API_BASE_URL` at build if cross-origin).
   `NODE_ENV=production` disables pretty logging and enables prod behavior.

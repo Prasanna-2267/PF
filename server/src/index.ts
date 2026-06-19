@@ -4,13 +4,12 @@ import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { logger } from './lib/logger.js';
 import { connectMongo, disconnectMongo } from './lib/db.js';
-import { connectRedis, redis } from './lib/redis.js';
 
 async function bootstrap(): Promise<void> {
   const app = createApp();
   const httpServer = createServer(app);
 
-  // Socket.io is used from Phase 1 for single-device enforcement.
+  // Socket.io: real-time "logged out on another device" lands in Phase 1c.
   const io = new SocketServer(httpServer, {
     cors: { origin: env.CLIENT_ORIGIN, credentials: true },
   });
@@ -18,17 +17,13 @@ async function bootstrap(): Promise<void> {
     logger.debug({ id: socket.id }, 'socket connected');
   });
 
-  // Connect infra. In dev we tolerate missing services so the API still boots.
   try {
     await connectMongo();
   } catch (err) {
-    logger.warn({ err: String(err) }, 'MongoDB not available — continuing (start it for Phase 1+)');
-  }
-  try {
-    await connectRedis();
-  } catch (err) {
-    logger.warn({ err: String(err) }, 'Redis not available — continuing (start it for Phase 1+)');
-    redis.disconnect(); // stop the reconnect loop while Redis is absent in dev
+    logger.error(
+      { err: String(err) },
+      'MongoDB connection failed — set MONGODB_URI in .env (see server/README.md)',
+    );
   }
 
   httpServer.listen(env.PORT, () => {
@@ -40,7 +35,6 @@ async function bootstrap(): Promise<void> {
     httpServer.close();
     io.close();
     await disconnectMongo().catch(() => undefined);
-    await redis.quit().catch(() => undefined);
     process.exit(0);
   };
   process.on('SIGINT', () => void shutdown('SIGINT'));

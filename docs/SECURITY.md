@@ -34,7 +34,7 @@ These are **deterrents + traceability**, not a guarantee against a determined ca
 - **Methods**: email/password (with 6-digit email OTP verification) and Google SSO.
 - **Tokens**: short-lived JWT access token + refresh token stored in an httpOnly, Secure, SameSite cookie.
 - **Passwords**: hashed with bcrypt/argon2; never logged.
-- **OTP**: 6-digit, stored hashed in Redis with short TTL + attempt limits.
+- **OTP**: 6-digit, stored **hashed** in MongoDB with a TTL index (auto-expiry) + attempt limits.
 - **Phone**: required for email signup; for Google SSO (which never provides a phone) the user is prompted after first login and **must add a phone before first purchase or first PDF open** so the watermark always carries it.
 - **RBAC**: roles `student | admin | superadmin`. The first admin is created via a seed script — there is no public admin signup.
 
@@ -42,14 +42,14 @@ These are **deterrents + traceability**, not a guarantee against a determined ca
 
 Goal: a user account can be actively logged in on **one device at a time**.
 
-- On each successful login, the server issues a new `deviceId` and records it as the user's only valid session (in Redis + `Session`).
+- On each successful login, the server issues a new `deviceId` and keeps a single `Session` doc per user (existing sessions are deleted), so the previous device is no longer valid.
 - Every authenticated request validates that the token's `deviceId` matches the current active device. A mismatch ⇒ 401 (logged in elsewhere).
 - The **previous device is force-logged-out in real time** via Socket.io (chosen behavior: new login kicks the old device, so users who switch phones aren't locked out).
 
 ## 5. General hardening (Phase 7 + ongoing)
 
 - Input validation with Zod at every route boundary.
-- Rate limiting (Redis) on auth, OTP, payment, and PDF endpoints.
+- Rate limiting (in-memory now; Redis-backed when multi-instance) on auth, OTP, payment, and PDF endpoints.
 - Helmet, CORS allowlist, secure cookies, HTTPS in prod.
 - Webhook signature verification for Razorpay.
 - Audit logs for admin actions and content access.

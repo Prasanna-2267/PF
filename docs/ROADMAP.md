@@ -14,7 +14,7 @@
 | Commerce | Razorpay, INR; per-lesson + admin packages; computed entitlements |
 | Storage | Cloudflare R2 (private), page-image streaming |
 | AI grading | OpenAI GPT (short/long answers) |
-| Scale | Small (<1k), single API server + Atlas + Redis, built to scale up |
+| Scale | Small (<1k), single API server + MongoDB Atlas (Redis added later at scale) |
 | Defaults | INR only; ISM gov links free; free lessons allowed; admin via seed; question bank free; MCQ auto-grade; revisions per-lesson; GST/refunds later |
 
 ## Phases
