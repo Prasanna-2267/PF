@@ -23,6 +23,8 @@ const schema = z.object({
   // Optional: override DNS resolvers (comma-separated). Useful when the local
   // resolver can't do the SRV lookups that mongodb+srv:// requires.
   DNS_SERVERS: z.string().optional(),
+  // Local-disk storage directory (used until Cloudflare R2 is configured).
+  STORAGE_DIR: z.string().optional(),
 
   // Phase 1+ (optional until those phases wire them in)
   JWT_ACCESS_SECRET: z.string().optional(),

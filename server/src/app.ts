@@ -8,6 +8,7 @@ import { logger } from './lib/logger.js';
 import { errorHandler, notFound } from './middleware/error.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { adminContentRouter, contentRouter } from './modules/content/content.routes.js';
+import { adminLessonsRouter, lessonsRouter } from './modules/lessons/lesson.routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -29,6 +30,8 @@ export function createApp(): Express {
   app.use('/api/auth', authRouter);
   app.use('/api/content', contentRouter);
   app.use('/api/admin/content', adminContentRouter);
+  app.use('/api/lessons', lessonsRouter);
+  app.use('/api/admin/lessons', adminLessonsRouter);
 
   app.use(notFound);
   app.use(errorHandler);

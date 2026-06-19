@@ -35,6 +35,11 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     res.status(err.status).json({ error: err.message, details: err.details });
     return;
   }
+  // Multer upload errors (file too large, unexpected field, …) → 400.
+  if (err instanceof Error && err.name === 'MulterError') {
+    res.status(400).json({ error: err.message });
+    return;
+  }
   // MongoDB duplicate-key (e.g. unique email/phone) — return a clean 409 even
   // when a findOne+create check loses a race.
   if (typeof err === 'object' && err !== null && (err as { code?: number }).code === 11000) {

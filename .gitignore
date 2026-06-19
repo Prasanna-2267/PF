@@ -22,8 +22,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Local uploads / temp PDF processing
+# Local uploads / object storage / temp PDF processing
 uploads/
+storage/
+.test-storage/
 tmp/
 .cache/
 
