@@ -9,6 +9,7 @@ const accessLogSchema = new Schema(
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     lessonId: { type: Schema.Types.ObjectId, ref: 'Lesson', required: true, index: true },
     action: { type: String, default: 'view' },
+    code: { type: String, index: true }, // forensic ref also baked into the watermark
     ip: { type: String },
     userAgent: { type: String },
   },

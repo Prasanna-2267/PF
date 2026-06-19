@@ -9,3 +9,10 @@ body,
 body {
   margin: 0;
 }
+
+/* Printing while a secured lesson is open yields a blank page. */
+@media print {
+  body.viewer-open * {
+    display: none !important;
+  }
+}

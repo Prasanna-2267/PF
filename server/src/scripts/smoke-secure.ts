@@ -129,9 +129,11 @@ async function main(): Promise<void> {
     r = await fetch(`${ROOT}/lessons/${paidId}/view`, { headers: adminHdr });
     check('admin views paid lesson -> 200', r.status === 200, `got ${r.status}`);
 
-    // Forensic access log recorded
+    // Forensic access log recorded, with the ref code baked into the watermark
     const logs = await AccessLogModel.countDocuments({ lessonId: freeId });
     check('access log recorded for views', logs >= 1, `${logs} entries`);
+    const log = await AccessLogModel.findOne({ lessonId: freeId }).lean();
+    check('access log has forensic ref code', !!log?.code && /^[0-9A-F]{10}$/.test(String(log.code)), String(log?.code));
   } finally {
     await mongoose.connection.dropDatabase();
     await new Promise<void>((resolve) => server.close(() => resolve()));

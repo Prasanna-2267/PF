@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
+import rateLimit from 'express-rate-limit';
 import { asyncHandler } from '../../middleware/error.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
@@ -10,13 +11,22 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
 });
 
+// Per-user throttle on page fetches — slows bulk "download every page" scraping.
+const pageLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.auth?.sub ?? 'anon',
+});
+
 /** Student-facing, mounted at /api/lessons. */
 export const lessonsRouter = Router();
 lessonsRouter.use(requireAuth);
 lessonsRouter.get('/', asyncHandler(lessons.listForStudent));
 lessonsRouter.get('/progress', asyncHandler(lessons.subjectProgress));
 lessonsRouter.get('/:id/view', asyncHandler(lessons.viewLesson));
-lessonsRouter.get('/:id/pages/:n', asyncHandler(lessons.pageImage));
+lessonsRouter.get('/:id/pages/:n', pageLimiter, asyncHandler(lessons.pageImage));
 lessonsRouter.post('/:id/complete', asyncHandler(lessons.complete));
 lessonsRouter.delete('/:id/complete', asyncHandler(lessons.uncomplete));
 

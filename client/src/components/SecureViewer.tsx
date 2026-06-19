@@ -51,6 +51,12 @@ export function SecureViewer({ lessonId, onClose }: { lessonId: string; onClose:
     };
   }, [lessonId, reloadKey]);
 
+  // Blank the page if the user tries to print while the viewer is open.
+  useEffect(() => {
+    document.body.classList.add('viewer-open');
+    return () => document.body.classList.remove('viewer-open');
+  }, []);
+
   // Deterrents (not guarantees).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

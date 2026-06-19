@@ -3,7 +3,7 @@ import { PDFDocument } from 'pdf-lib';
 import { HttpError } from '../../middleware/error.js';
 import { storage } from '../../services/storage.js';
 import { renderWatermarkedPage } from '../../services/pdf-render.js';
-import { getViewKey, issueViewKey } from '../../services/view-keys.js';
+import { getViewSession, issueViewSession } from '../../services/view-keys.js';
 import { UserModel, type UserDoc } from '../auth/user.model.js';
 import { SubjectModel } from '../content/subject.model.js';
 import { AccessLogModel } from './access-log.model.js';
@@ -160,9 +160,9 @@ function assertViewable(lesson: LessonDoc, user: UserDoc): void {
   }
 }
 
-function watermarkLines(user: UserDoc): string[] {
+function watermarkLines(user: UserDoc, code: string): string[] {
   const stamp = `${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC`;
-  return [user.name, user.email, user.phone ?? '', `ID ${user.id as string}`, stamp];
+  return [user.name, user.email, user.phone ?? '', `ID ${user.id as string}`, stamp, `Ref ${code}`];
 }
 
 export async function getLessonForView(userId: string, lessonId: string, meta: RequestMeta) {
@@ -172,14 +172,21 @@ export async function getLessonForView(userId: string, lessonId: string, meta: R
   if (!user) throw new HttpError(401, 'Account not found');
 
   assertViewable(lesson, user);
-  await AccessLogModel.create({ userId, lessonId, action: 'view', ip: meta.ip, userAgent: meta.userAgent });
-  const key = issueViewKey(userId, lessonId);
+  const session = issueViewSession(userId, lessonId);
+  await AccessLogModel.create({
+    userId,
+    lessonId,
+    action: 'view',
+    code: session.code,
+    ip: meta.ip,
+    userAgent: meta.userAgent,
+  });
 
   return {
     id: lesson.id as string,
     title: lesson.title,
     pageCount: lesson.pageCount ?? 0,
-    key: key.toString('base64'),
+    key: session.key.toString('base64'),
   };
 }
 
@@ -194,15 +201,15 @@ export async function renderLessonPage(userId: string, lessonId: string, pageNum
     throw new HttpError(404, 'Page out of range');
   }
 
-  const viewKey = getViewKey(userId, lessonId);
-  if (!viewKey) throw new HttpError(403, 'Open the lesson again', { code: 'VIEW_EXPIRED' });
+  const session = getViewSession(userId, lessonId);
+  if (!session) throw new HttpError(403, 'Open the lesson again', { code: 'VIEW_EXPIRED' });
 
   const pdf = await storage.get(lesson.fileKey as string);
-  const png = await renderWatermarkedPage(pdf, pageNumber, watermarkLines(user));
+  const png = await renderWatermarkedPage(pdf, pageNumber, watermarkLines(user, session.code));
 
   // Encrypt the page (AES-256-GCM) so the Network tab only sees ciphertext.
   const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', viewKey, iv);
+  const cipher = createCipheriv('aes-256-gcm', session.key, iv);
   const ciphertext = Buffer.concat([cipher.update(png), cipher.final()]);
   const tag = cipher.getAuthTag();
   return Buffer.concat([iv, ciphertext, tag]); // iv(12) || ciphertext || tag(16)
