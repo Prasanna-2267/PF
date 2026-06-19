@@ -19,7 +19,9 @@ export const lessonsApi = {
     api.get<{ total: number; completed: number }>('/lessons/progress', { params: { subjectId } }).then((r) => r.data),
   view: (id: string) =>
     api
-      .get<{ id: string; title: string; pageCount: number; key: string }>(`/lessons/${id}/view`)
+      .get<{ id: string; title: string; pageCount: number; completed: boolean; key: string }>(
+        `/lessons/${id}/view`,
+      )
       .then((r) => r.data),
   pageBytes: (id: string, n: number) =>
     api.get(`/lessons/${id}/pages/${n}`, { responseType: 'arraybuffer' }).then((r) => r.data as ArrayBuffer),

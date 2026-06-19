@@ -181,11 +181,13 @@ export async function getLessonForView(userId: string, lessonId: string, meta: R
     ip: meta.ip,
     userAgent: meta.userAgent,
   });
+  const completed = !!(await ProgressModel.exists({ userId, lessonId }));
 
   return {
     id: lesson.id as string,
     title: lesson.title,
     pageCount: lesson.pageCount ?? 0,
+    completed,
     key: session.key.toString('base64'),
   };
 }

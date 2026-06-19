@@ -90,9 +90,10 @@ async function main(): Promise<void> {
 
     // View now works and issues a per-view key
     r = await fetch(`${ROOT}/lessons/${freeId}/view`, { headers: studHdr });
-    const view = (await r.json()) as { pageCount?: number; key?: string };
+    const view = (await r.json()) as { pageCount?: number; key?: string; completed?: boolean };
     const viewKey = view.key ? Buffer.from(view.key, 'base64') : Buffer.alloc(0);
     check('view free lesson -> 200, pageCount 2, key issued', r.status === 200 && view.pageCount === 2 && !!view.key, `got ${r.status} pages=${view.pageCount}`);
+    check('view reports completed=false initially', view.completed === false, String(view.completed));
 
     // Page comes back ENCRYPTED — not a downloadable image in the Network tab
     r = await fetch(`${ROOT}/lessons/${freeId}/pages/1`, { headers: studHdr });
@@ -134,6 +135,12 @@ async function main(): Promise<void> {
     check('access log recorded for views', logs >= 1, `${logs} entries`);
     const log = await AccessLogModel.findOne({ lessonId: freeId }).lean();
     check('access log has forensic ref code', !!log?.code && /^[0-9A-F]{10}$/.test(String(log.code)), String(log?.code));
+
+    // Completion persists and is reflected by /view (viewer button initial state)
+    await fetch(`${ROOT}/lessons/${freeId}/complete`, { method: 'POST', headers: studHdr });
+    r = await fetch(`${ROOT}/lessons/${freeId}/view`, { headers: studHdr });
+    const v2 = (await r.json()) as { completed?: boolean };
+    check('view reflects completed=true after marking', v2.completed === true, String(v2.completed));
   } finally {
     await mongoose.connection.dropDatabase();
     await new Promise<void>((resolve) => server.close(() => resolve()));

@@ -39,6 +39,7 @@ export function SecureViewer({ lessonId, onClose }: { lessonId: string; onClose:
         if (!active) return;
         setMeta({ title: m.title, pageCount: m.pageCount });
         setViewKey(m.key);
+        setCompleted(m.completed);
       })
       .catch((err) => {
         if (!active) return;
