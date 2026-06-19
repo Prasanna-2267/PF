@@ -2,7 +2,7 @@ import type { Request, RequestHandler, Response } from 'express';
 import { authConfig } from '../../config/auth.js';
 import { HttpError } from '../../middleware/error.js';
 import * as authService from './auth.service.js';
-import { loginSchema, resendOtpSchema, signupSchema, verifyOtpSchema } from './auth.validation.js';
+import { loginSchema, signupSchema, verifyOtpSchema } from './auth.validation.js';
 import { UserModel } from './user.model.js';
 
 function reqMeta(req: Request) {
@@ -16,28 +16,48 @@ function setRefreshCookie(res: Response, token: string): void {
   });
 }
 
+function setSignupCookie(res: Response, token: string): void {
+  res.cookie(authConfig.signupCookieName, token, {
+    ...authConfig.cookie,
+    maxAge: authConfig.signupTtlSec * 1000,
+  });
+}
+
+function signupToken(req: Request): string | undefined {
+  return req.cookies?.[authConfig.signupCookieName] as string | undefined;
+}
+
 export const signup: RequestHandler = async (req, res) => {
   const input = signupSchema.parse(req.body);
-  res.status(201).json(await authService.signup(input));
+  const { signupToken: token } = await authService.signup(input);
+  setSignupCookie(res, token);
+  res.status(201).json({ message: 'Verification code sent to your email' });
 };
 
 export const resendOtp: RequestHandler = async (req, res) => {
-  const { email } = resendOtpSchema.parse(req.body);
-  res.json(await authService.resendOtp(email));
+  res.json(await authService.resendOtp(signupToken(req)));
 };
 
 export const verifyOtp: RequestHandler = async (req, res) => {
-  const { email, code } = verifyOtpSchema.parse(req.body);
-  const { user, tokens } = await authService.verifyOtp(email, code, reqMeta(req));
+  const { code } = verifyOtpSchema.parse(req.body);
+  const { user, tokens } = await authService.verifyOtp(signupToken(req), code, reqMeta(req));
+  res.clearCookie(authConfig.signupCookieName, { path: authConfig.cookie.path });
   setRefreshCookie(res, tokens.refreshToken);
   res.json({ user, accessToken: tokens.accessToken });
 };
 
 export const login: RequestHandler = async (req, res) => {
   const { email, password } = loginSchema.parse(req.body);
-  const { user, tokens } = await authService.login(email, password, reqMeta(req));
-  setRefreshCookie(res, tokens.refreshToken);
-  res.json({ user, accessToken: tokens.accessToken });
+  const result = await authService.login(email, password, reqMeta(req));
+
+  if (result.status === 'unverified') {
+    setSignupCookie(res, result.signupToken);
+    res.status(403).json({ error: 'Email not verified. We sent you a new verification code.' });
+    return;
+  }
+
+  setRefreshCookie(res, result.tokens.refreshToken);
+  res.json({ user: result.user, accessToken: result.tokens.accessToken });
 };
 
 export const refresh: RequestHandler = async (req, res) => {

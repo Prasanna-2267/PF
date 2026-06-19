@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { randomInt } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import { authConfig } from '../../config/auth.js';
 import { HttpError } from '../../middleware/error.js';
 import { sendOtpEmail } from '../../services/mail.js';
@@ -11,7 +11,7 @@ import {
   signRefreshToken,
   verifyRefreshToken,
 } from './auth.tokens.js';
-import { OtpModel } from './otp.model.js';
+import { PendingRegistrationModel } from './pending-registration.model.js';
 import { SessionModel } from './session.model.js';
 import { UserModel, type UserDoc } from './user.model.js';
 import type { SignupInput } from './auth.validation.js';
@@ -21,6 +21,10 @@ type TokenBundle = { accessToken: string; refreshToken: string };
 
 function generateOtp(): string {
   return String(randomInt(0, 1_000_000)).padStart(6, '0');
+}
+
+function signupExpiry(): Date {
+  return new Date(Date.now() + authConfig.signupTtlSec * 1000);
 }
 
 export function publicUser(user: UserDoc) {
@@ -35,24 +39,11 @@ export function publicUser(user: UserDoc) {
   };
 }
 
-async function issueOtp(email: string): Promise<void> {
-  const code = generateOtp();
-  const codeHash = await bcrypt.hash(code, 10);
-  const expiresAt = new Date(Date.now() + authConfig.otpTtlMinutes * 60_000);
-  await OtpModel.findOneAndUpdate(
-    { email },
-    { email, codeHash, attempts: 0, expiresAt, purpose: 'email_verify' },
-    { upsert: true },
-  );
-  await sendOtpEmail(email, code);
-}
-
 /** Single-device: drop the user's other sessions, then create one. */
 async function createSession(user: UserDoc, meta: RequestMeta): Promise<TokenBundle> {
   const deviceId = newDeviceId();
   const accessToken = signAccessToken({ sub: user.id as string, role: user.role, deviceId });
   const refreshToken = signRefreshToken({ sub: user.id as string, deviceId });
-  const expiresAt = new Date(Date.now() + authConfig.refreshTtlSec * 1000);
 
   await SessionModel.deleteMany({ userId: user.id });
   await SessionModel.create({
@@ -61,93 +52,130 @@ async function createSession(user: UserDoc, meta: RequestMeta): Promise<TokenBun
     refreshTokenHash: hashToken(refreshToken),
     ip: meta.ip,
     userAgent: meta.userAgent,
-    expiresAt,
+    expiresAt: new Date(Date.now() + authConfig.refreshTtlSec * 1000),
   });
 
   return { accessToken, refreshToken };
 }
 
-export async function signup(input: SignupInput) {
+/**
+ * Start signup. No User is created yet — we store a pending registration bound
+ * to a fresh session token (returned, to be set as the pf_signup cookie).
+ */
+export async function signup(input: SignupInput): Promise<{ signupToken: string }> {
   const email = input.email.toLowerCase();
-  const existing = await UserModel.findOne({ email });
-  if (existing?.emailVerified) {
+  if (await UserModel.exists({ email })) {
     throw new HttpError(409, 'An account with this email already exists');
   }
-  const passwordHash = await hashPassword(input.password);
 
-  if (existing) {
-    // Unverified account re-registering: refresh details and re-send OTP.
-    existing.name = input.name;
-    existing.phone = input.phone;
-    existing.passwordHash = passwordHash;
-    await existing.save();
-  } else {
-    await UserModel.create({
-      name: input.name,
-      email,
-      phone: input.phone,
-      passwordHash,
-      emailVerified: false,
-    });
-  }
-
-  await issueOtp(email);
-  return { message: 'Verification code sent to your email' };
+  const code = generateOtp();
+  const signupToken = randomUUID();
+  await PendingRegistrationModel.create({
+    email,
+    name: input.name,
+    phone: input.phone,
+    passwordHash: await hashPassword(input.password),
+    otpHash: await bcrypt.hash(code, 10),
+    sessionTokenHash: hashToken(signupToken),
+    expiresAt: signupExpiry(),
+  });
+  await sendOtpEmail(email, code);
+  return { signupToken };
 }
 
-export async function resendOtp(rawEmail: string) {
-  const email = rawEmail.toLowerCase();
-  const user = await UserModel.findOne({ email });
-  if (!user) throw new HttpError(404, 'No account found for this email');
-  if (user.emailVerified) throw new HttpError(400, 'Email is already verified');
-  await issueOtp(email);
-  return { message: 'Verification code resent' };
+/** Resend the code for the pending registration tied to this signup session. */
+export async function resendOtp(signupToken: string | undefined) {
+  const pending = await findPending(signupToken);
+  const code = generateOtp();
+  pending.otpHash = await bcrypt.hash(code, 10);
+  pending.otpAttempts = 0;
+  pending.expiresAt = signupExpiry();
+  await pending.save();
+  await sendOtpEmail(pending.email, code);
+  return { message: 'A new code has been sent' };
 }
 
-export async function verifyOtp(rawEmail: string, code: string, meta: RequestMeta) {
-  const email = rawEmail.toLowerCase();
-  const otp = await OtpModel.findOne({ email });
-  if (!otp) throw new HttpError(400, 'No active code. Please request a new one.');
+async function findPending(signupToken: string | undefined) {
+  if (!signupToken) {
+    throw new HttpError(400, 'Your signup session expired. Please sign up or log in again.');
+  }
+  const pending = await PendingRegistrationModel.findOne({
+    sessionTokenHash: hashToken(signupToken),
+  });
+  if (!pending) {
+    throw new HttpError(400, 'Your signup session expired. Please sign up or log in again.');
+  }
+  return pending;
+}
 
-  if (otp.attempts >= authConfig.otpMaxAttempts) {
-    await otp.deleteOne();
-    throw new HttpError(429, 'Too many attempts. Please request a new code.');
+/** Verify the OTP for THIS browser's pending registration, then create the user. */
+export async function verifyOtp(signupToken: string | undefined, code: string, meta: RequestMeta) {
+  const pending = await findPending(signupToken);
+
+  if (pending.otpAttempts >= authConfig.otpMaxAttempts) {
+    await pending.deleteOne();
+    throw new HttpError(429, 'Too many attempts. Please sign up again.');
   }
 
-  const matches = await bcrypt.compare(code, otp.codeHash);
+  const matches = await bcrypt.compare(code, pending.otpHash);
   if (!matches) {
-    otp.attempts += 1;
-    await otp.save();
+    pending.otpAttempts += 1;
+    await pending.save();
     throw new HttpError(400, 'Invalid code');
   }
 
-  await otp.deleteOne();
-  const user = await UserModel.findOne({ email });
-  if (!user) throw new HttpError(404, 'Account not found');
+  if (await UserModel.exists({ email: pending.email })) {
+    await pending.deleteOne();
+    throw new HttpError(409, 'An account with this email already exists');
+  }
 
-  user.emailVerified = true;
-  await user.save();
+  const user = await UserModel.create({
+    name: pending.name,
+    email: pending.email,
+    phone: pending.phone,
+    passwordHash: pending.passwordHash,
+    emailVerified: true,
+  });
+  await PendingRegistrationModel.deleteMany({ email: pending.email });
 
   const tokens = await createSession(user, meta);
   return { user: publicUser(user), tokens };
 }
 
-export async function login(rawEmail: string, password: string, meta: RequestMeta) {
+type LoginResult =
+  | { status: 'ok'; user: ReturnType<typeof publicUser>; tokens: TokenBundle }
+  | { status: 'unverified'; signupToken: string };
+
+export async function login(rawEmail: string, password: string, meta: RequestMeta): Promise<LoginResult> {
   const email = rawEmail.toLowerCase();
   const user = await UserModel.findOne({ email });
-  if (!user || !user.passwordHash) {
-    throw new HttpError(401, 'Invalid email or password');
-  }
-  const ok = await verifyPassword(password, user.passwordHash);
-  if (!ok) throw new HttpError(401, 'Invalid email or password');
 
-  if (!user.emailVerified) {
-    await issueOtp(email);
-    throw new HttpError(403, 'Email not verified. We sent you a new verification code.');
+  if (user) {
+    if (!user.passwordHash || !(await verifyPassword(password, user.passwordHash))) {
+      throw new HttpError(401, 'Invalid email or password');
+    }
+    const tokens = await createSession(user, meta);
+    return { status: 'ok', user: publicUser(user), tokens };
   }
 
-  const tokens = await createSession(user, meta);
-  return { user: publicUser(user), tokens };
+  // No verified account. If a pending registration matches this password,
+  // rebind it to this browser and resend a code (safe: gated by the password).
+  const pendings = await PendingRegistrationModel.find({ email });
+  for (const pending of pendings) {
+    if (await verifyPassword(password, pending.passwordHash)) {
+      const code = generateOtp();
+      const signupToken = randomUUID();
+      pending.otpHash = await bcrypt.hash(code, 10);
+      pending.otpAttempts = 0;
+      pending.sessionTokenHash = hashToken(signupToken);
+      pending.expiresAt = signupExpiry();
+      await pending.save();
+      await sendOtpEmail(email, code);
+      return { status: 'unverified', signupToken };
+    }
+  }
+
+  throw new HttpError(401, 'Invalid email or password');
 }
 
 export async function refresh(refreshToken: string | undefined) {
@@ -168,7 +196,6 @@ export async function refresh(refreshToken: string | undefined) {
   const user = await UserModel.findById(payload.sub);
   if (!user) throw new HttpError(401, 'Account not found');
 
-  // Rotate both tokens.
   const accessToken = signAccessToken({
     sub: user.id as string,
     role: user.role,

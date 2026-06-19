@@ -13,6 +13,7 @@ import { setMailer } from '../services/mail.js';
 
 const PORT = 4100;
 const BASE = `http://localhost:${PORT}/api/auth`;
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 // Capture the OTP that the app "sends" instead of emailing it.
 let lastOtp = '';
@@ -29,7 +30,12 @@ function check(name: string, passed: boolean, detail = ''): void {
   console.log(`  [${passed ? 'PASS' : 'FAIL'}] ${name}${detail ? ` — ${detail}` : ''}`);
 }
 
-const json = { 'Content-Type': 'application/json' };
+function cookie(res: Response, name: string): string | undefined {
+  return res.headers
+    .getSetCookie()
+    .map((c) => c.split(';')[0] ?? '')
+    .find((c) => c.startsWith(`${name}=`));
+}
 
 async function main(): Promise<void> {
   if (env.DNS_SERVERS) {
@@ -48,33 +54,38 @@ async function main(): Promise<void> {
   });
 
   try {
-    const email = `smoke_${Date.now()}@example.com`;
     const password = 'secret123';
-    const signupBody = JSON.stringify({ name: 'Smoke Test', email, phone: '9998887777', password });
+    const email = `smoke_${Date.now()}@example.com`;
+    const body = (extra: object) => JSON.stringify({ name: 'Smoke Test', phone: '9998887777', ...extra });
 
-    let r = await fetch(`${BASE}/signup`, { method: 'POST', headers: json, body: signupBody });
+    // --- Main flow (email A) ---
+    let r = await fetch(`${BASE}/signup`, { method: 'POST', headers: JSON_HEADERS, body: body({ email, password }) });
+    const signupCookie = cookie(r, 'pf_signup');
     check('signup -> 201', r.status === 201, `got ${r.status}`);
+    check('signup sets pf_signup cookie', !!signupCookie);
     check('otp captured from mailer', /^\d{6}$/.test(lastOtp), lastOtp || '(none)');
+    const otpA = lastOtp;
+
+    // verify without the signup cookie must be rejected (session binding)
+    r = await fetch(`${BASE}/verify-otp`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ code: otpA }) });
+    check('verify-otp without session cookie -> 400', r.status === 400, `got ${r.status}`);
 
     r = await fetch(`${BASE}/verify-otp`, {
       method: 'POST',
-      headers: json,
-      body: JSON.stringify({ email, code: lastOtp }),
+      headers: { ...JSON_HEADERS, Cookie: signupCookie ?? '' },
+      body: JSON.stringify({ code: otpA }),
     });
     const verify = (await r.json()) as { user?: { emailVerified?: boolean }; accessToken?: string };
-    check('verify-otp -> 200', r.status === 200, `got ${r.status}`);
+    check('verify-otp with session cookie -> 200', r.status === 200, `got ${r.status}`);
     check('verify returns token + emailVerified', !!verify.accessToken && verify.user?.emailVerified === true);
     const tokenA = verify.accessToken ?? '';
 
     r = await fetch(`${BASE}/me`, { headers: { Authorization: `Bearer ${tokenA}` } });
     check('me with token A -> 200', r.status === 200, `got ${r.status}`);
 
-    r = await fetch(`${BASE}/login`, { method: 'POST', headers: json, body: JSON.stringify({ email, password }) });
+    r = await fetch(`${BASE}/login`, { method: 'POST', headers: JSON_HEADERS, body: body({ email, password }) });
     const login = (await r.json()) as { accessToken?: string };
-    const refreshCookie = r.headers
-      .getSetCookie()
-      .map((c) => c.split(';')[0] ?? '')
-      .find((c) => c.startsWith('pf_refresh='));
+    const refreshCookie = cookie(r, 'pf_refresh');
     check('login -> 200', r.status === 200, `got ${r.status}`);
     check('login sets refresh cookie', !!refreshCookie);
     const tokenB = login.accessToken ?? '';
@@ -90,22 +101,35 @@ async function main(): Promise<void> {
 
     r = await fetch(`${BASE}/logout`, { method: 'POST', headers: { Authorization: `Bearer ${tokenB}` } });
     check('logout -> 200', r.status === 200, `got ${r.status}`);
-
     r = await fetch(`${BASE}/me`, { headers: { Authorization: `Bearer ${tokenB}` } });
     check('me after logout -> 401', r.status === 401, `got ${r.status}`);
 
-    r = await fetch(`${BASE}/login`, {
-      method: 'POST',
-      headers: json,
-      body: JSON.stringify({ email, password: 'wrongpass' }),
-    });
+    r = await fetch(`${BASE}/login`, { method: 'POST', headers: JSON_HEADERS, body: body({ email, password: 'wrongpass' }) });
     check('wrong password -> 401', r.status === 401, `got ${r.status}`);
 
-    r = await fetch(`${BASE}/signup`, { method: 'POST', headers: json, body: signupBody });
-    check('duplicate signup (verified) -> 409', r.status === 409, `got ${r.status}`);
+    r = await fetch(`${BASE}/signup`, { method: 'POST', headers: JSON_HEADERS, body: body({ email, password }) });
+    check('duplicate signup (verified email) -> 409', r.status === 409, `got ${r.status}`);
 
-    r = await fetch(`${BASE}/login`, { method: 'POST', headers: json, body: JSON.stringify({ email: 'nope' }) });
+    r = await fetch(`${BASE}/login`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ email: 'nope' }) });
     check('validation: bad body -> 400', r.status === 400, `got ${r.status}`);
+
+    // --- Scenario: register, DON'T verify, then log in (should guide to verify) ---
+    const email2 = `smoke2_${Date.now()}@example.com`;
+    r = await fetch(`${BASE}/signup`, { method: 'POST', headers: JSON_HEADERS, body: body({ email: email2, password }) });
+    check('scenario2 signup -> 201', r.status === 201, `got ${r.status}`);
+
+    r = await fetch(`${BASE}/login`, { method: 'POST', headers: JSON_HEADERS, body: body({ email: email2, password }) });
+    const rebindCookie = cookie(r, 'pf_signup');
+    check('login before verify -> 403', r.status === 403, `got ${r.status}`);
+    check('login before verify rebinds pf_signup cookie', !!rebindCookie);
+    const otp2 = lastOtp;
+
+    r = await fetch(`${BASE}/verify-otp`, {
+      method: 'POST',
+      headers: { ...JSON_HEADERS, Cookie: rebindCookie ?? '' },
+      body: JSON.stringify({ code: otp2 }),
+    });
+    check('verify after login-rebind -> 200', r.status === 200, `got ${r.status}`);
   } finally {
     await mongoose.connection.dropDatabase();
     await new Promise<void>((resolve) => server.close(() => resolve()));

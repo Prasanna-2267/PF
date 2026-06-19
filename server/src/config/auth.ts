@@ -19,9 +19,12 @@ export const authConfig = {
   refreshSecret: resolveSecret(env.JWT_REFRESH_SECRET, 'JWT_REFRESH_SECRET'),
   accessTtlSec: 15 * 60, // 15 minutes
   refreshTtlSec: 7 * 24 * 60 * 60, // 7 days
-  otpTtlMinutes: 10,
   otpMaxAttempts: 5,
   refreshCookieName: 'pf_refresh',
+  // Pending signup: the OTP + candidate account live this long, and the
+  // signup-session cookie (which binds verification to this browser) matches it.
+  signupCookieName: 'pf_signup',
+  signupTtlSec: 30 * 60, // 30 minutes
   cookie: {
     httpOnly: true,
     secure: isProd,

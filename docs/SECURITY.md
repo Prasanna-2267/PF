@@ -33,8 +33,9 @@ These are **deterrents + traceability**, not a guarantee against a determined ca
 
 - **Methods**: email/password (with 6-digit email OTP verification) and Google SSO.
 - **Tokens**: short-lived JWT access token + refresh token stored in an httpOnly, Secure, SameSite cookie.
-- **Passwords**: hashed with bcrypt/argon2; never logged.
-- **OTP**: 6-digit, stored **hashed** in MongoDB with a TTL index (auto-expiry) + attempt limits.
+- **Passwords**: hashed with bcrypt; never logged.
+- **Signup model (takeover-safe)**: signup does **not** create a User. It stores a `PendingRegistration` (name, phone, hashed password, hashed OTP) bound to a one-time signup token set as an httpOnly `pf_signup` cookie. The OTP can only be verified by the **same browser** (cookie) that started signup, and the real User is created **only on successful verification**. This prevents pre-verification account takeover (an attacker re-registering a victim's email cannot influence the account the victim verifies). A pending row that already matches a login password can be rebound to the current browser (gated by the correct password).
+- **OTP**: 6-digit, stored **hashed** on the pending registration in MongoDB with a TTL index (auto-expiry) + attempt limits.
 - **Phone**: required for email signup; for Google SSO (which never provides a phone) the user is prompted after first login and **must add a phone before first purchase or first PDF open** so the watermark always carries it.
 - **RBAC**: roles `student | admin | superadmin`. The first admin is created via a seed script — there is no public admin signup.
 

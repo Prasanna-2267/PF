@@ -7,10 +7,10 @@ export const authApi = {
   signup: (d: { name: string; email: string; phone: string; password: string }) =>
     api.post<{ message: string }>('/auth/signup', d).then((r) => r.data),
 
-  resendOtp: (d: { email: string }) =>
-    api.post<{ message: string }>('/auth/resend-otp', d).then((r) => r.data),
+  // Resend/verify use the httpOnly pf_signup cookie set at signup — no email needed.
+  resendOtp: () => api.post<{ message: string }>('/auth/resend-otp').then((r) => r.data),
 
-  verifyOtp: (d: { email: string; code: string }) =>
+  verifyOtp: (d: { code: string }) =>
     api.post<AuthResponse>('/auth/verify-otp', d).then((r) => r.data),
 
   login: (d: { email: string; password: string }) =>

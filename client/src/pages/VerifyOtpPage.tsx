@@ -9,6 +9,7 @@ export function VerifyOtpPage() {
   const location = useLocation();
   const setAuth = useAuthStore((s) => s.setAuth);
   const email = (location.state as { email?: string } | null)?.email ?? '';
+  const sentTo = email || 'your email';
 
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
@@ -20,7 +21,7 @@ export function VerifyOtpPage() {
     setError('');
     setLoading(true);
     try {
-      const { user, accessToken } = await authApi.verifyOtp({ email, code });
+      const { user, accessToken } = await authApi.verifyOtp({ code });
       setAuth(user, accessToken);
       navigate('/dashboard', { replace: true });
     } catch (err) {
@@ -34,26 +35,15 @@ export function VerifyOtpPage() {
     setError('');
     setInfo('');
     try {
-      await authApi.resendOtp({ email });
+      await authApi.resendOtp();
       setInfo('A new code has been sent.');
     } catch (err) {
       setError(errorMessage(err));
     }
   }
 
-  if (!email) {
-    return (
-      <AuthCard title="Verify email">
-        <ErrorText>No email in context — please sign up again.</ErrorText>
-        <Link to="/signup" className="text-sm text-violet-400 hover:underline">
-          Back to sign up
-        </Link>
-      </AuthCard>
-    );
-  }
-
   return (
-    <AuthCard title="Verify your email" subtitle={`Enter the 6-digit code sent to ${email}`}>
+    <AuthCard title="Verify your email" subtitle={`Enter the 6-digit code sent to ${sentTo}`}>
       <form className="space-y-4" onSubmit={onSubmit}>
         <TextInput
           label="Verification code"
@@ -76,6 +66,12 @@ export function VerifyOtpPage() {
       >
         Resend code
       </button>
+      <p className="text-center text-sm text-slate-400">
+        Wrong email?{' '}
+        <Link to="/signup" className="text-violet-400 hover:underline">
+          Start over
+        </Link>
+      </p>
     </AuthCard>
   );
 }
