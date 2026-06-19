@@ -11,6 +11,7 @@
     "start:prod": "cross-env NODE_ENV=production node dist/index.js",
     "typecheck": "tsc --noEmit",
     "seed:admin": "cross-env NODE_ENV=development tsx src/scripts/seed-admin.ts",
+    "admins": "cross-env NODE_ENV=development tsx src/scripts/list-admins.ts",
     "test:smoke": "cross-env NODE_ENV=test tsx src/scripts/smoke-auth.ts",
     "test:smoke:content": "cross-env NODE_ENV=test tsx src/scripts/smoke-content.ts",
     "lint": "eslint .",
