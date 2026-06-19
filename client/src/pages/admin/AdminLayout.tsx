@@ -1,4 +1,5 @@
 import { Outlet, useNavigate } from 'react-router-dom';
+import { AppHeader, Button } from '../../components/ui';
 import { authApi } from '../../features/auth/auth.api';
 import { useAuthStore } from '../../lib/auth-store';
 
@@ -17,25 +18,18 @@ export function AdminLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="flex items-center justify-between border-b border-slate-800 px-6 py-3">
-        <div className="flex items-baseline gap-2">
-          <span className="bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-lg font-semibold text-transparent">
-            Parallax Flow
-          </span>
-          <span className="rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-300">Admin</span>
-        </div>
-        <div className="flex items-center gap-3 text-sm">
-          <span className="text-slate-400">{user?.email}</span>
-          <button
-            type="button"
-            onClick={logout}
-            className="rounded-lg border border-slate-700 px-3 py-1.5 hover:bg-slate-800"
-          >
-            Log out
-          </button>
-        </div>
-      </header>
+    <div className="min-h-screen bg-canvas text-ink">
+      <AppHeader
+        sub="Admin"
+        right={
+          <>
+            <span className="hidden text-sm text-muted sm:inline">{user?.email}</span>
+            <Button variant="secondary" size="sm" onClick={logout}>
+              Log out
+            </Button>
+          </>
+        }
+      />
       <main className="p-6">
         <Outlet />
       </main>

@@ -12,10 +12,10 @@ export function GoogleButton({ onError }: { onError?: (message: string) => void 
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-3 text-xs text-slate-500">
-        <span className="h-px flex-1 bg-slate-800" />
+      <div className="flex items-center gap-3 text-xs text-muted">
+        <span className="h-px flex-1 bg-line" />
         or
-        <span className="h-px flex-1 bg-slate-800" />
+        <span className="h-px flex-1 bg-line" />
       </div>
       <div className="flex justify-center">
         <GoogleLogin

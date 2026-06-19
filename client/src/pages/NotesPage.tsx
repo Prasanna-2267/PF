@@ -1,38 +1,24 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { AppHeader, Badge, Button, Card, Select } from '../components/ui';
 import { contentApi, type PubSubject } from '../features/content/content.api';
 import { lessonsApi, type Lesson } from '../features/lessons/lessons.api';
 import { SecureViewer } from '../components/SecureViewer';
 
 export function NotesPage() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [catId, setCatId] = useState('');
   const [stageId, setStageId] = useState('');
   const [subjectId, setSubjectId] = useState('');
   const [viewerLessonId, setViewerLessonId] = useState<string | null>(null);
 
   const categories = useQuery({ queryKey: ['pub', 'categories'], queryFn: contentApi.categories });
-  const stages = useQuery({
-    queryKey: ['pub', 'stages', catId],
-    queryFn: () => contentApi.stages(catId),
-    enabled: !!catId,
-  });
-  const subjects = useQuery({
-    queryKey: ['pub', 'subjects', stageId],
-    queryFn: () => contentApi.subjectTree(stageId),
-    enabled: !!stageId,
-  });
-  const lessons = useQuery({
-    queryKey: ['pub', 'lessons', subjectId],
-    queryFn: () => lessonsApi.list(subjectId),
-    enabled: !!subjectId,
-  });
-  const progress = useQuery({
-    queryKey: ['pub', 'progress', subjectId],
-    queryFn: () => lessonsApi.progress(subjectId),
-    enabled: !!subjectId,
-  });
+  const stages = useQuery({ queryKey: ['pub', 'stages', catId], queryFn: () => contentApi.stages(catId), enabled: !!catId });
+  const subjects = useQuery({ queryKey: ['pub', 'subjects', stageId], queryFn: () => contentApi.subjectTree(stageId), enabled: !!stageId });
+  const lessons = useQuery({ queryKey: ['pub', 'lessons', subjectId], queryFn: () => lessonsApi.list(subjectId), enabled: !!subjectId });
+  const progress = useQuery({ queryKey: ['pub', 'progress', subjectId], queryFn: () => lessonsApi.progress(subjectId), enabled: !!subjectId });
 
   async function toggleComplete(lesson: Lesson) {
     if (lesson.completed) await lessonsApi.uncomplete(lesson.id);
@@ -42,28 +28,27 @@ export function NotesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 px-6 py-6 text-slate-100">
-      <div className="mx-auto max-w-5xl">
-        <div className="flex items-center justify-between">
-          <p className="bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-xl font-semibold text-transparent">
-            Parallax Flow
-          </p>
-          <Link to="/dashboard" className="text-sm text-slate-400 hover:text-slate-100">
-            ← Dashboard
-          </Link>
-        </div>
+    <div className="min-h-screen bg-canvas text-ink">
+      <AppHeader
+        right={
+          <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
+            Dashboard
+          </Button>
+        }
+      />
 
-        <h1 className="mt-6 text-2xl font-medium">Notes</h1>
+      <main className="mx-auto max-w-5xl px-6 py-8">
+        <h1 className="font-display text-2xl font-semibold tracking-tight">Notes</h1>
 
         <div className="mt-4 flex flex-wrap gap-3">
-          <select
+          <Select
             value={catId}
             onChange={(e) => {
               setCatId(e.target.value);
               setStageId('');
               setSubjectId('');
             }}
-            className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+            className="w-44"
           >
             <option value="">Select exam</option>
             {categories.data?.map((c) => (
@@ -71,16 +56,15 @@ export function NotesPage() {
                 {c.name}
               </option>
             ))}
-          </select>
-
-          <select
+          </Select>
+          <Select
             value={stageId}
             onChange={(e) => {
               setStageId(e.target.value);
               setSubjectId('');
             }}
             disabled={!catId}
-            className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm disabled:opacity-40"
+            className="w-44"
           >
             <option value="">Select stage</option>
             {stages.data?.map((s) => (
@@ -88,34 +72,34 @@ export function NotesPage() {
                 {s.name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
 
         {stageId && (
           <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-[260px_1fr]">
-            <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
-              <h2 className="mb-2 px-1 text-sm font-medium">Subjects</h2>
+            <Card className="p-3">
+              <h2 className="mb-2 px-1 font-display text-sm font-medium">Subjects</h2>
               {subjects.data?.length ? (
                 <SubjectNodes nodes={subjects.data} selectedId={subjectId} onSelect={setSubjectId} />
               ) : (
-                <p className="px-1 text-sm text-slate-500">No subjects yet.</p>
+                <p className="px-1 text-sm text-muted">No subjects yet.</p>
               )}
-            </section>
+            </Card>
 
-            <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-              {!subjectId && <p className="text-sm text-slate-500">Select a subject to see its notes.</p>}
+            <Card className="p-4">
+              {!subjectId && <p className="text-sm text-muted">Select a subject to see its notes.</p>}
               {subjectId && (
                 <>
                   <div className="mb-3 flex items-center justify-between">
-                    <h2 className="text-sm font-medium">Lessons</h2>
+                    <h2 className="font-display text-sm font-medium">Lessons</h2>
                     {progress.data && (
-                      <span className="text-xs text-slate-400">
-                        {progress.data.completed}/{progress.data.total} completed
+                      <span className="font-mono text-xs text-muted">
+                        {progress.data.completed}/{progress.data.total} done
                       </span>
                     )}
                   </div>
                   <div className="space-y-2">
-                    {lessons.data?.length === 0 && <p className="text-sm text-slate-500">No lessons yet.</p>}
+                    {lessons.data?.length === 0 && <p className="text-sm text-muted">No lessons yet.</p>}
                     {lessons.data?.map((lesson) => (
                       <LessonRow
                         key={lesson.id}
@@ -127,10 +111,10 @@ export function NotesPage() {
                   </div>
                 </>
               )}
-            </section>
+            </Card>
           </div>
         )}
-      </div>
+      </main>
 
       {viewerLessonId && (
         <SecureViewer
@@ -159,13 +143,15 @@ function SubjectNodes({
   depth?: number;
 }) {
   return (
-    <ul className={depth ? 'ml-3 border-l border-slate-800 pl-2' : ''}>
+    <ul className={depth ? 'ml-3 border-l border-line pl-2' : ''}>
       {nodes.map((n) => (
         <li key={n.id}>
           <button
             type="button"
             onClick={() => onSelect(n.id)}
-            className={`block w-full truncate rounded px-2 py-1 text-left text-sm ${selectedId === n.id ? 'bg-slate-800' : 'hover:bg-slate-800/50'}`}
+            className={`block w-full truncate rounded px-2 py-1 text-left text-sm ${
+              selectedId === n.id ? 'bg-accent-soft text-accent' : 'text-ink hover:bg-canvas'
+            }`}
           >
             {n.name}
           </button>
@@ -178,49 +164,39 @@ function SubjectNodes({
   );
 }
 
-function LessonRow({
-  lesson,
-  onOpen,
-  onToggle,
-}: {
-  lesson: Lesson;
-  onOpen: () => void;
-  onToggle: () => void;
-}) {
-  const meta =
-    lesson.type === 'pdf'
-      ? `PDF · ${lesson.pageCount ?? 0} pages`
-      : 'Government link';
-  const priceTag = lesson.isFree ? ' · Free' : lesson.price ? ` · ₹${lesson.price}` : '';
-
+function LessonRow({ lesson, onOpen, onToggle }: { lesson: Lesson; onOpen: () => void; onToggle: () => void }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-slate-800 p-3">
+    <div className="flex items-center gap-3 rounded-lg border border-line p-3">
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">
-          {lesson.title} {lesson.completed && <span className="text-emerald-400">✓</span>}
+        <p className="flex items-center gap-2 truncate text-sm font-medium">
+          {lesson.title}
+          {lesson.completed && <Badge tone="success">done</Badge>}
         </p>
-        <p className="text-xs text-slate-500">
-          {meta}
-          {priceTag}
+        <p className="mt-0.5 flex items-center gap-2 text-xs text-muted">
+          <Badge>{lesson.type}</Badge>
+          <span className="font-mono">
+            {lesson.type === 'pdf' ? `${lesson.pageCount ?? 0} pages` : 'Government link'}
+          </span>
+          {lesson.isFree ? <Badge tone="accent">free</Badge> : lesson.price ? <span className="font-mono">₹{lesson.price}</span> : null}
         </p>
       </div>
       {lesson.type === 'pdf' ? (
-        <button type="button" onClick={onOpen} className="rounded bg-violet-600 px-3 py-1 text-sm hover:bg-violet-500">
+        <Button size="sm" onClick={onOpen}>
           Open
-        </button>
+        </Button>
       ) : (
         <a
           href={lesson.externalUrl ?? '#'}
           target="_blank"
           rel="noreferrer"
-          className="rounded border border-slate-700 px-3 py-1 text-sm hover:bg-slate-800"
+          className="inline-flex items-center rounded-md border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink hover:bg-canvas"
         >
           Open ↗
         </a>
       )}
-      <button type="button" onClick={onToggle} className="rounded border border-slate-700 px-2 py-1 text-xs hover:bg-slate-800">
+      <Button variant="secondary" size="sm" onClick={onToggle}>
         {lesson.completed ? 'Undo' : 'Done'}
-      </button>
+      </Button>
     </div>
   );
 }

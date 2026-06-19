@@ -4,7 +4,7 @@ import { Spinner } from './ui';
 
 export function ProtectedRoute() {
   const status = useAuthStore((s) => s.status);
-  if (status === 'loading') return <Spinner />;
+  if (status === 'loading') return <Spinner full />;
   if (status === 'unauthenticated') return <Navigate to="/login" replace />;
   return <Outlet />;
 }

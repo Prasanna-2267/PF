@@ -1,4 +1,5 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { AppHeader, Button, Card } from '../components/ui';
 import { authApi } from '../features/auth/auth.api';
 import { useAuthStore } from '../lib/auth-store';
 
@@ -6,6 +7,7 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const clear = useAuthStore((s) => s.clear);
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
 
   async function logout() {
     try {
@@ -17,57 +19,43 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 px-6 py-10 text-slate-100">
-      <div className="mx-auto max-w-2xl">
-        <div className="flex items-center justify-between">
-          <p className="bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-xl font-semibold text-transparent">
-            Parallax Flow
-          </p>
-          <button
-            type="button"
-            onClick={logout}
-            className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm hover:bg-slate-800"
-          >
+    <div className="min-h-screen bg-canvas text-ink">
+      <AppHeader
+        right={
+          <Button variant="secondary" size="sm" onClick={logout}>
             Log out
-          </button>
-        </div>
-
-        <h1 className="mt-10 text-2xl font-medium">Welcome, {user?.name} 👋</h1>
-        <p className="mt-1 text-slate-400">You're signed in. Jump into your notes below.</p>
+          </Button>
+        }
+      />
+      <main className="mx-auto max-w-2xl px-6 py-10">
+        <h1 className="font-display text-2xl font-semibold tracking-tight">Welcome, {user?.name}</h1>
+        <p className="mt-1 text-sm text-muted">Pick up where you left off.</p>
 
         <div className="mt-6 flex flex-wrap gap-3">
-          <Link
-            to="/notes"
-            className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium hover:bg-violet-500"
-          >
-            Open Notes
-          </Link>
-          {(user?.role === 'admin' || user?.role === 'superadmin') && (
-            <Link
-              to="/admin"
-              className="rounded-lg border border-slate-700 px-4 py-2 text-sm hover:bg-slate-800"
-            >
+          <Button onClick={() => navigate('/notes')}>Open Notes</Button>
+          {isAdmin && (
+            <Button variant="secondary" onClick={() => navigate('/admin')}>
               Admin panel
-            </Link>
+            </Button>
           )}
         </div>
 
-        <dl className="mt-8 grid grid-cols-2 gap-4 text-sm">
+        <dl className="mt-10 grid grid-cols-2 gap-3">
           <Info label="Email" value={user?.email ?? '—'} />
           <Info label="Phone" value={user?.phone ?? '—'} />
           <Info label="Role" value={user?.role ?? '—'} />
           <Info label="Email verified" value={user?.emailVerified ? 'Yes' : 'No'} />
         </dl>
-      </div>
+      </main>
     </div>
   );
 }
 
 function Info({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-      <dt className="text-xs text-slate-500">{label}</dt>
-      <dd className="mt-1 font-medium">{value}</dd>
-    </div>
+    <Card className="p-4">
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className="mt-1 text-sm font-medium">{value}</dd>
+    </Card>
   );
 }

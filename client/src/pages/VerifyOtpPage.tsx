@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { AuthCard, Button, ErrorText, TextInput } from '../components/ui';
+import { Alert, AuthShell, Button, Input } from '../components/ui';
 import { authApi, errorMessage } from '../features/auth/auth.api';
 import { useAuthStore } from '../lib/auth-store';
 
@@ -43,9 +43,20 @@ export function VerifyOtpPage() {
   }
 
   return (
-    <AuthCard title="Verify your email" subtitle={`Enter the 6-digit code sent to ${sentTo}`}>
+    <AuthShell
+      title="Verify your email"
+      subtitle={`Enter the 6-digit code sent to ${sentTo}`}
+      footer={
+        <>
+          Wrong email?{' '}
+          <Link to="/signup" className="text-accent hover:underline">
+            Start over
+          </Link>
+        </>
+      }
+    >
       <form className="space-y-4" onSubmit={onSubmit}>
-        <TextInput
+        <Input
           label="Verification code"
           inputMode="numeric"
           maxLength={6}
@@ -53,25 +64,15 @@ export function VerifyOtpPage() {
           onChange={(e) => setCode(e.target.value)}
           required
         />
-        <ErrorText>{error}</ErrorText>
-        {info ? <p className="text-sm text-emerald-400">{info}</p> : null}
-        <Button type="submit" disabled={loading}>
+        <Alert>{error}</Alert>
+        {info && <Alert tone="success">{info}</Alert>}
+        <Button type="submit" fullWidth disabled={loading}>
           {loading ? 'Verifying…' : 'Verify'}
         </Button>
       </form>
-      <button
-        type="button"
-        onClick={resend}
-        className="w-full text-center text-sm text-slate-400 hover:text-slate-200"
-      >
+      <button type="button" onClick={resend} className="w-full text-center text-sm text-muted hover:text-ink">
         Resend code
       </button>
-      <p className="text-center text-sm text-slate-400">
-        Wrong email?{' '}
-        <Link to="/signup" className="text-violet-400 hover:underline">
-          Start over
-        </Link>
-      </p>
-    </AuthCard>
+    </AuthShell>
   );
 }

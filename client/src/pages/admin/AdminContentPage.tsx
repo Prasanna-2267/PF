@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Alert, Button } from '../../components/ui';
 import {
   adminContentApi,
   slugify,
@@ -45,7 +46,6 @@ export function AdminContentPage() {
   const stageKey = [['admin', 'stages', catId]];
   const subjKey = [['admin', 'subjects', stageId]];
 
-  // ── Categories ──
   function addCategory() {
     const name = window.prompt('Exam category name (e.g. CA, NEET, JEE):')?.trim();
     if (!name) return;
@@ -63,11 +63,11 @@ export function AdminContentPage() {
       if (ok && catId === c._id) {
         setCatId(null);
         setStageId(null);
+        setSubjectId(null);
       }
     });
   }
 
-  // ── Stages ──
   function addStage() {
     if (!catId) return;
     const name = window.prompt('Stage name (e.g. Foundation, Inter, Final):')?.trim();
@@ -80,11 +80,13 @@ export function AdminContentPage() {
   function delStage(s: Stage) {
     if (!window.confirm(`Delete stage "${s.name}"?`)) return;
     void run(() => adminContentApi.deleteStage(s._id), stageKey).then((ok) => {
-      if (ok && stageId === s._id) setStageId(null);
+      if (ok && stageId === s._id) {
+        setStageId(null);
+        setSubjectId(null);
+      }
     });
   }
 
-  // ── Subjects ──
   function addSubject(parentSubjectId: string | null) {
     if (!stageId) return;
     const name = window.prompt(parentSubjectId ? 'Sub-subject name:' : 'Subject name:')?.trim();
@@ -96,13 +98,15 @@ export function AdminContentPage() {
   }
   function delSubject(n: SubjectNode) {
     if (!window.confirm(`Delete "${n.name}"? (must have no sub-subjects)`)) return;
-    void run(() => adminContentApi.deleteSubject(n.id), subjKey);
+    void run(() => adminContentApi.deleteSubject(n.id), subjKey).then((ok) => {
+      if (ok && subjectId === n.id) setSubjectId(null);
+    });
   }
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-medium">Content</h1>
-      {error ? <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-sm text-rose-300">{error}</p> : null}
+      <h1 className="font-display text-xl font-semibold tracking-tight">Content</h1>
+      <Alert>{error}</Alert>
 
       <div className="flex flex-wrap gap-4">
         <Panel title="Exam categories" onAdd={addCategory}>
@@ -172,27 +176,15 @@ export function AdminContentPage() {
   );
 }
 
-function Panel({
-  title,
-  onAdd,
-  children,
-}: {
-  title: string;
-  onAdd?: () => void;
-  children: ReactNode;
-}) {
+function Panel({ title, onAdd, children }: { title: string; onAdd?: () => void; children: ReactNode }) {
   return (
-    <section className="min-w-[260px] flex-1 rounded-xl border border-slate-800 bg-slate-900/40">
-      <div className="flex items-center justify-between border-b border-slate-800 px-4 py-2.5">
-        <h2 className="text-sm font-medium">{title}</h2>
+    <section className="min-w-[260px] flex-1 rounded-lg border border-line bg-surface">
+      <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+        <h2 className="font-display text-sm font-medium">{title}</h2>
         {onAdd && (
-          <button
-            type="button"
-            onClick={onAdd}
-            className="rounded-md bg-violet-600 px-2 py-1 text-xs font-medium hover:bg-violet-500"
-          >
+          <Button size="sm" onClick={onAdd}>
             + Add
-          </button>
+          </Button>
         )}
       </div>
       <div className="space-y-0.5 p-2">{children}</div>
@@ -200,8 +192,8 @@ function Panel({
   );
 }
 
-function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="px-2 py-3 text-sm text-slate-500">{children}</p>;
+function Empty({ children }: { children: ReactNode }) {
+  return <p className="px-2 py-3 text-sm text-muted">{children}</p>;
 }
 
 function Row({
@@ -225,14 +217,18 @@ function Row({
 }) {
   return (
     <div
-      className={`flex items-center gap-1 rounded-lg px-2 py-1.5 ${selected ? 'bg-slate-800' : 'hover:bg-slate-800/50'}`}
+      className={`flex items-center gap-1 rounded-md px-2 py-1.5 ${selected ? 'bg-accent-soft' : 'hover:bg-canvas'}`}
     >
-      <button type="button" onClick={onSelect} className="flex-1 truncate text-left text-sm">
+      <button
+        type="button"
+        onClick={onSelect}
+        className={`flex-1 truncate text-left text-sm ${selected ? 'text-accent' : 'text-ink'}`}
+      >
         {label}
-        {sub ? <span className="ml-1 text-xs text-slate-500">/{sub}</span> : null}
-        {!active ? <span className="ml-2 text-xs text-amber-400">hidden</span> : null}
+        {sub ? <span className="ml-1 font-mono text-xs text-muted">/{sub}</span> : null}
+        {!active ? <span className="ml-2 text-xs text-danger">hidden</span> : null}
       </button>
-      <IconButton title={active ? 'Unpublish' : 'Publish'} onClick={onToggle} label={active ? '🟢' : '⚪'} />
+      <IconButton title={active ? 'Unpublish' : 'Publish'} onClick={onToggle} label={active ? '◉' : '○'} />
       <IconButton title="Rename" onClick={onRename} label="✎" />
       <IconButton title="Delete" onClick={onDelete} label="🗑" />
     </div>
@@ -245,7 +241,7 @@ function IconButton({ title, onClick, label }: { title: string; onClick: () => v
       type="button"
       title={title}
       onClick={onClick}
-      className="rounded px-1.5 py-0.5 text-xs text-slate-400 hover:bg-slate-700 hover:text-slate-100"
+      className="rounded px-1.5 py-0.5 text-xs text-muted transition-colors hover:bg-line hover:text-ink"
     >
       {label}
     </button>
@@ -272,23 +268,21 @@ function SubjectTree({
   depth?: number;
 }) {
   return (
-    <ul className={depth ? 'ml-3 border-l border-slate-800 pl-3' : ''}>
+    <ul className={depth ? 'ml-3 border-l border-line pl-3' : ''}>
       {nodes.map((n) => (
         <li key={n.id} className="py-0.5">
-          <div
-            className={`flex items-center gap-1 rounded-lg px-2 py-1 ${selectedId === n.id ? 'bg-slate-800' : 'hover:bg-slate-800/50'}`}
-          >
+          <div className={`flex items-center gap-1 rounded-md px-2 py-1 ${selectedId === n.id ? 'bg-accent-soft' : 'hover:bg-canvas'}`}>
             <button
               type="button"
               onClick={() => onSelect(n.id)}
-              className="flex-1 truncate text-left text-sm"
+              className={`flex-1 truncate text-left text-sm ${selectedId === n.id ? 'text-accent' : 'text-ink'}`}
               title="Select to manage lessons"
             >
               {n.name}
-              {!n.isActive ? <span className="ml-2 text-xs text-amber-400">hidden</span> : null}
+              {!n.isActive ? <span className="ml-2 text-xs text-danger">hidden</span> : null}
             </button>
             <IconButton title="Add sub-subject" onClick={() => onAddChild(n.id)} label="＋" />
-            <IconButton title={n.isActive ? 'Unpublish' : 'Publish'} onClick={() => onToggle(n)} label={n.isActive ? '🟢' : '⚪'} />
+            <IconButton title={n.isActive ? 'Unpublish' : 'Publish'} onClick={() => onToggle(n)} label={n.isActive ? '◉' : '○'} />
             <IconButton title="Rename" onClick={() => onRename(n)} label="✎" />
             <IconButton title="Delete" onClick={() => onDelete(n)} label="🗑" />
           </div>

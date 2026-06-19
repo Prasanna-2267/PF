@@ -1,6 +1,6 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AuthCard, Button, ErrorText, TextInput } from '../components/ui';
+import { Alert, AuthShell, Button, Input } from '../components/ui';
 import { GoogleButton } from '../components/GoogleButton';
 import { authApi, errorMessage } from '../features/auth/auth.api';
 
@@ -28,31 +28,36 @@ export function SignupPage() {
   }
 
   return (
-    <AuthCard title="Create your account" subtitle="Start learning with Parallax Flow">
+    <AuthShell
+      title="Create your account"
+      subtitle="Start learning with Parallax Flow"
+      footer={
+        <>
+          Already have an account?{' '}
+          <Link to="/login" className="text-accent hover:underline">
+            Log in
+          </Link>
+        </>
+      }
+    >
       <form className="space-y-4" onSubmit={onSubmit}>
-        <TextInput label="Full name" value={form.name} onChange={update('name')} required />
-        <TextInput label="Email" type="email" value={form.email} onChange={update('email')} required />
-        <TextInput label="Phone" value={form.phone} onChange={update('phone')} required />
-        <TextInput
+        <Input label="Full name" value={form.name} onChange={update('name')} required />
+        <Input label="Email" type="email" value={form.email} onChange={update('email')} required />
+        <Input label="Phone" value={form.phone} onChange={update('phone')} required />
+        <Input
           label="Password"
           type="password"
+          minLength={8}
           value={form.password}
           onChange={update('password')}
-          minLength={8}
           required
         />
-        <ErrorText>{error}</ErrorText>
-        <Button type="submit" disabled={loading}>
+        <Alert>{error}</Alert>
+        <Button type="submit" fullWidth disabled={loading}>
           {loading ? 'Sending code…' : 'Sign up'}
         </Button>
       </form>
       <GoogleButton onError={setError} />
-      <p className="text-center text-sm text-slate-400">
-        Already have an account?{' '}
-        <Link to="/login" className="text-violet-400 hover:underline">
-          Log in
-        </Link>
-      </p>
-    </AuthCard>
+    </AuthShell>
   );
 }

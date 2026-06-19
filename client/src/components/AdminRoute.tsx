@@ -7,7 +7,7 @@ export function AdminRoute() {
   const status = useAuthStore((s) => s.status);
   const role = useAuthStore((s) => s.user?.role);
 
-  if (status === 'loading') return <Spinner />;
+  if (status === 'loading') return <Spinner full />;
   if (status === 'unauthenticated') return <Navigate to="/admin/login" replace />;
   if (role !== 'admin' && role !== 'superadmin') return <Navigate to="/dashboard" replace />;
   return <Outlet />;

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AuthCard, Button, ErrorText, TextInput } from '../components/ui';
+import { Alert, AuthShell, Button, Input } from '../components/ui';
 import { authApi, errorMessage } from '../features/auth/auth.api';
 
 export function ForgotPasswordPage() {
@@ -24,19 +24,22 @@ export function ForgotPasswordPage() {
   }
 
   return (
-    <AuthCard title="Forgot password" subtitle="We'll email you a reset code">
+    <AuthShell
+      title="Forgot password"
+      subtitle="We'll email you a reset code"
+      footer={
+        <Link to="/login" className="text-accent hover:underline">
+          Back to login
+        </Link>
+      }
+    >
       <form className="space-y-4" onSubmit={onSubmit}>
-        <TextInput label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        <ErrorText>{error}</ErrorText>
-        <Button type="submit" disabled={loading}>
+        <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        <Alert>{error}</Alert>
+        <Button type="submit" fullWidth disabled={loading}>
           {loading ? 'Sending…' : 'Send reset code'}
         </Button>
       </form>
-      <p className="text-center text-sm text-slate-400">
-        <Link to="/login" className="text-violet-400 hover:underline">
-          Back to login
-        </Link>
-      </p>
-    </AuthCard>
+    </AuthShell>
   );
 }

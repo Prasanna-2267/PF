@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Alert, Badge, Button } from '../../components/ui';
 import { adminLessonsApi, type AdminLesson } from '../../features/admin/admin-lessons.api';
 import { errorMessage } from '../../features/auth/auth.api';
 
@@ -58,49 +59,40 @@ export function LessonsPanel({ subjectId }: { subjectId: string }) {
   }
 
   return (
-    <section className="min-w-[280px] flex-1 rounded-xl border border-slate-800 bg-slate-900/40">
-      <div className="flex items-center justify-between gap-2 border-b border-slate-800 px-4 py-2.5">
-        <h2 className="text-sm font-medium">Lessons</h2>
+    <section className="min-w-[300px] flex-1 rounded-lg border border-line bg-surface">
+      <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-2.5">
+        <h2 className="font-display text-sm font-medium">Lessons</h2>
         <div className="flex gap-2">
           <input ref={fileRef} type="file" accept="application/pdf" onChange={onPickFile} className="hidden" />
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            className="rounded-md bg-violet-600 px-2 py-1 text-xs font-medium hover:bg-violet-500"
-          >
+          <Button size="sm" onClick={() => fileRef.current?.click()}>
             + Upload PDF
-          </button>
-          <button
-            type="button"
-            onClick={addIsm}
-            className="rounded-md border border-slate-700 px-2 py-1 text-xs hover:bg-slate-800"
-          >
+          </Button>
+          <Button size="sm" variant="secondary" onClick={addIsm}>
             + Add link
-          </button>
+          </Button>
         </div>
       </div>
 
       <div className="space-y-2 p-2">
-        {error && <p className="rounded bg-rose-500/10 px-2 py-1 text-xs text-rose-300">{error}</p>}
-        {lessons.isLoading && <p className="px-2 py-3 text-sm text-slate-500">Loading…</p>}
-        {lessons.data?.length === 0 && <p className="px-2 py-3 text-sm text-slate-500">No lessons yet.</p>}
+        <Alert>{error}</Alert>
+        {lessons.isLoading && <p className="px-2 py-3 text-sm text-muted">Loading…</p>}
+        {lessons.data?.length === 0 && <p className="px-2 py-3 text-sm text-muted">No lessons yet.</p>}
         {lessons.data?.map((l) => (
-          <div key={l.id} className="rounded-lg border border-slate-800 p-2.5">
+          <div key={l.id} className="rounded-lg border border-line p-2.5">
             <div className="flex items-center gap-2">
-              <span className="min-w-0 flex-1 truncate text-sm">
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">
                 {l.title}
-                {!l.isActive && <span className="ml-2 text-xs text-amber-400">hidden</span>}
+                {!l.isActive && <span className="ml-2 text-xs text-danger">hidden</span>}
               </span>
-              <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] uppercase text-slate-400">
-                {l.type}
-              </span>
+              <Badge>{l.type}</Badge>
+              {l.isFree ? <Badge tone="accent">free</Badge> : null}
             </div>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 font-mono text-xs text-muted">
               {l.type === 'pdf' ? `${l.pageCount ?? 0} pages` : l.externalUrl}
               {' · '}
               {l.isFree ? 'Free' : `₹${l.price}`}
             </p>
-            <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
+            <div className="mt-2 flex flex-wrap gap-1.5">
               <Mini onClick={() => void run(() => adminLessonsApi.update(l.id, { isActive: !l.isActive }))}>
                 {l.isActive ? 'Unpublish' : 'Publish'}
               </Mini>
@@ -109,7 +101,7 @@ export function LessonsPanel({ subjectId }: { subjectId: string }) {
               </Mini>
               {l.type === 'pdf' && <Mini onClick={() => setPrice(l)}>Price</Mini>}
               <Mini onClick={() => rename(l)}>Rename</Mini>
-              <Mini onClick={() => void run(() => adminLessonsApi.remove(l.id))} danger>
+              <Mini danger onClick={() => void run(() => adminLessonsApi.remove(l.id))}>
                 Delete
               </Mini>
             </div>
@@ -125,7 +117,7 @@ function Mini({ children, onClick, danger }: { children: ReactNode; onClick: () 
     <button
       type="button"
       onClick={onClick}
-      className={`rounded border border-slate-700 px-2 py-0.5 hover:bg-slate-800 ${danger ? 'text-rose-300' : 'text-slate-300'}`}
+      className={`rounded border border-line px-2 py-0.5 text-xs transition-colors hover:bg-canvas ${danger ? 'text-danger' : 'text-muted hover:text-ink'}`}
     >
       {children}
     </button>

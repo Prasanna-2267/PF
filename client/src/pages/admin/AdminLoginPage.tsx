@@ -1,6 +1,6 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AuthCard, Button, ErrorText, TextInput } from '../../components/ui';
+import { Alert, AuthShell, Button, Input } from '../../components/ui';
 import { authApi, errorMessage } from '../../features/auth/auth.api';
 import { useAuthStore } from '../../lib/auth-store';
 
@@ -34,21 +34,15 @@ export function AdminLoginPage() {
   }
 
   return (
-    <AuthCard title="Admin sign in" subtitle="Authorized administrators only">
+    <AuthShell title="Admin sign in" subtitle="Authorized administrators only">
       <form className="space-y-4" onSubmit={onSubmit}>
-        <TextInput label="Email" type="email" value={form.email} onChange={update('email')} required />
-        <TextInput
-          label="Password"
-          type="password"
-          value={form.password}
-          onChange={update('password')}
-          required
-        />
-        <ErrorText>{error}</ErrorText>
-        <Button type="submit" disabled={loading}>
+        <Input label="Email" type="email" value={form.email} onChange={update('email')} required />
+        <Input label="Password" type="password" value={form.password} onChange={update('password')} required />
+        <Alert>{error}</Alert>
+        <Button type="submit" fullWidth disabled={loading}>
           {loading ? 'Signing in…' : 'Sign in'}
         </Button>
       </form>
-    </AuthCard>
+    </AuthShell>
   );
 }
