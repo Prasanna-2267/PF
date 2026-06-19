@@ -20,6 +20,9 @@ const schema = z.object({
   CLIENT_ORIGIN: z.string().url().default('http://localhost:5173'),
 
   MONGODB_URI: z.string().min(1).default('mongodb://127.0.0.1:27017/parallax_flow'),
+  // Optional: override DNS resolvers (comma-separated). Useful when the local
+  // resolver can't do the SRV lookups that mongodb+srv:// requires.
+  DNS_SERVERS: z.string().optional(),
 
   // Phase 1+ (optional until those phases wire them in)
   JWT_ACCESS_SECRET: z.string().optional(),
