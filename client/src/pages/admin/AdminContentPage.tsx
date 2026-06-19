@@ -8,11 +8,13 @@ import {
   type SubjectNode,
 } from '../../features/admin/content.api';
 import { errorMessage } from '../../features/auth/auth.api';
+import { LessonsPanel } from './LessonsPanel';
 
 export function AdminContentPage() {
   const qc = useQueryClient();
   const [catId, setCatId] = useState<string | null>(null);
   const [stageId, setStageId] = useState<string | null>(null);
+  const [subjectId, setSubjectId] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   const categories = useQuery({ queryKey: ['admin', 'categories'], queryFn: adminContentApi.listCategories });
@@ -116,6 +118,7 @@ export function AdminContentPage() {
               onSelect={() => {
                 setCatId(c._id);
                 setStageId(null);
+                setSubjectId(null);
               }}
               onToggle={() => void run(() => adminContentApi.updateCategory(c._id, { isActive: !c.isActive }), catKey)}
               onRename={() => renameCategory(c)}
@@ -135,7 +138,10 @@ export function AdminContentPage() {
                 label={s.name}
                 active={s.isActive}
                 selected={stageId === s._id}
-                onSelect={() => setStageId(s._id)}
+                onSelect={() => {
+                  setStageId(s._id);
+                  setSubjectId(null);
+                }}
                 onToggle={() => void run(() => adminContentApi.updateStage(s._id, { isActive: !s.isActive }), stageKey)}
                 onRename={() => renameStage(s)}
                 onDelete={() => delStage(s)}
@@ -150,6 +156,8 @@ export function AdminContentPage() {
           {stageId && subjects.data && subjects.data.length > 0 && (
             <SubjectTree
               nodes={subjects.data}
+              selectedId={subjectId}
+              onSelect={setSubjectId}
               onAddChild={(id) => addSubject(id)}
               onRename={renameSubject}
               onToggle={(n) => void run(() => adminContentApi.updateSubject(n.id, { isActive: !n.isActive }), subjKey)}
@@ -157,6 +165,8 @@ export function AdminContentPage() {
             />
           )}
         </Panel>
+
+        {subjectId && <LessonsPanel subjectId={subjectId} />}
       </div>
     </div>
   );
@@ -244,6 +254,8 @@ function IconButton({ title, onClick, label }: { title: string; onClick: () => v
 
 function SubjectTree({
   nodes,
+  selectedId,
+  onSelect,
   onAddChild,
   onRename,
   onToggle,
@@ -251,6 +263,8 @@ function SubjectTree({
   depth = 0,
 }: {
   nodes: SubjectNode[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
   onAddChild: (id: string) => void;
   onRename: (n: SubjectNode) => void;
   onToggle: (n: SubjectNode) => void;
@@ -261,11 +275,18 @@ function SubjectTree({
     <ul className={depth ? 'ml-3 border-l border-slate-800 pl-3' : ''}>
       {nodes.map((n) => (
         <li key={n.id} className="py-0.5">
-          <div className="flex items-center gap-1 rounded-lg px-2 py-1 hover:bg-slate-800/50">
-            <span className="flex-1 truncate text-sm">
+          <div
+            className={`flex items-center gap-1 rounded-lg px-2 py-1 ${selectedId === n.id ? 'bg-slate-800' : 'hover:bg-slate-800/50'}`}
+          >
+            <button
+              type="button"
+              onClick={() => onSelect(n.id)}
+              className="flex-1 truncate text-left text-sm"
+              title="Select to manage lessons"
+            >
               {n.name}
               {!n.isActive ? <span className="ml-2 text-xs text-amber-400">hidden</span> : null}
-            </span>
+            </button>
             <IconButton title="Add sub-subject" onClick={() => onAddChild(n.id)} label="＋" />
             <IconButton title={n.isActive ? 'Unpublish' : 'Publish'} onClick={() => onToggle(n)} label={n.isActive ? '🟢' : '⚪'} />
             <IconButton title="Rename" onClick={() => onRename(n)} label="✎" />
@@ -274,6 +295,8 @@ function SubjectTree({
           {n.children.length > 0 && (
             <SubjectTree
               nodes={n.children}
+              selectedId={selectedId}
+              onSelect={onSelect}
               onAddChild={onAddChild}
               onRename={onRename}
               onToggle={onToggle}

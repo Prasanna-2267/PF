@@ -16,6 +16,7 @@ type AuthState = {
   status: 'loading' | 'authenticated' | 'unauthenticated';
   setAuth: (user: AuthUser, accessToken: string) => void;
   setAccessToken: (accessToken: string) => void;
+  setUser: (user: AuthUser) => void;
   clear: () => void;
 };
 
@@ -25,5 +26,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   status: 'loading',
   setAuth: (user, accessToken) => set({ user, accessToken, status: 'authenticated' }),
   setAccessToken: (accessToken) => set({ accessToken }),
+  setUser: (user) => set({ user }),
   clear: () => set({ user: null, accessToken: null, status: 'unauthenticated' }),
 }));

@@ -4,6 +4,7 @@ import { AdminRoute } from './components/AdminRoute';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { bootstrapAuth } from './features/auth/auth.api';
 import { DashboardPage } from './pages/DashboardPage';
+import { NotesPage } from './pages/NotesPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { LoginPage } from './pages/LoginPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
@@ -28,6 +29,7 @@ function App() {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/notes" element={<NotesPage />} />
       </Route>
 
       {/* Admin */}

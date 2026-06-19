@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { authApi } from '../features/auth/auth.api';
 import { useAuthStore } from '../lib/auth-store';
 
@@ -33,9 +33,24 @@ export function DashboardPage() {
         </div>
 
         <h1 className="mt-10 text-2xl font-medium">Welcome, {user?.name} 👋</h1>
-        <p className="mt-1 text-slate-400">
-          You're signed in. The student experience (notes, tracker, store…) is built in later phases.
-        </p>
+        <p className="mt-1 text-slate-400">You're signed in. Jump into your notes below.</p>
+
+        <div className="mt-6 flex flex-wrap gap-3">
+          <Link
+            to="/notes"
+            className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium hover:bg-violet-500"
+          >
+            Open Notes
+          </Link>
+          {(user?.role === 'admin' || user?.role === 'superadmin') && (
+            <Link
+              to="/admin"
+              className="rounded-lg border border-slate-700 px-4 py-2 text-sm hover:bg-slate-800"
+            >
+              Admin panel
+            </Link>
+          )}
+        </div>
 
         <dl className="mt-8 grid grid-cols-2 gap-4 text-sm">
           <Info label="Email" value={user?.email ?? '—'} />

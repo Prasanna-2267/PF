@@ -28,6 +28,9 @@ export const authApi = {
   me: () => api.get<{ user: AuthUser }>('/auth/me').then((r) => r.data.user),
 
   logout: () => api.post('/auth/logout').then((r) => r.data),
+
+  setPhone: (phone: string) =>
+    api.patch<{ user: AuthUser }>('/auth/phone', { phone }).then((r) => r.data.user),
 };
 
 /** Silent login on app load using the refresh cookie. */
@@ -49,4 +52,13 @@ export function errorMessage(err: unknown, fallback = 'Something went wrong'): s
     if (resp?.data?.error) return resp.data.error;
   }
   return fallback;
+}
+
+/** Extract HTTP status + app error code (e.g. PHONE_REQUIRED) from an axios error. */
+export function errorInfo(err: unknown): { status?: number; code?: string } {
+  if (typeof err === 'object' && err !== null && 'response' in err) {
+    const resp = (err as { response?: { status?: number; data?: { details?: { code?: string } } } }).response;
+    return { status: resp?.status, code: resp?.data?.details?.code };
+  }
+  return {};
 }
