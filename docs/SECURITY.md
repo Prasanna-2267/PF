@@ -1,0 +1,62 @@
+# Parallax Flow — Security & Anti-Piracy Model
+
+> Source of truth for the auth, single-device, and PDF-protection design. Read this before touching anything in `auth/`, `lessons/`, or the PDF pipeline.
+
+## 1. Honest threat model for PDF protection
+
+**On the web, you cannot truly prevent screenshots or someone photographing the screen with a phone.** There is no browser API to block the OS PrintScreen, Snipping Tool, screen recorders, or an external camera. Any claim otherwise on a pure web app is false.
+
+So our strategy is **defense-in-depth + forensic traceability**, the same model used by serious document-protection platforms:
+
+1. Make casual piracy genuinely hard (no raw file, no download/print, deterrents).
+2. Make any leak **traceable to the exact account** via per-user watermarks (visible + invisible + metadata) and access logs.
+
+The deterrent + traceability combination is what actually protects content. True screenshot-blocking would require a native mobile/desktop app (e.g. Android `FLAG_SECURE`) — out of scope for the web-only launch, and even that can't stop a phone camera.
+
+## 2. PDF protection layers
+
+| Layer | Mechanism |
+|------|-----------|
+| **No raw file** | PDFs live in a **private** Cloudflare R2 bucket. No public URLs, ever. The browser never receives a `.pdf` it can save. |
+| **Page-image streaming** | Pages are rendered/served as images one at a time, behind **short-lived signed tokens** (expire in seconds, bound to user + session + page). |
+| **Visible watermark** | Per-user watermark (name, email, phone, userID, timestamp) tiled diagonally, **baked into the pixels** server-side — not a CSS overlay that can be deleted via devtools. |
+| **Invisible/forensic watermark** | Subtle per-user fingerprint embedded in the rendered output so a leaked page can be traced to the account. |
+| **Metadata watermark** | User identity embedded in any served PDF/image metadata. |
+| **Entitlement gate** | Stream only if the user owns the lesson (direct purchase or via package). |
+| **Single-device gate** | Stream only if the request comes from the user's currently-active device. |
+| **Client deterrents** | PDF.js/canvas render; right-click off; text-select off; Ctrl+S / Ctrl+P / PrintScreen intercepted; blur content on tab-blur / visibility-change / devtools-open. |
+| **Access logging** | Every lesson open is written to `AccessLog` (user, ip, ua, time) for the forensic trail. |
+
+These are **deterrents + traceability**, not a guarantee against a determined camera. That trade-off is accepted and documented.
+
+## 3. Authentication
+
+- **Methods**: email/password (with 6-digit email OTP verification) and Google SSO.
+- **Tokens**: short-lived JWT access token + refresh token stored in an httpOnly, Secure, SameSite cookie.
+- **Passwords**: hashed with bcrypt/argon2; never logged.
+- **OTP**: 6-digit, stored hashed in Redis with short TTL + attempt limits.
+- **Phone**: required for email signup; for Google SSO (which never provides a phone) the user is prompted after first login and **must add a phone before first purchase or first PDF open** so the watermark always carries it.
+- **RBAC**: roles `student | admin | superadmin`. The first admin is created via a seed script — there is no public admin signup.
+
+## 4. Single-device enforcement
+
+Goal: a user account can be actively logged in on **one device at a time**.
+
+- On each successful login, the server issues a new `deviceId` and records it as the user's only valid session (in Redis + `Session`).
+- Every authenticated request validates that the token's `deviceId` matches the current active device. A mismatch ⇒ 401 (logged in elsewhere).
+- The **previous device is force-logged-out in real time** via Socket.io (chosen behavior: new login kicks the old device, so users who switch phones aren't locked out).
+
+## 5. General hardening (Phase 7 + ongoing)
+
+- Input validation with Zod at every route boundary.
+- Rate limiting (Redis) on auth, OTP, payment, and PDF endpoints.
+- Helmet, CORS allowlist, secure cookies, HTTPS in prod.
+- Webhook signature verification for Razorpay.
+- Audit logs for admin actions and content access.
+- Secrets only via env vars; `.env` is git-ignored.
+
+## 6. Known limitations (state these plainly)
+
+- Web cannot block screenshots or screen photography — mitigated by forensic watermarking + logging, not prevented.
+- Client-side deterrents (devtools/blur detection) are bypassable; they raise effort, they don't guarantee.
+- Strongest possible protection would need a native app (future phase).
