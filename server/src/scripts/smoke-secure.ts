@@ -4,6 +4,7 @@
  *
  *   npm run test:smoke:secure
  */
+import { createDecipheriv } from 'node:crypto';
 import dns from 'node:dns';
 import { rm } from 'node:fs/promises';
 import type { Server } from 'node:http';
@@ -87,18 +88,30 @@ async function main(): Promise<void> {
     r = await fetch(`${ROOT}/auth/phone`, { method: 'PATCH', headers: { ...JSON_HEADERS, ...studHdr }, body: JSON.stringify({ phone: '9998887777' }) });
     check('set phone -> 200', r.status === 200, `got ${r.status}`);
 
-    // View now works
+    // View now works and issues a per-view key
     r = await fetch(`${ROOT}/lessons/${freeId}/view`, { headers: studHdr });
-    const view = (await r.json()) as { pageCount?: number };
-    check('view free lesson -> 200, pageCount 2', r.status === 200 && view.pageCount === 2, `got ${r.status} pages=${view.pageCount}`);
+    const view = (await r.json()) as { pageCount?: number; key?: string };
+    const viewKey = view.key ? Buffer.from(view.key, 'base64') : Buffer.alloc(0);
+    check('view free lesson -> 200, pageCount 2, key issued', r.status === 200 && view.pageCount === 2 && !!view.key, `got ${r.status} pages=${view.pageCount}`);
 
-    // Watermarked page image
+    // Page comes back ENCRYPTED — not a downloadable image in the Network tab
     r = await fetch(`${ROOT}/lessons/${freeId}/pages/1`, { headers: studHdr });
     const ct = r.headers.get('content-type') ?? '';
-    const buf = Buffer.from(await r.arrayBuffer());
-    check('page 1 -> 200 image/png', r.status === 200 && ct.includes('image/png'), `got ${r.status} ${ct}`);
-    check('page is a valid PNG (watermarked)', buf.subarray(0, 8).toString('hex') === PNG_SIG && buf.length > 1000, `${buf.length} bytes`);
-    check('page response is not a PDF', !buf.subarray(0, 5).toString('latin1').startsWith('%PDF'));
+    const cipher = Buffer.from(await r.arrayBuffer());
+    check('page 1 -> 200 octet-stream (not an image)', r.status === 200 && ct.includes('application/octet-stream'), `got ${r.status} ${ct}`);
+    check(
+      'wire bytes are NOT a PNG/PDF (ciphertext)',
+      cipher.subarray(0, 8).toString('hex') !== PNG_SIG && !cipher.subarray(0, 5).toString('latin1').startsWith('%PDF'),
+    );
+
+    // Decrypt with the per-view key → a valid, heavily watermarked PNG
+    const iv = cipher.subarray(0, 12);
+    const tag = cipher.subarray(cipher.length - 16);
+    const ctBody = cipher.subarray(12, cipher.length - 16);
+    const decipher = createDecipheriv('aes-256-gcm', viewKey, iv);
+    decipher.setAuthTag(tag);
+    const png = Buffer.concat([decipher.update(ctBody), decipher.final()]);
+    check('decrypts to a valid watermarked PNG', png.subarray(0, 8).toString('hex') === PNG_SIG && png.length > 1000, `${png.length} bytes`);
 
     // Out-of-range + invalid page
     r = await fetch(`${ROOT}/lessons/${freeId}/pages/99`, { headers: studHdr });

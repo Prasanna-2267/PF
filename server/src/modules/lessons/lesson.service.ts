@@ -1,8 +1,9 @@
-import { randomUUID } from 'node:crypto';
+import { createCipheriv, randomBytes, randomUUID } from 'node:crypto';
 import { PDFDocument } from 'pdf-lib';
 import { HttpError } from '../../middleware/error.js';
 import { storage } from '../../services/storage.js';
 import { renderWatermarkedPage } from '../../services/pdf-render.js';
+import { getViewKey, issueViewKey } from '../../services/view-keys.js';
 import { UserModel, type UserDoc } from '../auth/user.model.js';
 import { SubjectModel } from '../content/subject.model.js';
 import { AccessLogModel } from './access-log.model.js';
@@ -172,8 +173,14 @@ export async function getLessonForView(userId: string, lessonId: string, meta: R
 
   assertViewable(lesson, user);
   await AccessLogModel.create({ userId, lessonId, action: 'view', ip: meta.ip, userAgent: meta.userAgent });
+  const key = issueViewKey(userId, lessonId);
 
-  return { id: lesson.id as string, title: lesson.title, pageCount: lesson.pageCount ?? 0 };
+  return {
+    id: lesson.id as string,
+    title: lesson.title,
+    pageCount: lesson.pageCount ?? 0,
+    key: key.toString('base64'),
+  };
 }
 
 export async function renderLessonPage(userId: string, lessonId: string, pageNumber: number): Promise<Buffer> {
@@ -187,6 +194,16 @@ export async function renderLessonPage(userId: string, lessonId: string, pageNum
     throw new HttpError(404, 'Page out of range');
   }
 
+  const viewKey = getViewKey(userId, lessonId);
+  if (!viewKey) throw new HttpError(403, 'Open the lesson again', { code: 'VIEW_EXPIRED' });
+
   const pdf = await storage.get(lesson.fileKey as string);
-  return renderWatermarkedPage(pdf, pageNumber, watermarkLines(user));
+  const png = await renderWatermarkedPage(pdf, pageNumber, watermarkLines(user));
+
+  // Encrypt the page (AES-256-GCM) so the Network tab only sees ciphertext.
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', viewKey, iv);
+  const ciphertext = Buffer.concat([cipher.update(png), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return Buffer.concat([iv, ciphertext, tag]); // iv(12) || ciphertext || tag(16)
 }

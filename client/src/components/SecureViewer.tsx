@@ -1,19 +1,32 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { lessonsApi } from '../features/lessons/lessons.api';
 import { authApi, errorInfo, errorMessage } from '../features/auth/auth.api';
 import { useAuthStore } from '../lib/auth-store';
 
 /**
- * In-app viewer for secured PDFs. Pages arrive as per-user watermarked images
- * (never the raw PDF). Client-side blocks (no right-click/select/drag, blur on
- * focus loss / PrintScreen) are DETERRENTS, not guarantees — the real
- * protection is the baked watermark + server access log. See docs/SECURITY.md.
+ * In-app viewer for secured PDFs. Pages arrive ENCRYPTED (AES-GCM) — the
+ * Network tab only sees ciphertext, never a downloadable image. The client
+ * decrypts in memory and paints to a <canvas> (no <img>, no blob URL, nothing
+ * to "Save image as"). Every page is heavily watermarked with the viewer's
+ * identity, and each open is logged. Client blocks (no right-click/select/drag,
+ * blur on focus loss / PrintScreen) are DETERRENTS — a determined user with
+ * devtools can still read the canvas. True prevention needs a native app.
+ * See docs/SECURITY.md.
  */
+async function decryptPage(cipher: ArrayBuffer, keyB64: string): Promise<ArrayBuffer> {
+  const rawKey = Uint8Array.from(atob(keyB64), (c) => c.charCodeAt(0));
+  const key = await crypto.subtle.importKey('raw', rawKey, { name: 'AES-GCM' }, false, ['decrypt']);
+  const bytes = new Uint8Array(cipher);
+  return crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes.slice(0, 12) }, key, bytes.slice(12));
+}
+
 export function SecureViewer({ lessonId, onClose }: { lessonId: string; onClose: () => void }) {
   const setUser = useAuthStore((s) => s.setUser);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [meta, setMeta] = useState<{ title: string; pageCount: number } | null>(null);
+  const [viewKey, setViewKey] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const [pageData, setPageData] = useState<{ page: number; url: string } | null>(null);
+  const [loadedPage, setLoadedPage] = useState(0);
   const [error, setError] = useState('');
   const [needPhone, setNeedPhone] = useState(false);
   const [phone, setPhone] = useState('');
@@ -21,16 +34,16 @@ export function SecureViewer({ lessonId, onClose }: { lessonId: string; onClose:
   const [completed, setCompleted] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
-  // Load metadata; handle the phone gate (403) and paid gate (402).
+  // Open the lesson: access checks + per-view key.
   useEffect(() => {
     let active = true;
     lessonsApi
       .view(lessonId)
       .then((m) => {
-        if (active) {
-          setMeta(m);
-          setPage(1);
-        }
+        if (!active) return;
+        setMeta({ title: m.title, pageCount: m.pageCount });
+        setViewKey(m.key);
+        setPage(1);
       })
       .catch((err) => {
         if (!active) return;
@@ -43,26 +56,36 @@ export function SecureViewer({ lessonId, onClose }: { lessonId: string; onClose:
     };
   }, [lessonId, reloadKey]);
 
-  // Fetch the current page as a blob → object URL (no shareable page URL).
+  // Fetch + decrypt + paint the current page.
   useEffect(() => {
-    if (!meta) return;
+    if (!meta || !viewKey) return;
     let active = true;
-    let url: string | null = null;
+    canvasRef.current?.getContext('2d')?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     lessonsApi
-      .pageBlob(lessonId, page)
-      .then((blob) => {
-        if (!active) return;
-        url = URL.createObjectURL(blob);
-        setPageData({ page, url });
+      .pageBytes(lessonId, page)
+      .then(async (cipher) => {
+        const png = await decryptPage(cipher, viewKey);
+        const bitmap = await createImageBitmap(new Blob([png], { type: 'image/png' }));
+        if (!active) {
+          bitmap.close();
+          return;
+        }
+        const canvas = canvasRef.current;
+        if (canvas) {
+          canvas.width = bitmap.width;
+          canvas.height = bitmap.height;
+          canvas.getContext('2d')?.drawImage(bitmap, 0, 0);
+        }
+        bitmap.close();
+        setLoadedPage(page);
       })
       .catch((err) => {
         if (active) setError(errorMessage(err));
       });
     return () => {
       active = false;
-      if (url) URL.revokeObjectURL(url);
     };
-  }, [meta, page, lessonId]);
+  }, [meta, viewKey, page, lessonId]);
 
   // Deterrents (not guarantees).
   useEffect(() => {
@@ -196,17 +219,12 @@ export function SecureViewer({ lessonId, onClose }: { lessonId: string; onClose:
 
         {meta && !needPhone && (
           <div className="mx-auto max-w-3xl">
-            {pageData && pageData.page === page ? (
-              <img
-                src={pageData.url}
-                alt={`Page ${page}`}
-                draggable={false}
-                onDragStart={(e) => e.preventDefault()}
-                className="mx-auto w-full rounded shadow-lg"
-              />
-            ) : (
-              <p className="py-20 text-center text-slate-500">Loading page…</p>
-            )}
+            <canvas
+              ref={canvasRef}
+              onContextMenu={(e) => e.preventDefault()}
+              className={`mx-auto w-full rounded shadow-lg ${loadedPage === page ? '' : 'hidden'}`}
+            />
+            {loadedPage !== page && <p className="py-20 text-center text-slate-500">Loading page…</p>}
           </div>
         )}
 

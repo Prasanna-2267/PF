@@ -63,9 +63,9 @@ export const pageImage: RequestHandler = async (req, res) => {
   if (!Number.isInteger(pageNumber) || pageNumber < 1) {
     throw new HttpError(400, 'Invalid page number');
   }
-  const png = await lessons.renderLessonPage(req.auth!.sub, req.params.id!, pageNumber);
-  res.setHeader('Content-Type', 'image/png');
+  const data = await lessons.renderLessonPage(req.auth!.sub, req.params.id!, pageNumber);
+  // Encrypted bytes, not an image — keeps it un-downloadable from the Network tab.
+  res.setHeader('Content-Type', 'application/octet-stream');
   res.setHeader('Cache-Control', 'no-store, private');
-  res.setHeader('Content-Disposition', 'inline');
-  res.send(png);
+  res.send(data);
 };

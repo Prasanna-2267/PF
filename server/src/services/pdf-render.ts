@@ -26,15 +26,15 @@ export async function renderWatermarkedPage(
   return canvas.toBuffer('image/png');
 }
 
-/** Tiled, diagonal, semi-transparent watermark covering the whole page. */
+/** Heavy tiled, diagonal watermark covering the whole page (rows staggered). */
 function drawWatermark(ctx: SKRSContext2D, width: number, height: number, lines: string[]): void {
   const text = lines.filter(Boolean).join('   •   ');
   if (!text) return;
 
   ctx.save();
-  ctx.globalAlpha = 0.16;
-  ctx.fillStyle = '#b91c1c';
-  const fontSize = Math.max(13, Math.round(width / 48));
+  ctx.globalAlpha = 0.22;
+  ctx.fillStyle = '#9f1239';
+  const fontSize = Math.max(14, Math.round(width / 40));
   ctx.font = `bold ${fontSize}px sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -42,12 +42,15 @@ function drawWatermark(ctx: SKRSContext2D, width: number, height: number, lines:
   ctx.rotate(-Math.PI / 6);
 
   const diag = Math.ceil(Math.sqrt(width * width + height * height));
-  const stepY = fontSize * 7;
-  const stepX = ctx.measureText(text).width + fontSize * 6;
+  const stepY = fontSize * 4.5;
+  const stepX = ctx.measureText(text).width + fontSize * 2.5;
+  let row = 0;
   for (let y = -diag; y <= diag; y += stepY) {
-    for (let x = -diag; x <= diag; x += stepX) {
-      ctx.fillText(text, x, y);
+    const offset = row % 2 === 1 ? stepX / 2 : 0; // stagger alternate rows
+    for (let x = -diag - offset; x <= diag; x += stepX) {
+      ctx.fillText(text, x + offset, y);
     }
+    row += 1;
   }
   ctx.restore();
 }
