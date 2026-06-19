@@ -2,10 +2,15 @@ import { randomUUID } from 'node:crypto';
 import { PDFDocument } from 'pdf-lib';
 import { HttpError } from '../../middleware/error.js';
 import { storage } from '../../services/storage.js';
+import { renderWatermarkedPage } from '../../services/pdf-render.js';
+import { UserModel, type UserDoc } from '../auth/user.model.js';
 import { SubjectModel } from '../content/subject.model.js';
+import { AccessLogModel } from './access-log.model.js';
 import { LessonModel, type LessonDoc } from './lesson.model.js';
 import { ProgressModel } from './progress.model.js';
 import type { CreateIsmInput, CreatePdfFields, UpdateLessonInput } from './lesson.validation.js';
+
+type RequestMeta = { ip?: string; userAgent?: string };
 
 /** Client-safe shape — never exposes fileKey/storage internals. */
 function publicLesson(l: LessonDoc, completed = false) {
@@ -134,4 +139,54 @@ export async function getSubjectProgress(userId: string, subjectId: string) {
   );
   const completed = await ProgressModel.countDocuments({ userId, lessonId: { $in: lessonIds } });
   return { total: lessonIds.length, completed };
+}
+
+// ── Secure viewing ──
+function assertViewable(lesson: LessonDoc, user: UserDoc): void {
+  if (lesson.type !== 'pdf' || !lesson.fileKey) {
+    throw new HttpError(400, 'This lesson is not a secured PDF');
+  }
+  if (!lesson.isActive) throw new HttpError(404, 'Lesson not found');
+
+  const isAdmin = user.role === 'admin' || user.role === 'superadmin';
+  // Phase 4 will add purchased-entitlement here; for now free lessons + admins.
+  if (!lesson.isFree && !isAdmin) {
+    throw new HttpError(402, 'Purchase required to view this lesson');
+  }
+  // Phone required so the watermark always carries it (students only).
+  if (user.role === 'student' && !user.phone) {
+    throw new HttpError(403, 'Add your phone number to view secured notes', { code: 'PHONE_REQUIRED' });
+  }
+}
+
+function watermarkLines(user: UserDoc): string[] {
+  const stamp = `${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+  return [user.name, user.email, user.phone ?? '', `ID ${user.id as string}`, stamp];
+}
+
+export async function getLessonForView(userId: string, lessonId: string, meta: RequestMeta) {
+  const lesson = await LessonModel.findById(lessonId);
+  if (!lesson) throw new HttpError(404, 'Lesson not found');
+  const user = await UserModel.findById(userId);
+  if (!user) throw new HttpError(401, 'Account not found');
+
+  assertViewable(lesson, user);
+  await AccessLogModel.create({ userId, lessonId, action: 'view', ip: meta.ip, userAgent: meta.userAgent });
+
+  return { id: lesson.id as string, title: lesson.title, pageCount: lesson.pageCount ?? 0 };
+}
+
+export async function renderLessonPage(userId: string, lessonId: string, pageNumber: number): Promise<Buffer> {
+  const lesson = await LessonModel.findById(lessonId);
+  if (!lesson) throw new HttpError(404, 'Lesson not found');
+  const user = await UserModel.findById(userId);
+  if (!user) throw new HttpError(401, 'Account not found');
+
+  assertViewable(lesson, user);
+  if (pageNumber < 1 || pageNumber > (lesson.pageCount ?? 0)) {
+    throw new HttpError(404, 'Page out of range');
+  }
+
+  const pdf = await storage.get(lesson.fileKey as string);
+  return renderWatermarkedPage(pdf, pageNumber, watermarkLines(user));
 }

@@ -248,6 +248,14 @@ export async function logout(userId: string, deviceId: string): Promise<void> {
   await SessionModel.deleteOne({ userId, deviceId });
 }
 
+export async function setPhone(userId: string, phone: string) {
+  const user = await UserModel.findById(userId);
+  if (!user) throw new HttpError(404, 'Account not found');
+  user.phone = phone;
+  await user.save();
+  return publicUser(user);
+}
+
 /** Always returns success (never reveals whether the email exists). */
 export async function forgotPassword(rawEmail: string) {
   const email = rawEmail.toLowerCase();

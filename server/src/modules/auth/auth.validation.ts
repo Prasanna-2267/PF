@@ -30,4 +30,8 @@ export const resetPasswordSchema = z.object({
   newPassword: z.string().min(8).max(128),
 });
 
+export const phoneSchema = z.object({
+  phone: z.string().min(7).max(20),
+});
+
 export type SignupInput = z.infer<typeof signupSchema>;

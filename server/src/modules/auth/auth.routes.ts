@@ -31,3 +31,4 @@ authRouter.post('/reset-password', otpLimiter, asyncHandler(authController.reset
 authRouter.post('/refresh', asyncHandler(authController.refresh));
 authRouter.post('/logout', requireAuth, asyncHandler(authController.logout));
 authRouter.get('/me', requireAuth, asyncHandler(authController.me));
+authRouter.patch('/phone', requireAuth, asyncHandler(authController.updatePhone));

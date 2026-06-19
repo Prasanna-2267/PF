@@ -1,4 +1,5 @@
 import type { RequestHandler } from 'express';
+import { HttpError } from '../../middleware/error.js';
 import * as lessons from './lesson.service.js';
 import {
   createIsmSchema,
@@ -49,4 +50,22 @@ export const uncomplete: RequestHandler = async (req, res) => {
 export const subjectProgress: RequestHandler = async (req, res) => {
   const { subjectId } = subjectIdQuery.parse(req.query);
   res.json(await lessons.getSubjectProgress(req.auth!.sub, subjectId));
+};
+
+// ── Secure viewing ──
+export const viewLesson: RequestHandler = async (req, res) => {
+  const meta = { ip: req.ip, userAgent: req.headers['user-agent'] };
+  res.json(await lessons.getLessonForView(req.auth!.sub, req.params.id!, meta));
+};
+
+export const pageImage: RequestHandler = async (req, res) => {
+  const pageNumber = Number(req.params.n);
+  if (!Number.isInteger(pageNumber) || pageNumber < 1) {
+    throw new HttpError(400, 'Invalid page number');
+  }
+  const png = await lessons.renderLessonPage(req.auth!.sub, req.params.id!, pageNumber);
+  res.setHeader('Content-Type', 'image/png');
+  res.setHeader('Cache-Control', 'no-store, private');
+  res.setHeader('Content-Disposition', 'inline');
+  res.send(png);
 };

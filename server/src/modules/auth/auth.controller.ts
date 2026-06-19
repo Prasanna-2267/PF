@@ -6,6 +6,7 @@ import {
   forgotPasswordSchema,
   googleSchema,
   loginSchema,
+  phoneSchema,
   resetPasswordSchema,
   signupSchema,
   verifyOtpSchema,
@@ -101,4 +102,9 @@ export const me: RequestHandler = async (req, res) => {
   const user = await UserModel.findById(req.auth!.sub);
   if (!user) throw new HttpError(404, 'Account not found');
   res.json({ user: authService.publicUser(user) });
+};
+
+export const updatePhone: RequestHandler = async (req, res) => {
+  const { phone } = phoneSchema.parse(req.body);
+  res.json({ user: await authService.setPhone(req.auth!.sub, phone) });
 };

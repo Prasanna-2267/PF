@@ -15,10 +15,12 @@
     "test:smoke": "cross-env NODE_ENV=test tsx src/scripts/smoke-auth.ts",
     "test:smoke:content": "cross-env NODE_ENV=test tsx src/scripts/smoke-content.ts",
     "test:smoke:lessons": "cross-env NODE_ENV=test STORAGE_DIR=.test-storage tsx src/scripts/smoke-lessons.ts",
+    "test:smoke:secure": "cross-env NODE_ENV=test STORAGE_DIR=.test-storage tsx src/scripts/smoke-secure.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.0.0",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -30,6 +32,7 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^8.9.5",
     "multer": "^2.2.0",
+    "mupdf": "^1.27.0",
     "pdf-lib": "^1.17.1",
     "pino": "^9.6.0",
     "pino-http": "^10.4.0",

@@ -15,6 +15,8 @@ export const lessonsRouter = Router();
 lessonsRouter.use(requireAuth);
 lessonsRouter.get('/', asyncHandler(lessons.listForStudent));
 lessonsRouter.get('/progress', asyncHandler(lessons.subjectProgress));
+lessonsRouter.get('/:id/view', asyncHandler(lessons.viewLesson));
+lessonsRouter.get('/:id/pages/:n', asyncHandler(lessons.pageImage));
 lessonsRouter.post('/:id/complete', asyncHandler(lessons.complete));
 lessonsRouter.delete('/:id/complete', asyncHandler(lessons.uncomplete));
 
