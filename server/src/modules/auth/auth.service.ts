@@ -3,6 +3,7 @@ import { randomInt, randomUUID } from 'node:crypto';
 import { authConfig } from '../../config/auth.js';
 import { HttpError } from '../../middleware/error.js';
 import { sendOtpEmail } from '../../services/mail.js';
+import { verifyGoogleIdToken } from '../../services/google.js';
 import { hashPassword, verifyPassword } from './auth.password.js';
 import {
   hashToken,
@@ -176,6 +177,39 @@ export async function login(rawEmail: string, password: string, meta: RequestMet
   }
 
   throw new HttpError(401, 'Invalid email or password');
+}
+
+/** Sign in (or sign up) via a verified Google ID token. */
+export async function googleLogin(credential: string, meta: RequestMeta) {
+  const profile = await verifyGoogleIdToken(credential);
+
+  let user = await UserModel.findOne({
+    $or: [{ googleId: profile.googleId }, { email: profile.email }],
+  });
+
+  if (!user) {
+    user = await UserModel.create({
+      name: profile.name,
+      email: profile.email,
+      googleId: profile.googleId,
+      emailVerified: true, // Google has verified the address
+    });
+  } else {
+    // Link the Google identity to an existing email account on first use.
+    let changed = false;
+    if (!user.googleId) {
+      user.googleId = profile.googleId;
+      changed = true;
+    }
+    if (!user.emailVerified) {
+      user.emailVerified = true;
+      changed = true;
+    }
+    if (changed) await user.save();
+  }
+
+  const tokens = await createSession(user, meta);
+  return { user: publicUser(user), tokens };
 }
 
 export async function refresh(refreshToken: string | undefined) {

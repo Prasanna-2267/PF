@@ -113,6 +113,12 @@ async function main(): Promise<void> {
     r = await fetch(`${BASE}/login`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ email: 'nope' }) });
     check('validation: bad body -> 400', r.status === 400, `got ${r.status}`);
 
+    // Google SSO error paths (no GOOGLE_CLIENT_ID configured in test env)
+    r = await fetch(`${BASE}/google`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({}) });
+    check('google: missing credential -> 400', r.status === 400, `got ${r.status}`);
+    r = await fetch(`${BASE}/google`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ credential: 'fake.invalid.token' }) });
+    check('google: invalid/unconfigured -> 401 or 503', r.status === 401 || r.status === 503, `got ${r.status}`);
+
     // --- Scenario: register, DON'T verify, then log in (should guide to verify) ---
     const email2 = `smoke2_${Date.now()}@example.com`;
     r = await fetch(`${BASE}/signup`, { method: 'POST', headers: JSON_HEADERS, body: body({ email: email2, password }) });

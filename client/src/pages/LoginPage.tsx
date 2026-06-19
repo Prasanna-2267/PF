@@ -1,6 +1,7 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthCard, Button, ErrorText, TextInput } from '../components/ui';
+import { GoogleButton } from '../components/GoogleButton';
 import { authApi, errorMessage } from '../features/auth/auth.api';
 import { useAuthStore } from '../lib/auth-store';
 
@@ -54,6 +55,7 @@ export function LoginPage() {
           {loading ? 'Logging in…' : 'Log in'}
         </Button>
       </form>
+      <GoogleButton onError={setError} />
       <p className="text-center text-sm text-slate-400">
         New here?{' '}
         <Link to="/signup" className="text-violet-400 hover:underline">

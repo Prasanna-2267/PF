@@ -16,4 +16,8 @@ export const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+export const googleSchema = z.object({
+  credential: z.string().min(10),
+});
+
 export type SignupInput = z.infer<typeof signupSchema>;

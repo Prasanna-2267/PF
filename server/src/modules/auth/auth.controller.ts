@@ -2,7 +2,7 @@ import type { Request, RequestHandler, Response } from 'express';
 import { authConfig } from '../../config/auth.js';
 import { HttpError } from '../../middleware/error.js';
 import * as authService from './auth.service.js';
-import { loginSchema, signupSchema, verifyOtpSchema } from './auth.validation.js';
+import { googleSchema, loginSchema, signupSchema, verifyOtpSchema } from './auth.validation.js';
 import { UserModel } from './user.model.js';
 
 function reqMeta(req: Request) {
@@ -58,6 +58,13 @@ export const login: RequestHandler = async (req, res) => {
 
   setRefreshCookie(res, result.tokens.refreshToken);
   res.json({ user: result.user, accessToken: result.tokens.accessToken });
+};
+
+export const google: RequestHandler = async (req, res) => {
+  const { credential } = googleSchema.parse(req.body);
+  const { user, tokens } = await authService.googleLogin(credential, reqMeta(req));
+  setRefreshCookie(res, tokens.refreshToken);
+  res.json({ user, accessToken: tokens.accessToken });
 };
 
 export const refresh: RequestHandler = async (req, res) => {
