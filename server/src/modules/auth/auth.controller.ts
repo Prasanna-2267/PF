@@ -2,7 +2,14 @@ import type { Request, RequestHandler, Response } from 'express';
 import { authConfig } from '../../config/auth.js';
 import { HttpError } from '../../middleware/error.js';
 import * as authService from './auth.service.js';
-import { googleSchema, loginSchema, signupSchema, verifyOtpSchema } from './auth.validation.js';
+import {
+  forgotPasswordSchema,
+  googleSchema,
+  loginSchema,
+  resetPasswordSchema,
+  signupSchema,
+  verifyOtpSchema,
+} from './auth.validation.js';
 import { UserModel } from './user.model.js';
 
 function reqMeta(req: Request) {
@@ -65,6 +72,16 @@ export const google: RequestHandler = async (req, res) => {
   const { user, tokens } = await authService.googleLogin(credential, reqMeta(req));
   setRefreshCookie(res, tokens.refreshToken);
   res.json({ user, accessToken: tokens.accessToken });
+};
+
+export const forgotPassword: RequestHandler = async (req, res) => {
+  const { email } = forgotPasswordSchema.parse(req.body);
+  res.json(await authService.forgotPassword(email));
+};
+
+export const resetPassword: RequestHandler = async (req, res) => {
+  const { email, code, newPassword } = resetPasswordSchema.parse(req.body);
+  res.json(await authService.resetPassword(email, code, newPassword));
 };
 
 export const refresh: RequestHandler = async (req, res) => {

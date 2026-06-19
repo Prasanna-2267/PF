@@ -55,6 +55,11 @@ export function LoginPage() {
           {loading ? 'Logging in…' : 'Log in'}
         </Button>
       </form>
+      <p className="text-center text-sm">
+        <Link to="/forgot-password" className="text-slate-400 hover:text-slate-200">
+          Forgot password?
+        </Link>
+      </p>
       <GoogleButton onError={setError} />
       <p className="text-center text-sm text-slate-400">
         New here?{' '}

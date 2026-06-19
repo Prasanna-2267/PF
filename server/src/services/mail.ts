@@ -51,9 +51,20 @@ export async function sendOtpEmail(to: string, code: string): Promise<void> {
   await activeMailer.send({
     to,
     subject: 'Your Parallax Flow verification code',
-    text: `Your verification code is ${code}. It expires in 10 minutes.`,
+    text: `Your verification code is ${code}. It expires in 30 minutes.`,
     html: `<p>Your Parallax Flow verification code is:</p>
 <h2 style="letter-spacing:4px;font-family:monospace">${code}</h2>
-<p>It expires in 10 minutes. If you didn't request this, you can ignore this email.</p>`,
+<p>It expires in 30 minutes. If you didn't request this, you can ignore this email.</p>`,
+  });
+}
+
+export async function sendPasswordResetEmail(to: string, code: string): Promise<void> {
+  await activeMailer.send({
+    to,
+    subject: 'Reset your Parallax Flow password',
+    text: `Your password reset code is ${code}. It expires in 15 minutes.`,
+    html: `<p>Your Parallax Flow password reset code is:</p>
+<h2 style="letter-spacing:4px;font-family:monospace">${code}</h2>
+<p>It expires in 15 minutes. If you didn't request this, you can safely ignore this email.</p>`,
   });
 }

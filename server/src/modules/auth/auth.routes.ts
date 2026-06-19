@@ -26,6 +26,8 @@ authRouter.post('/resend-otp', otpLimiter, asyncHandler(authController.resendOtp
 authRouter.post('/verify-otp', otpLimiter, asyncHandler(authController.verifyOtp));
 authRouter.post('/login', loginLimiter, asyncHandler(authController.login));
 authRouter.post('/google', loginLimiter, asyncHandler(authController.google));
+authRouter.post('/forgot-password', otpLimiter, asyncHandler(authController.forgotPassword));
+authRouter.post('/reset-password', otpLimiter, asyncHandler(authController.resetPassword));
 authRouter.post('/refresh', asyncHandler(authController.refresh));
 authRouter.post('/logout', requireAuth, asyncHandler(authController.logout));
 authRouter.get('/me', requireAuth, asyncHandler(authController.me));

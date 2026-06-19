@@ -19,6 +19,12 @@ export const authApi = {
   google: (credential: string) =>
     api.post<AuthResponse>('/auth/google', { credential }).then((r) => r.data),
 
+  forgotPassword: (d: { email: string }) =>
+    api.post<{ message: string }>('/auth/forgot-password', d).then((r) => r.data),
+
+  resetPassword: (d: { email: string; code: string; newPassword: string }) =>
+    api.post<{ message: string }>('/auth/reset-password', d).then((r) => r.data),
+
   me: () => api.get<{ user: AuthUser }>('/auth/me').then((r) => r.data.user),
 
   logout: () => api.post('/auth/logout').then((r) => r.data),

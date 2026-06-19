@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import { randomInt, randomUUID } from 'node:crypto';
 import { authConfig } from '../../config/auth.js';
 import { HttpError } from '../../middleware/error.js';
-import { sendOtpEmail } from '../../services/mail.js';
+import { sendOtpEmail, sendPasswordResetEmail } from '../../services/mail.js';
 import { verifyGoogleIdToken } from '../../services/google.js';
 import { hashPassword, verifyPassword } from './auth.password.js';
 import {
@@ -12,6 +12,7 @@ import {
   signRefreshToken,
   verifyRefreshToken,
 } from './auth.tokens.js';
+import { PasswordResetModel } from './password-reset.model.js';
 import { PendingRegistrationModel } from './pending-registration.model.js';
 import { SessionModel } from './session.model.js';
 import { UserModel, type UserDoc } from './user.model.js';
@@ -245,4 +246,54 @@ export async function refresh(refreshToken: string | undefined) {
 
 export async function logout(userId: string, deviceId: string): Promise<void> {
   await SessionModel.deleteOne({ userId, deviceId });
+}
+
+/** Always returns success (never reveals whether the email exists). */
+export async function forgotPassword(rawEmail: string) {
+  const email = rawEmail.toLowerCase();
+  const user = await UserModel.findOne({ email });
+  if (user?.passwordHash) {
+    const code = generateOtp();
+    await PasswordResetModel.findOneAndUpdate(
+      { email },
+      {
+        email,
+        codeHash: await bcrypt.hash(code, 10),
+        attempts: 0,
+        expiresAt: new Date(Date.now() + authConfig.passwordResetTtlSec * 1000),
+      },
+      { upsert: true },
+    );
+    await sendPasswordResetEmail(email, code);
+  }
+  return { message: 'If an account exists for that email, a reset code has been sent.' };
+}
+
+export async function resetPassword(rawEmail: string, code: string, newPassword: string) {
+  const email = rawEmail.toLowerCase();
+  const reset = await PasswordResetModel.findOne({ email });
+  if (!reset) throw new HttpError(400, 'Invalid or expired reset code');
+
+  if (reset.attempts >= authConfig.otpMaxAttempts) {
+    await reset.deleteOne();
+    throw new HttpError(429, 'Too many attempts. Please request a new reset code.');
+  }
+
+  const matches = await bcrypt.compare(code, reset.codeHash);
+  if (!matches) {
+    reset.attempts += 1;
+    await reset.save();
+    throw new HttpError(400, 'Invalid code');
+  }
+
+  await reset.deleteOne();
+  const user = await UserModel.findOne({ email });
+  if (!user) throw new HttpError(400, 'Invalid or expired reset code');
+
+  user.passwordHash = await hashPassword(newPassword);
+  await user.save();
+  // Force re-login everywhere after a password change.
+  await SessionModel.deleteMany({ userId: user.id });
+
+  return { message: 'Password updated. Please log in with your new password.' };
 }

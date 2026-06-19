@@ -136,6 +136,34 @@ async function main(): Promise<void> {
       body: JSON.stringify({ code: otp2 }),
     });
     check('verify after login-rebind -> 200', r.status === 200, `got ${r.status}`);
+
+    // --- Password reset (email A) ---
+    r = await fetch(`${BASE}/forgot-password`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ email }) });
+    check('forgot-password -> 200', r.status === 200, `got ${r.status}`);
+    const resetCode = lastOtp;
+    check('reset code captured', /^\d{6}$/.test(resetCode), resetCode || '(none)');
+
+    r = await fetch(`${BASE}/reset-password`, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ email, code: '000000', newPassword: 'newsecret123' }),
+    });
+    check('reset-password wrong code -> 400', r.status === 400, `got ${r.status}`);
+
+    r = await fetch(`${BASE}/reset-password`, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ email, code: resetCode, newPassword: 'newsecret123' }),
+    });
+    check('reset-password valid -> 200', r.status === 200, `got ${r.status}`);
+
+    r = await fetch(`${BASE}/login`, { method: 'POST', headers: JSON_HEADERS, body: body({ email, password }) });
+    check('login with old password -> 401', r.status === 401, `got ${r.status}`);
+    r = await fetch(`${BASE}/login`, { method: 'POST', headers: JSON_HEADERS, body: body({ email, password: 'newsecret123' }) });
+    check('login with new password -> 200', r.status === 200, `got ${r.status}`);
+
+    r = await fetch(`${BASE}/forgot-password`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ email: 'nobody@example.com' }) });
+    check('forgot-password unknown email -> 200 (no reveal)', r.status === 200, `got ${r.status}`);
   } finally {
     await mongoose.connection.dropDatabase();
     await new Promise<void>((resolve) => server.close(() => resolve()));

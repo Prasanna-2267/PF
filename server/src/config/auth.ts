@@ -25,6 +25,7 @@ export const authConfig = {
   // signup-session cookie (which binds verification to this browser) matches it.
   signupCookieName: 'pf_signup',
   signupTtlSec: 30 * 60, // 30 minutes
+  passwordResetTtlSec: 15 * 60, // 15 minutes
   cookie: {
     httpOnly: true,
     secure: isProd,
