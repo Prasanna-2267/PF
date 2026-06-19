@@ -35,6 +35,13 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     res.status(err.status).json({ error: err.message, details: err.details });
     return;
   }
+  // MongoDB duplicate-key (e.g. unique email/phone) — return a clean 409 even
+  // when a findOne+create check loses a race.
+  if (typeof err === 'object' && err !== null && (err as { code?: number }).code === 11000) {
+    const field = Object.keys((err as { keyValue?: Record<string, unknown> }).keyValue ?? {})[0];
+    res.status(409).json({ error: `An account with this ${field ?? 'value'} already exists` });
+    return;
+  }
   logger.error({ err }, 'Unhandled error');
   res.status(500).json({ error: isProd ? 'Internal server error' : String(err) });
 };
