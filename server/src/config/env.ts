@@ -1,5 +1,13 @@
-import 'dotenv/config';
+import { config as loadEnv } from 'dotenv';
 import { z } from 'zod';
+
+// Layered env loading (most-specific first; dotenv never overrides already-set
+// vars, so the host/script environment always wins):
+//   .env.<NODE_ENV>.local → .env.<NODE_ENV> → .env.local → .env
+const NODE_ENV = process.env.NODE_ENV ?? 'development';
+for (const file of [`.env.${NODE_ENV}.local`, `.env.${NODE_ENV}`, '.env.local', '.env']) {
+  loadEnv({ path: file });
+}
 
 /**
  * Typed, validated environment. Core vars have safe dev defaults so the server

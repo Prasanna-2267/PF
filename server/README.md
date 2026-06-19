@@ -22,11 +22,24 @@ The API starts on `http://localhost:4000`. Health check: `GET /health`.
 
 | Script | Purpose |
 |--------|---------|
-| `npm run dev` | Start with hot reload (tsx watch) |
-| `npm start` | Start once (tsx) |
-| `npm run typecheck` | Type-check with tsc (no emit) |
+| `npm run dev` | Dev with hot reload (tsx watch, `NODE_ENV=development`) |
+| `npm run build` | Compile TypeScript to `dist/` |
+| `npm start` | Run the compiled build (`dist/index.js`) |
+| `npm run start:prod` | Run the build with `NODE_ENV=production` |
+| `npm run typecheck` | Type-check only (no emit) |
 | `npm run lint` | ESLint |
 | `npm run format` | Prettier write |
+
+## Environments (dev & prod)
+
+Config is loaded layered, most-specific first (the host/script environment always
+wins over files): `.env.<NODE_ENV>.local` → `.env.<NODE_ENV>` → `.env.local` → `.env`.
+
+- **Dev**: `npm run dev` (uses safe localhost defaults; create `.env` or
+  `.env.development` for overrides). Start MongoDB + Redis locally from Phase 1.
+- **Prod**: `npm run build` then `npm run start:prod`. Provide secrets via host
+  env vars or `.env.production` (never committed). `NODE_ENV=production` switches
+  off pretty logging and enables prod behavior.
 
 ## Structure
 

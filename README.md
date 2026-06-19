@@ -31,6 +31,20 @@ Parallax-Flow/
 
 See per-package READMEs in `client/` and `server/`. Start with `docs/ROADMAP.md` for the build plan and current phase.
 
+## Environments (dev & prod)
+
+Both apps are environment-aware via `NODE_ENV` / Vite mode.
+
+| | Dev | Prod |
+|---|---|---|
+| **Server** | `npm run dev` (tsx watch, localhost defaults) | `npm run build` → `npm run start:prod` (compiled `dist/`) |
+| **Client** | `npm run dev` (Vite, proxies `/api` → server) | `npm run build` → static assets in `dist/` |
+| **Config** | `.env` / `.env.development` (server), Vite proxy (client) | host env vars / `.env.production` (server), `VITE_API_BASE_URL` at build (client) |
+
+Env files are git-ignored except `*.example` templates. Copy `server/.env.example`
+and `client/.env.example` and fill values per phase. See each package's README for
+the layered env-loading order and full details.
+
 ## Documentation
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — system design, data model, modules

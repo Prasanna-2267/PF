@@ -109,5 +109,15 @@ Server state via **React Query**; light client state via **Zustand**. Styling wi
 
 ## 8. Environments
 
-- **Dev**: local MongoDB + local Redis; R2/Razorpay/OpenAI via test credentials in `.env`.
-- **Prod**: MongoDB Atlas + managed Redis; secrets via host env vars. Never commit `.env`.
+Both apps are environment-aware. The server selects config via `NODE_ENV`; the
+client via Vite mode.
+
+- **Server env loading** (layered, most-specific first; host/script env always wins):
+  `.env.<NODE_ENV>.local` → `.env.<NODE_ENV>` → `.env.local` → `.env`. Built with
+  `tsc` to `dist/` and run with `node` in prod.
+- **Dev**: local MongoDB + local Redis; R2/Razorpay/OpenAI via test credentials.
+  `server: npm run dev` (tsx watch), `client: npm run dev` (Vite proxies `/api`).
+- **Prod**: MongoDB Atlas + managed Redis; secrets via host env vars (never commit
+  real env files — only `*.example`). `server: npm run build && npm run start:prod`,
+  `client: npm run build` (set `VITE_API_BASE_URL` at build if cross-origin).
+  `NODE_ENV=production` disables pretty logging and enables prod behavior.

@@ -8,10 +8,10 @@ dist/
 build/
 *.tsbuildinfo
 
-# Environment / secrets
+# Environment / secrets — ignore all env files; commit only templates (*.example)
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 *.pem
 *.key
 
