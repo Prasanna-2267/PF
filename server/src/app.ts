@@ -7,6 +7,7 @@ import { env, isProd } from './config/env.js';
 import { logger } from './lib/logger.js';
 import { errorHandler, notFound } from './middleware/error.js';
 import { authRouter } from './modules/auth/auth.routes.js';
+import { adminContentRouter, contentRouter } from './modules/content/content.routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -26,6 +27,8 @@ export function createApp(): Express {
 
   // Feature routers (more mounted here as phases land).
   app.use('/api/auth', authRouter);
+  app.use('/api/content', contentRouter);
+  app.use('/api/admin/content', adminContentRouter);
 
   app.use(notFound);
   app.use(errorHandler);
