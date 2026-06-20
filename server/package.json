@@ -17,6 +17,7 @@
     "test:smoke:lessons": "cross-env NODE_ENV=test STORAGE_DIR=.test-storage tsx src/scripts/smoke-lessons.ts",
     "test:smoke:secure": "cross-env NODE_ENV=test STORAGE_DIR=.test-storage tsx src/scripts/smoke-secure.ts",
     "test:smoke:realtime": "cross-env NODE_ENV=test tsx src/scripts/smoke-realtime.ts",
+    "test:smoke:commerce": "cross-env NODE_ENV=test STORAGE_DIR=.test-storage tsx src/scripts/smoke-commerce.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

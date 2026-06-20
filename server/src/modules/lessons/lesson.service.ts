@@ -6,6 +6,7 @@ import { renderWatermarkedPage } from '../../services/pdf-render.js';
 import { getViewSession, issueViewSession } from '../../services/view-keys.js';
 import { UserModel, type UserDoc } from '../auth/user.model.js';
 import { SubjectModel } from '../content/subject.model.js';
+import { getOwnedLessonIds, hasLessonAccess } from '../commerce/commerce.entitlement.js';
 import { AccessLogModel } from './access-log.model.js';
 import { LessonModel, type LessonDoc } from './lesson.model.js';
 import { ProgressModel } from './progress.model.js';
@@ -14,7 +15,7 @@ import type { CreateIsmInput, CreatePdfFields, UpdateLessonInput } from './lesso
 type RequestMeta = { ip?: string; userAgent?: string };
 
 /** Client-safe shape — never exposes fileKey/storage internals. */
-function publicLesson(l: LessonDoc, completed = false) {
+function publicLesson(l: LessonDoc, completed = false, locked = false) {
   return {
     id: l.id as string,
     title: l.title,
@@ -27,6 +28,7 @@ function publicLesson(l: LessonDoc, completed = false) {
     order: l.order,
     isActive: l.isActive,
     completed,
+    locked,
   };
 }
 
@@ -101,7 +103,11 @@ export async function listLessonsForStudent(subjectId: string, userId: string) {
     .select('lessonId')
     .lean();
   const completed = new Set(completedRows.map((p) => String(p.lessonId)));
-  return lessons.map((l) => publicLesson(l, completed.has(String(l._id))));
+  const owned = await getOwnedLessonIds(userId);
+  return lessons.map((l) => {
+    const locked = l.type === 'pdf' && !l.isFree && !owned.has(String(l._id));
+    return publicLesson(l, completed.has(String(l._id)), locked);
+  });
 }
 
 export async function updateLesson(id: string, data: UpdateLessonInput) {
@@ -143,16 +149,17 @@ export async function getSubjectProgress(userId: string, subjectId: string) {
 }
 
 // ── Secure viewing ──
-function assertViewable(lesson: LessonDoc, user: UserDoc): void {
+async function assertViewable(lesson: LessonDoc, user: UserDoc): Promise<void> {
   if (lesson.type !== 'pdf' || !lesson.fileKey) {
     throw new HttpError(400, 'This lesson is not a secured PDF');
   }
   if (!lesson.isActive) throw new HttpError(404, 'Lesson not found');
 
   const isAdmin = user.role === 'admin' || user.role === 'superadmin';
-  // Phase 4 will add purchased-entitlement here; for now free lessons + admins.
+  // Free lessons + admins are always allowed; otherwise require a paid entitlement.
   if (!lesson.isFree && !isAdmin) {
-    throw new HttpError(402, 'Purchase required to view this lesson');
+    const owns = await hasLessonAccess(user.id as string, lesson.id as string);
+    if (!owns) throw new HttpError(402, 'Purchase required to view this lesson', { code: 'PURCHASE_REQUIRED' });
   }
   // Phone required so the watermark always carries it (students only).
   if (user.role === 'student' && !user.phone) {
@@ -171,7 +178,7 @@ export async function getLessonForView(userId: string, lessonId: string, meta: R
   const user = await UserModel.findById(userId);
   if (!user) throw new HttpError(401, 'Account not found');
 
-  assertViewable(lesson, user);
+  await assertViewable(lesson, user);
   const session = issueViewSession(userId, lessonId);
   await AccessLogModel.create({
     userId,
@@ -198,7 +205,7 @@ export async function renderLessonPage(userId: string, lessonId: string, pageNum
   const user = await UserModel.findById(userId);
   if (!user) throw new HttpError(401, 'Account not found');
 
-  assertViewable(lesson, user);
+  await assertViewable(lesson, user);
   if (pageNumber < 1 || pageNumber > (lesson.pageCount ?? 0)) {
     throw new HttpError(404, 'Page out of range');
   }

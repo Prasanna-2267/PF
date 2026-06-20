@@ -9,6 +9,7 @@ import { errorHandler, notFound } from './middleware/error.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { adminContentRouter, contentRouter } from './modules/content/content.routes.js';
 import { adminLessonsRouter, lessonsRouter } from './modules/lessons/lesson.routes.js';
+import { adminCommerceRouter, commerceRouter } from './modules/commerce/commerce.routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -18,7 +19,15 @@ export function createApp(): Express {
 
   app.use(helmet());
   app.use(cors({ origin: env.CLIENT_ORIGIN, credentials: true }));
-  app.use(express.json({ limit: '1mb' }));
+  app.use(
+    express.json({
+      limit: '1mb',
+      // Stash the raw body so the Razorpay webhook can verify its signature.
+      verify: (req, _res, buf) => {
+        (req as unknown as { rawBody?: Buffer }).rawBody = buf;
+      },
+    }),
+  );
   app.use(cookieParser());
   app.use(pinoHttp({ logger }));
 
@@ -32,6 +41,8 @@ export function createApp(): Express {
   app.use('/api/admin/content', adminContentRouter);
   app.use('/api/lessons', lessonsRouter);
   app.use('/api/admin/lessons', adminLessonsRouter);
+  app.use('/api/commerce', commerceRouter);
+  app.use('/api/admin/commerce', adminCommerceRouter);
 
   app.use(notFound);
   app.use(errorHandler);

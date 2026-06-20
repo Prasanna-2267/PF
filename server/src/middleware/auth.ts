@@ -8,6 +8,7 @@ declare global {
   namespace Express {
     interface Request {
       auth?: AccessPayload;
+      rawBody?: Buffer;
     }
   }
 }
