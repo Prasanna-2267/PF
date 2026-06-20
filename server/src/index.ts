@@ -4,18 +4,17 @@ import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { logger } from './lib/logger.js';
 import { connectMongo, disconnectMongo } from './lib/db.js';
+import { bindRealtime } from './realtime/realtime.js';
 
 async function bootstrap(): Promise<void> {
   const app = createApp();
   const httpServer = createServer(app);
 
-  // Socket.io: real-time "logged out on another device" lands in Phase 1c.
+  // Socket.io: instant "logged out on another device" push (single-device).
   const io = new SocketServer(httpServer, {
     cors: { origin: env.CLIENT_ORIGIN, credentials: true },
   });
-  io.on('connection', (socket) => {
-    logger.debug({ id: socket.id }, 'socket connected');
-  });
+  bindRealtime(io);
 
   try {
     await connectMongo();

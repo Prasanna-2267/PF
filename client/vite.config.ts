@@ -13,6 +13,12 @@ export default defineConfig({
         target: 'http://localhost:4000',
         changeOrigin: true,
       },
+      // Forward the Socket.io websocket (instant logout) too.
+      '/socket.io': {
+        target: 'http://localhost:4000',
+        ws: true,
+        changeOrigin: true,
+      },
     },
   },
 });

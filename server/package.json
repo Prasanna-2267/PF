@@ -16,10 +16,12 @@
     "test:smoke:content": "cross-env NODE_ENV=test tsx src/scripts/smoke-content.ts",
     "test:smoke:lessons": "cross-env NODE_ENV=test STORAGE_DIR=.test-storage tsx src/scripts/smoke-lessons.ts",
     "test:smoke:secure": "cross-env NODE_ENV=test STORAGE_DIR=.test-storage tsx src/scripts/smoke-secure.ts",
+    "test:smoke:realtime": "cross-env NODE_ENV=test tsx src/scripts/smoke-realtime.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1073.0",
     "@napi-rs/canvas": "^1.0.0",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
@@ -51,6 +53,7 @@
     "eslint": "^9.18.0",
     "pino-pretty": "^13.0.0",
     "prettier": "^3.4.2",
+    "socket.io-client": "^4.8.3",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"

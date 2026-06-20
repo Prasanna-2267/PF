@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { AdminRoute } from './components/AdminRoute';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { bootstrapAuth } from './features/auth/auth.api';
+import { useAuthStore } from './lib/auth-store';
+import { connectSocket, disconnectSocket } from './lib/socket';
 import { DashboardPage } from './pages/DashboardPage';
 import { NotesPage } from './pages/NotesPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
@@ -15,10 +17,28 @@ import { AdminLayout } from './pages/admin/AdminLayout';
 import { AdminLoginPage } from './pages/admin/AdminLoginPage';
 
 function App() {
+  const navigate = useNavigate();
+  const status = useAuthStore((s) => s.status);
+  const clear = useAuthStore((s) => s.clear);
+
   // Attempt a silent login (via the refresh cookie) on first load.
   useEffect(() => {
     void bootstrapAuth();
   }, []);
+
+  // Realtime single-device: get pushed to the login screen if we're logged out
+  // because the account signed in on another device.
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+    const token = useAuthStore.getState().accessToken;
+    if (!token) return;
+    connectSocket(token, () => {
+      const role = useAuthStore.getState().user?.role;
+      clear();
+      navigate(role === 'admin' || role === 'superadmin' ? '/admin/login' : '/login', { replace: true });
+    });
+    return () => disconnectSocket();
+  }, [status, clear, navigate]);
 
   return (
     <Routes>

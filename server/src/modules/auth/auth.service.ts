@@ -4,6 +4,7 @@ import { authConfig } from '../../config/auth.js';
 import { HttpError } from '../../middleware/error.js';
 import { sendOtpEmail, sendPasswordResetEmail } from '../../services/mail.js';
 import { verifyGoogleIdToken } from '../../services/google.js';
+import { kickOtherDevices } from '../../realtime/realtime.js';
 import { hashPassword, verifyPassword } from './auth.password.js';
 import {
   hashToken,
@@ -56,6 +57,9 @@ async function createSession(user: UserDoc, meta: RequestMeta): Promise<TokenBun
     userAgent: meta.userAgent,
     expiresAt: new Date(Date.now() + authConfig.refreshTtlSec * 1000),
   });
+
+  // Instantly log out any other device still connected over Socket.io.
+  void kickOtherDevices(user.id as string, deviceId);
 
   return { accessToken, refreshToken };
 }
