@@ -10,6 +10,7 @@ export type Lesson = {
   isFree: boolean;
   order: number;
   completed: boolean;
+  locked: boolean;
 };
 
 export const lessonsApi = {

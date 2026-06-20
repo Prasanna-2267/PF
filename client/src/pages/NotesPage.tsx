@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AppHeader, Badge, Button, Card, Select } from '../components/ui';
+import { Alert, AppHeader, Badge, Button, Card, Select } from '../components/ui';
 import { contentApi, type PubSubject } from '../features/content/content.api';
 import { lessonsApi, type Lesson } from '../features/lessons/lessons.api';
+import { purchase } from '../features/commerce/purchase';
 import { SecureViewer } from '../components/SecureViewer';
 
 export function NotesPage() {
@@ -13,6 +14,7 @@ export function NotesPage() {
   const [stageId, setStageId] = useState('');
   const [subjectId, setSubjectId] = useState('');
   const [viewerLessonId, setViewerLessonId] = useState<string | null>(null);
+  const [purchaseError, setPurchaseError] = useState('');
 
   const categories = useQuery({ queryKey: ['pub', 'categories'], queryFn: contentApi.categories });
   const stages = useQuery({ queryKey: ['pub', 'stages', catId], queryFn: () => contentApi.stages(catId), enabled: !!catId });
@@ -25,6 +27,15 @@ export function NotesPage() {
     else await lessonsApi.complete(lesson.id);
     await qc.invalidateQueries({ queryKey: ['pub', 'lessons', subjectId] });
     await qc.invalidateQueries({ queryKey: ['pub', 'progress', subjectId] });
+  }
+
+  async function buyLesson(lesson: Lesson) {
+    setPurchaseError('');
+    await purchase(
+      [{ type: 'lesson', id: lesson.id }],
+      () => void qc.invalidateQueries({ queryKey: ['pub', 'lessons', subjectId] }),
+      setPurchaseError,
+    );
   }
 
   return (
@@ -99,6 +110,7 @@ export function NotesPage() {
                     )}
                   </div>
                   <div className="space-y-2">
+                    <Alert>{purchaseError}</Alert>
                     {lessons.data?.length === 0 && <p className="text-sm text-muted">No lessons yet.</p>}
                     {lessons.data?.map((lesson) => (
                       <LessonRow
@@ -106,6 +118,7 @@ export function NotesPage() {
                         lesson={lesson}
                         onOpen={() => setViewerLessonId(lesson.id)}
                         onToggle={() => void toggleComplete(lesson)}
+                        onBuy={() => void buyLesson(lesson)}
                       />
                     ))}
                   </div>
@@ -164,13 +177,24 @@ function SubjectNodes({
   );
 }
 
-function LessonRow({ lesson, onOpen, onToggle }: { lesson: Lesson; onOpen: () => void; onToggle: () => void }) {
+function LessonRow({
+  lesson,
+  onOpen,
+  onToggle,
+  onBuy,
+}: {
+  lesson: Lesson;
+  onOpen: () => void;
+  onToggle: () => void;
+  onBuy: () => void;
+}) {
   return (
     <div className="flex items-center gap-3 rounded-lg border border-line p-3">
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-2 truncate text-sm font-medium">
           {lesson.title}
           {lesson.completed && <Badge tone="success">done</Badge>}
+          {lesson.locked && <Badge>locked</Badge>}
         </p>
         <p className="mt-0.5 flex items-center gap-2 text-xs text-muted">
           <Badge>{lesson.type}</Badge>
@@ -180,23 +204,35 @@ function LessonRow({ lesson, onOpen, onToggle }: { lesson: Lesson; onOpen: () =>
           {lesson.isFree ? <Badge tone="accent">free</Badge> : lesson.price ? <span className="font-mono">₹{lesson.price}</span> : null}
         </p>
       </div>
-      {lesson.type === 'pdf' ? (
-        <Button size="sm" onClick={onOpen}>
-          Open
+
+      {lesson.locked ? (
+        <Button size="sm" onClick={onBuy}>
+          Buy ₹{lesson.price}
         </Button>
+      ) : lesson.type === 'pdf' ? (
+        <>
+          <Button size="sm" onClick={onOpen}>
+            Open
+          </Button>
+          <Button variant="secondary" size="sm" onClick={onToggle}>
+            {lesson.completed ? 'Undo' : 'Done'}
+          </Button>
+        </>
       ) : (
-        <a
-          href={lesson.externalUrl ?? '#'}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center rounded-md border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink hover:bg-canvas"
-        >
-          Open ↗
-        </a>
+        <>
+          <a
+            href={lesson.externalUrl ?? '#'}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center rounded-md border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink hover:bg-canvas"
+          >
+            Open ↗
+          </a>
+          <Button variant="secondary" size="sm" onClick={onToggle}>
+            {lesson.completed ? 'Undo' : 'Done'}
+          </Button>
+        </>
       )}
-      <Button variant="secondary" size="sm" onClick={onToggle}>
-        {lesson.completed ? 'Undo' : 'Done'}
-      </Button>
     </div>
   );
 }

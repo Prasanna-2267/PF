@@ -15,6 +15,7 @@ import { VerifyOtpPage } from './pages/VerifyOtpPage';
 import { AdminContentPage } from './pages/admin/AdminContentPage';
 import { AdminLayout } from './pages/admin/AdminLayout';
 import { AdminLoginPage } from './pages/admin/AdminLoginPage';
+import { AdminPackagesPage } from './pages/admin/AdminPackagesPage';
 
 function App() {
   const navigate = useNavigate();
@@ -57,6 +58,7 @@ function App() {
       <Route element={<AdminRoute />}>
         <Route element={<AdminLayout />}>
           <Route path="/admin" element={<AdminContentPage />} />
+          <Route path="/admin/packages" element={<AdminPackagesPage />} />
         </Route>
       </Route>
 
