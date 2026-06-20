@@ -29,6 +29,12 @@ export function NotesPage() {
     await qc.invalidateQueries({ queryKey: ['pub', 'progress', subjectId] });
   }
 
+  async function reviseLesson(lesson: Lesson) {
+    await lessonsApi.revise(lesson.id);
+    await qc.invalidateQueries({ queryKey: ['pub', 'lessons', subjectId] });
+    await qc.invalidateQueries({ queryKey: ['tracker'] });
+  }
+
   async function buyLesson(lesson: Lesson) {
     setPurchaseError('');
     const coupon = window.prompt('Have a coupon code? (optional)')?.trim() || undefined;
@@ -121,6 +127,7 @@ export function NotesPage() {
                         onOpen={() => setViewerLessonId(lesson.id)}
                         onToggle={() => void toggleComplete(lesson)}
                         onBuy={() => void buyLesson(lesson)}
+                        onRevise={() => void reviseLesson(lesson)}
                       />
                     ))}
                   </div>
@@ -184,11 +191,13 @@ function LessonRow({
   onOpen,
   onToggle,
   onBuy,
+  onRevise,
 }: {
   lesson: Lesson;
   onOpen: () => void;
   onToggle: () => void;
   onBuy: () => void;
+  onRevise: () => void;
 }) {
   return (
     <div className="flex items-center gap-3 rounded-lg border border-line p-3">
@@ -197,6 +206,7 @@ function LessonRow({
           {lesson.title}
           {lesson.completed && <Badge tone="success">done</Badge>}
           {lesson.locked && <Badge>locked</Badge>}
+          {lesson.revisions > 0 && <Badge tone="accent">{lesson.revisions}× revised</Badge>}
         </p>
         <p className="mt-0.5 flex items-center gap-2 text-xs text-muted">
           <Badge>{lesson.type}</Badge>
@@ -219,6 +229,9 @@ function LessonRow({
           <Button variant="secondary" size="sm" onClick={onToggle}>
             {lesson.completed ? 'Undo' : 'Done'}
           </Button>
+          <Button variant="ghost" size="sm" onClick={onRevise}>
+            Revise
+          </Button>
         </>
       ) : (
         <>
@@ -232,6 +245,9 @@ function LessonRow({
           </a>
           <Button variant="secondary" size="sm" onClick={onToggle}>
             {lesson.completed ? 'Undo' : 'Done'}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onRevise}>
+            Revise
           </Button>
         </>
       )}

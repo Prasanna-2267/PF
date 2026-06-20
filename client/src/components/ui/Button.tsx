@@ -2,7 +2,7 @@ import type { ButtonHTMLAttributes } from 'react';
 import { cn } from '../../lib/cn';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
-type Size = 'sm' | 'md';
+type Size = 'sm' | 'md' | 'lg';
 
 const base =
   'inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-canvas disabled:cursor-not-allowed disabled:opacity-50';
@@ -17,6 +17,7 @@ const variants: Record<Variant, string> = {
 const sizes: Record<Size, string> = {
   sm: 'px-2.5 py-1 text-xs',
   md: 'px-4 py-2 text-sm',
+  lg: 'px-6 py-2.5 text-sm',
 };
 
 export function Button({

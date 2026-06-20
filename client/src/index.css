@@ -14,6 +14,8 @@
   --accent-soft: #eaf1fc;
   --success: #047857;
   --success-soft: #ecfdf5;
+  --warn: #b45309;
+  --warn-soft: #fffbeb;
   --danger: #be123c;
   --danger-soft: #fff1f2;
 }
@@ -29,6 +31,8 @@
   --accent-soft: #14233f;
   --success: #34d399;
   --success-soft: #0c2a22;
+  --warn: #fbbf24;
+  --warn-soft: #2a2008;
   --danger: #fb7185;
   --danger-soft: #2a1115;
 }
@@ -46,6 +50,8 @@
   --color-accent-soft: var(--accent-soft);
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
 

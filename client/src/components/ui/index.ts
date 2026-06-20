@@ -5,6 +5,8 @@ export { Card } from './Card';
 export { Badge } from './Badge';
 export { Alert } from './Alert';
 export { Spinner } from './Spinner';
+export { Progress } from './Progress';
+export { Stat } from './Stat';
 export { ThemeToggle } from './ThemeToggle';
 export { Wordmark } from './Wordmark';
 export { AppHeader } from './AppHeader';

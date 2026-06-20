@@ -7,6 +7,8 @@ import { useAuthStore } from './lib/auth-store';
 import { connectSocket, disconnectSocket } from './lib/socket';
 import { DashboardPage } from './pages/DashboardPage';
 import { NotesPage } from './pages/NotesPage';
+import { TrackerPage } from './pages/TrackerPage';
+import { LessonViewerPage } from './pages/LessonViewerPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { LoginPage } from './pages/LoginPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
@@ -52,6 +54,8 @@ function App() {
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/notes" element={<NotesPage />} />
+        <Route path="/tracker" element={<TrackerPage />} />
+        <Route path="/lesson/:id" element={<LessonViewerPage />} />
       </Route>
 
       {/* Admin */}

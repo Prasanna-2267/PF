@@ -11,6 +11,7 @@ export type Lesson = {
   order: number;
   completed: boolean;
   locked: boolean;
+  revisions: number;
 };
 
 export const lessonsApi = {
@@ -28,4 +29,5 @@ export const lessonsApi = {
     api.get(`/lessons/${id}/pages/${n}`, { responseType: 'arraybuffer' }).then((r) => r.data as ArrayBuffer),
   complete: (id: string) => api.post(`/lessons/${id}/complete`).then((r) => r.data),
   uncomplete: (id: string) => api.delete(`/lessons/${id}/complete`).then((r) => r.data),
+  revise: (id: string) => api.post<{ count: number }>(`/lessons/${id}/revise`).then((r) => r.data),
 };
