@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { asyncHandler } from '../../middleware/error.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
+import { auditMutations } from '../audit/audit.js';
 import * as commerce from './commerce.controller.js';
 
 /** Student-facing, mounted at /api/commerce. */
@@ -16,7 +17,7 @@ commerceRouter.get('/my', asyncHandler(commerce.myPurchases));
 
 /** Admin packages, mounted at /api/admin/commerce. */
 export const adminCommerceRouter = Router();
-adminCommerceRouter.use(requireAuth, requireRole('admin', 'superadmin'));
+adminCommerceRouter.use(requireAuth, requireRole('admin', 'superadmin'), auditMutations('commerce'));
 adminCommerceRouter.get('/packages', asyncHandler(commerce.listAdminPackages));
 adminCommerceRouter.post('/packages', asyncHandler(commerce.createPackage));
 adminCommerceRouter.patch('/packages/:id', asyncHandler(commerce.updatePackage));

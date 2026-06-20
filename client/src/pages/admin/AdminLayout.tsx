@@ -35,6 +35,7 @@ export function AdminLayout() {
         <AdminNav to="/admin/packages" label="Packages" />
         <AdminNav to="/admin/coupons" label="Coupons" />
         <AdminNav to="/admin/questions" label="Questions" />
+        <AdminNav to="/admin/audit" label="Audit" />
       </nav>
       <main className="p-6">
         <Outlet />

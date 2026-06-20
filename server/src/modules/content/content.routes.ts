@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { asyncHandler } from '../../middleware/error.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
+import { auditMutations } from '../audit/audit.js';
 import * as content from './content.controller.js';
 
 /** Public, read-only — active (published) content only. Mounted at /api/content. */
@@ -12,7 +13,7 @@ contentRouter.get('/stages/:stageId/subjects', asyncHandler(content.getSubjectTr
 
 /** Admin-only management — includes unpublished items. Mounted at /api/admin/content. */
 export const adminContentRouter = Router();
-adminContentRouter.use(requireAuth, requireRole('admin', 'superadmin'));
+adminContentRouter.use(requireAuth, requireRole('admin', 'superadmin'), auditMutations('content'));
 
 adminContentRouter.get('/categories', asyncHandler(content.listCategories));
 adminContentRouter.post('/categories', asyncHandler(content.createCategory));

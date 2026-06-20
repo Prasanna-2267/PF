@@ -4,6 +4,7 @@ import rateLimit from 'express-rate-limit';
 import { asyncHandler } from '../../middleware/error.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
+import { auditMutations } from '../audit/audit.js';
 import * as lessons from './lesson.controller.js';
 
 const upload = multer({
@@ -33,7 +34,7 @@ lessonsRouter.post('/:id/revise', asyncHandler(lessons.revise));
 
 /** Admin-only, mounted at /api/admin/lessons. */
 export const adminLessonsRouter = Router();
-adminLessonsRouter.use(requireAuth, requireRole('admin', 'superadmin'));
+adminLessonsRouter.use(requireAuth, requireRole('admin', 'superadmin'), auditMutations('lessons'));
 adminLessonsRouter.get('/', asyncHandler(lessons.listAdmin));
 adminLessonsRouter.post('/pdf', upload.single('file'), asyncHandler(lessons.uploadPdf));
 adminLessonsRouter.post('/ism', asyncHandler(lessons.createIsm));

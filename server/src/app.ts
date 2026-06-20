@@ -2,6 +2,7 @@ import express, { type Express } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import rateLimit from 'express-rate-limit';
 import { pinoHttp } from 'pino-http';
 import { env, isProd } from './config/env.js';
 import { logger } from './lib/logger.js';
@@ -12,6 +13,7 @@ import { adminLessonsRouter, lessonsRouter } from './modules/lessons/lesson.rout
 import { adminCommerceRouter, commerceRouter } from './modules/commerce/commerce.routes.js';
 import { trackerRouter } from './modules/tracker/tracker.routes.js';
 import { adminQuestionsRouter, questionsRouter } from './modules/questions/question.routes.js';
+import { adminAuditRouter } from './modules/audit/audit.routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -37,6 +39,16 @@ export function createApp(): Express {
     res.json({ status: 'ok', service: 'parallax-flow-server', env: env.NODE_ENV });
   });
 
+  // Baseline per-IP throttle across the whole API (defense-in-depth; sensitive
+  // routes add tighter limits on top). Generous enough for a power user reading
+  // a long secured PDF. Skipped under test so smoke suites aren't throttled.
+  if (env.NODE_ENV !== 'test') {
+    app.use(
+      '/api',
+      rateLimit({ windowMs: 5 * 60 * 1000, max: 1000, standardHeaders: true, legacyHeaders: false }),
+    );
+  }
+
   // Feature routers (more mounted here as phases land).
   app.use('/api/auth', authRouter);
   app.use('/api/content', contentRouter);
@@ -48,6 +60,7 @@ export function createApp(): Express {
   app.use('/api/tracker', trackerRouter);
   app.use('/api/questions', questionsRouter);
   app.use('/api/admin/questions', adminQuestionsRouter);
+  app.use('/api/admin/audit', adminAuditRouter);
 
   app.use(notFound);
   app.use(errorHandler);

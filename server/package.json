@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "seed:admin": "cross-env NODE_ENV=development tsx src/scripts/seed-admin.ts",
     "admins": "cross-env NODE_ENV=development tsx src/scripts/list-admins.ts",
+    "forensic": "cross-env NODE_ENV=development tsx src/scripts/forensic.ts",
     "test:smoke": "cross-env NODE_ENV=test tsx src/scripts/smoke-auth.ts",
     "test:smoke:content": "cross-env NODE_ENV=test tsx src/scripts/smoke-content.ts",
     "test:smoke:lessons": "cross-env NODE_ENV=test STORAGE_DIR=.test-storage tsx src/scripts/smoke-lessons.ts",
@@ -21,6 +22,8 @@
     "test:smoke:payments": "cross-env NODE_ENV=test RAZORPAY_KEY_SECRET=test_secret_key RAZORPAY_WEBHOOK_SECRET=test_webhook_secret tsx src/scripts/smoke-payments.ts",
     "test:smoke:tracker": "cross-env NODE_ENV=test tsx src/scripts/smoke-tracker.ts",
     "test:smoke:questions": "cross-env NODE_ENV=test tsx src/scripts/smoke-questions.ts",
+    "test:smoke:audit": "cross-env NODE_ENV=test tsx src/scripts/smoke-audit.ts",
+    "test:smoke:all": "npm run test:smoke && npm run test:smoke:content && npm run test:smoke:lessons && npm run test:smoke:secure && npm run test:smoke:realtime && npm run test:smoke:commerce && npm run test:smoke:payments && npm run test:smoke:tracker && npm run test:smoke:questions && npm run test:smoke:audit",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

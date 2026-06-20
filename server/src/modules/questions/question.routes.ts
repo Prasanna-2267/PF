@@ -3,6 +3,7 @@ import rateLimit from 'express-rate-limit';
 import { asyncHandler } from '../../middleware/error.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
+import { auditMutations } from '../audit/audit.js';
 import * as questions from './question.controller.js';
 
 // Throttle answer submissions — caps AI grading cost / abuse per user.
@@ -23,7 +24,7 @@ questionsRouter.post('/:id/answer', answerLimiter, asyncHandler(questions.answer
 
 /** Admin-only, mounted at /api/admin/questions. */
 export const adminQuestionsRouter = Router();
-adminQuestionsRouter.use(requireAuth, requireRole('admin', 'superadmin'));
+adminQuestionsRouter.use(requireAuth, requireRole('admin', 'superadmin'), auditMutations('questions'));
 adminQuestionsRouter.get('/', asyncHandler(questions.listAdmin));
 adminQuestionsRouter.post('/', asyncHandler(questions.create));
 adminQuestionsRouter.patch('/:id', asyncHandler(questions.update));

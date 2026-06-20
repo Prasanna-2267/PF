@@ -21,6 +21,7 @@ import { AdminLoginPage } from './pages/admin/AdminLoginPage';
 import { AdminPackagesPage } from './pages/admin/AdminPackagesPage';
 import { AdminCouponsPage } from './pages/admin/AdminCouponsPage';
 import { AdminQuestionsPage } from './pages/admin/AdminQuestionsPage';
+import { AdminAuditPage } from './pages/admin/AdminAuditPage';
 
 function App() {
   const navigate = useNavigate();
@@ -69,6 +70,7 @@ function App() {
           <Route path="/admin/packages" element={<AdminPackagesPage />} />
           <Route path="/admin/coupons" element={<AdminCouponsPage />} />
           <Route path="/admin/questions" element={<AdminQuestionsPage />} />
+          <Route path="/admin/audit" element={<AdminAuditPage />} />
         </Route>
       </Route>
 

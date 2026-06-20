@@ -47,14 +47,18 @@ Goal: a user account can be actively logged in on **one device at a time**.
 - Every authenticated request validates that the token's `deviceId` matches the current active device. A mismatch ⇒ 401 (logged in elsewhere).
 - The **previous device is force-logged-out in real time** via Socket.io (chosen behavior: new login kicks the old device, so users who switch phones aren't locked out).
 
-## 5. General hardening (Phase 7 + ongoing)
+## 5. General hardening (Phase 7 — implemented)
 
 - Input validation with Zod at every route boundary.
-- Rate limiting (in-memory now; Redis-backed when multi-instance) on auth, OTP, payment, and PDF endpoints.
-- Helmet, CORS allowlist, secure cookies, HTTPS in prod.
-- Webhook signature verification for Razorpay.
-- Audit logs for admin actions and content access.
-- Secrets only via env vars; `.env` is git-ignored.
+- Rate limiting (in-memory; per-instance) on auth, OTP, password-reset, payment, PDF-page, and answer-submission endpoints, plus a **global per-IP baseline** across `/api`. Redis-backed when we go multi-instance.
+- Helmet, CORS allowlist, secure httpOnly cookies, `trust proxy` + HTTPS in prod, 1 MB body limit, graceful shutdown.
+- Webhook signature verification for Razorpay (HMAC, timing-safe).
+- JWT secrets fail-fast (process won't boot in prod without strong secrets).
+- **Audit logging** — every admin create/update/delete is recorded to `AuditLog` (actor, role, method, path, resource id, status, IP, UA) via non-blocking middleware on the admin routers; viewable in the admin **Audit** tab (`GET /api/admin/audit`). Failed writes and reads are not recorded.
+- **Forensic verification tooling** — `npm run forensic -- <REF_CODE>` traces a leaked page's watermark ref code back to the exact account/IP/time via `AccessLog`.
+- Secrets only via env vars; `.env` is git-ignored. All third-party integrations degrade gracefully when unset.
+
+Covered by smoke suites (`npm run test:smoke:all`): auth, content/RBAC, lessons, secure-PDF, realtime, commerce, payments, tracker, questions, audit.
 
 ## 6. Known limitations (state these plainly)
 

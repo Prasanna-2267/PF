@@ -1,0 +1,49 @@
+# One-command local/VPS deployment: API + nginx-served client.
+#
+#   1. cp server/.env.example server/.env   (fill in MONGODB_URI + secrets)
+#   2. Set CLIENT_ORIGIN in server/.env to the public URL (e.g. http://localhost:8080)
+#   3. docker compose up -d --build
+#   4. Open http://localhost:8080
+#
+# MongoDB is expected to be MongoDB Atlas (set MONGODB_URI). To run Mongo
+# locally instead, uncomment the `mongo` service and point MONGODB_URI at it.
+
+services:
+  server:
+    build: ./server
+    restart: unless-stopped
+    env_file: ./server/.env
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+    volumes:
+      - storage:/app/storage # local-disk fallback when R2 isn't configured
+    expose:
+      - '4000'
+    # depends_on:
+    #   - mongo
+
+  client:
+    build:
+      context: ./client
+      args:
+        # Leave unset for the same-origin proxy setup below.
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+    restart: unless-stopped
+    ports:
+      - '8080:80'
+    depends_on:
+      - server
+
+  # Optional fully-local MongoDB (otherwise use MongoDB Atlas via MONGODB_URI).
+  # mongo:
+  #   image: mongo:7
+  #   restart: unless-stopped
+  #   volumes:
+  #     - mongo-data:/data/db
+  #   expose:
+  #     - '27017'
+
+volumes:
+  storage:
+  # mongo-data:
