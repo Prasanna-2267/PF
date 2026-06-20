@@ -42,4 +42,6 @@ Real third-party credentials — all degrade gracefully until set: MongoDB Atlas
 
 ## Deferred (post-MVP)
 
-Notifications beyond OTP + receipts, global search, preview-pages-before-buy, multi-language, GST invoicing, refunds, native app for OS-level screenshot blocking.
+Access expiry/revocation (entitlements are currently buy-once-own-forever), failed/stale-order cleanup sweep, entitlement caching (Redis at scale), broader notifications, global search, preview-pages-before-buy, multi-language, GST invoicing, refunds, native app for OS-level screenshot blocking.
+
+> Payment **receipts** shipped post-Phase 7: an itemised, immutable receipt (`PF-YYYY-NNNN`) is generated when an order is paid (verify / webhook / full-coupon), emailed via Resend, listed in **My Library**, and printable at `/receipt/:id`.

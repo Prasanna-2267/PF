@@ -2,6 +2,7 @@ import type { RequestHandler } from 'express';
 import { HttpError } from '../../middleware/error.js';
 import { isPaymentsConfigured } from '../../services/razorpay.js';
 import * as commerce from './commerce.service.js';
+import * as receipts from './receipt.service.js';
 import {
   createCouponSchema,
   createOrderSchema,
@@ -28,6 +29,14 @@ export const verifyPayment: RequestHandler = async (req, res) => {
 
 export const myPurchases: RequestHandler = async (req, res) => {
   res.json(await commerce.myPurchases(req.auth!.sub));
+};
+
+export const listReceipts: RequestHandler = async (req, res) => {
+  res.json({ receipts: await receipts.listReceipts(req.auth!.sub) });
+};
+
+export const getReceipt: RequestHandler = async (req, res) => {
+  res.json({ receipt: await receipts.getReceipt(req.auth!.sub, req.params.id!) });
 };
 
 export const webhook: RequestHandler = async (req, res) => {

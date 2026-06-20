@@ -9,6 +9,8 @@ import { DashboardPage } from './pages/DashboardPage';
 import { NotesPage } from './pages/NotesPage';
 import { TrackerPage } from './pages/TrackerPage';
 import { PracticePage } from './pages/PracticePage';
+import { LibraryPage } from './pages/LibraryPage';
+import { ReceiptPage } from './pages/ReceiptPage';
 import { LessonViewerPage } from './pages/LessonViewerPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { LoginPage } from './pages/LoginPage';
@@ -59,6 +61,8 @@ function App() {
         <Route path="/notes" element={<NotesPage />} />
         <Route path="/tracker" element={<TrackerPage />} />
         <Route path="/practice" element={<PracticePage />} />
+        <Route path="/library" element={<LibraryPage />} />
+        <Route path="/receipt/:id" element={<ReceiptPage />} />
         <Route path="/lesson/:id" element={<LessonViewerPage />} />
       </Route>
 

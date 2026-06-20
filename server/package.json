@@ -23,7 +23,8 @@
     "test:smoke:tracker": "cross-env NODE_ENV=test tsx src/scripts/smoke-tracker.ts",
     "test:smoke:questions": "cross-env NODE_ENV=test tsx src/scripts/smoke-questions.ts",
     "test:smoke:audit": "cross-env NODE_ENV=test tsx src/scripts/smoke-audit.ts",
-    "test:smoke:all": "npm run test:smoke && npm run test:smoke:content && npm run test:smoke:lessons && npm run test:smoke:secure && npm run test:smoke:realtime && npm run test:smoke:commerce && npm run test:smoke:payments && npm run test:smoke:tracker && npm run test:smoke:questions && npm run test:smoke:audit",
+    "test:smoke:receipts": "cross-env NODE_ENV=test RAZORPAY_WEBHOOK_SECRET=test_webhook_secret tsx src/scripts/smoke-receipts.ts",
+    "test:smoke:all": "npm run test:smoke && npm run test:smoke:content && npm run test:smoke:lessons && npm run test:smoke:secure && npm run test:smoke:realtime && npm run test:smoke:commerce && npm run test:smoke:payments && npm run test:smoke:tracker && npm run test:smoke:questions && npm run test:smoke:audit && npm run test:smoke:receipts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

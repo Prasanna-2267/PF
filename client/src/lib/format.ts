@@ -8,6 +8,11 @@ export function formatMinutes(mins: number): string {
   return `${h}h ${r}m`;
 }
 
+/** Paise → "₹1,234.00". */
+export function formatINR(paise: number): string {
+  return `₹${(paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 /** Map a 0–100 exam-pressure score to a semantic bar/badge tone. */
 export function pressureTone(p: number): 'success' | 'warn' | 'danger' {
   if (p >= 70) return 'danger';

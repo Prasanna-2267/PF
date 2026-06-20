@@ -7,9 +7,11 @@ import {
   verifyWebhookSignature,
 } from '../../services/razorpay.js';
 import { getOwnedLessonIds } from './commerce.entitlement.js';
+import { generateReceiptForOrder } from './receipt.service.js';
 import { CouponModel, type CouponDoc } from './coupon.model.js';
 import { OrderModel, type OrderDoc } from './order.model.js';
 import { PackageModel, type PackageDoc } from './package.model.js';
+import { ReceiptModel } from './receipt.model.js';
 import type {
   CreateCouponInput,
   CreateOrderInput,
@@ -67,7 +69,7 @@ function checkoutInfo(order: OrderDoc, free = false) {
   };
 }
 
-type ResolvedItem = { type: 'lesson' | 'package'; refId: string; price: number; subjectId?: string };
+type ResolvedItem = { type: 'lesson' | 'package'; refId: string; title: string; price: number; subjectId?: string };
 
 /** Validate a coupon against the resolved cart and compute the discount (₹). */
 async function applyCoupon(code: string, resolved: ResolvedItem[], total: number) {
@@ -118,7 +120,7 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
       if (!lesson || !lesson.isActive || lesson.type !== 'pdf') throw new HttpError(400, 'Invalid lesson');
       if (lesson.isFree) throw new HttpError(400, 'That lesson is free');
       if (owned.has(String(lesson.id))) throw new HttpError(409, 'You already own this lesson');
-      resolved.push({ type: 'lesson', refId: lesson.id as string, price: lesson.price, subjectId: String(lesson.subjectId) });
+      resolved.push({ type: 'lesson', refId: lesson.id as string, title: lesson.title, price: lesson.price, subjectId: String(lesson.subjectId) });
     } else {
       const pkg = await PackageModel.findById(it.id);
       if (!pkg || !pkg.isActive) throw new HttpError(400, 'Invalid package');
@@ -126,7 +128,7 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
       if (lessonIds.length > 0 && lessonIds.every((id) => owned.has(id))) {
         throw new HttpError(409, 'You already own everything in this package');
       }
-      resolved.push({ type: 'package', refId: pkg.id as string, price: pkg.price });
+      resolved.push({ type: 'package', refId: pkg.id as string, title: pkg.title, price: pkg.price });
     }
   }
 
@@ -143,12 +145,13 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
 
   const amount = Math.round(Math.max(0, total - discountRupees) * 100); // paise
   const discount = Math.round(discountRupees * 100);
-  const items = resolved.map((r) => ({ type: r.type, refId: r.refId }));
+  const items = resolved.map((r) => ({ type: r.type, refId: r.refId, title: r.title, price: Math.round(r.price * 100) }));
 
   // Fully covered by the coupon → grant immediately, no payment needed.
   if (amount <= 0) {
     const order = await OrderModel.create({ userId, items, amount: 0, discount, couponCode, status: 'paid', idempotencyKey: input.idempotencyKey });
     if (couponCode) await redeemCoupon(couponCode);
+    await generateReceiptForOrder(order);
     return checkoutInfo(order, true);
   }
 
@@ -181,7 +184,10 @@ export async function verifyPayment(userId: string, input: VerifyPaymentInput) {
     { $set: { status: 'paid', razorpayPaymentId: input.razorpay_payment_id } },
     { new: true },
   );
-  if (justPaid?.couponCode) await redeemCoupon(justPaid.couponCode);
+  if (justPaid) {
+    if (justPaid.couponCode) await redeemCoupon(justPaid.couponCode);
+    await generateReceiptForOrder(justPaid);
+  }
   return { ok: true };
 }
 
@@ -199,7 +205,10 @@ export async function handleWebhook(rawBody: Buffer, signature: string): Promise
       { $set: { status: 'paid', razorpayPaymentId: entity.id ?? 'webhook' } },
       { new: true },
     );
-    if (justPaid?.couponCode) await redeemCoupon(justPaid.couponCode);
+    if (justPaid) {
+      if (justPaid.couponCode) await redeemCoupon(justPaid.couponCode);
+      await generateReceiptForOrder(justPaid);
+    }
   }
 }
 
@@ -255,15 +264,22 @@ export async function deleteCoupon(id: string): Promise<void> {
 export async function myPurchases(userId: string) {
   const ownedLessonIds = [...(await getOwnedLessonIds(userId))];
   const orders = await OrderModel.find({ userId }).sort({ createdAt: -1 }).lean();
+  const receipts = await ReceiptModel.find({ userId }).select('_id orderId receiptNumber').lean();
+  const byOrder = new Map(receipts.map((r) => [String(r.orderId), r]));
   return {
     ownedLessonIds,
-    orders: orders.map((o) => ({
-      id: String(o._id),
-      amount: o.amount,
-      currency: o.currency,
-      status: o.status,
-      itemCount: o.items.length,
-      createdAt: o.createdAt,
-    })),
+    orders: orders.map((o) => {
+      const receipt = byOrder.get(String(o._id));
+      return {
+        id: String(o._id),
+        amount: o.amount,
+        currency: o.currency,
+        status: o.status,
+        itemCount: o.items.length,
+        createdAt: o.createdAt,
+        receiptId: receipt ? String(receipt._id) : null,
+        receiptNumber: receipt?.receiptNumber ?? null,
+      };
+    }),
   };
 }

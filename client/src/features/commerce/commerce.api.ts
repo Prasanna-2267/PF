@@ -18,6 +18,32 @@ export type RazorpayResult = {
 
 export type OrderItem = { type: 'lesson' | 'package'; id: string };
 
+export type Order = {
+  id: string;
+  amount: number;
+  currency: string;
+  status: 'created' | 'paid' | 'failed';
+  itemCount: number;
+  createdAt: string;
+  receiptId: string | null;
+  receiptNumber: string | null;
+};
+
+export type Receipt = {
+  id: string;
+  receiptNumber: string;
+  orderId: string;
+  buyer: { name?: string; email?: string; phone?: string };
+  lines: { type: 'lesson' | 'package'; title: string; price: number }[];
+  subtotal: number;
+  discount: number;
+  couponCode: string | null;
+  total: number;
+  currency: string;
+  razorpayPaymentId: string | null;
+  paidAt: string;
+};
+
 export type Coupon = {
   id: string;
   code: string;
@@ -60,12 +86,9 @@ export const commerceApi = {
       .then((r) => r.data),
   verify: (d: RazorpayResult) => api.post('/commerce/verify', d).then((r) => r.data),
   my: () =>
-    api
-      .get<{
-        ownedLessonIds: string[];
-        orders: { id: string; amount: number; currency: string; status: string; itemCount: number; createdAt: string }[];
-      }>('/commerce/my')
-      .then((r) => r.data),
+    api.get<{ ownedLessonIds: string[]; orders: Order[] }>('/commerce/my').then((r) => r.data),
+  receipts: () => api.get<{ receipts: Receipt[] }>('/commerce/receipts').then((r) => r.data.receipts),
+  receipt: (id: string) => api.get<{ receipt: Receipt }>(`/commerce/receipts/${id}`).then((r) => r.data.receipt),
 
   // admin
   adminPackages: () => api.get<{ packages: Package[] }>('/admin/commerce/packages').then((r) => r.data.packages),

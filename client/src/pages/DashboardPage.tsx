@@ -45,6 +45,9 @@ export function DashboardPage() {
             <Button variant="ghost" size="sm" onClick={() => navigate('/tracker')}>
               Tracker
             </Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/library')}>
+              Library
+            </Button>
             {isAdmin && (
               <Button variant="ghost" size="sm" onClick={() => navigate('/admin')}>
                 Admin

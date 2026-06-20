@@ -4,6 +4,10 @@ const orderItemSchema = new Schema(
   {
     type: { type: String, enum: ['lesson', 'package'], required: true },
     refId: { type: Schema.Types.ObjectId, required: true },
+    // Snapshot at purchase time so a receipt stays correct even if the lesson/
+    // package is later renamed, repriced, or deleted.
+    title: { type: String },
+    price: { type: Number }, // paise, list price for this line
   },
   { _id: false },
 );

@@ -14,6 +14,8 @@ commerceRouter.get('/packages', asyncHandler(commerce.listPackages));
 commerceRouter.post('/orders', asyncHandler(commerce.createOrder));
 commerceRouter.post('/verify', asyncHandler(commerce.verifyPayment));
 commerceRouter.get('/my', asyncHandler(commerce.myPurchases));
+commerceRouter.get('/receipts', asyncHandler(commerce.listReceipts));
+commerceRouter.get('/receipts/:id', asyncHandler(commerce.getReceipt));
 
 /** Admin packages, mounted at /api/admin/commerce. */
 export const adminCommerceRouter = Router();
