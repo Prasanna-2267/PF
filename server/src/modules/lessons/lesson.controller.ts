@@ -47,6 +47,10 @@ export const uncomplete: RequestHandler = async (req, res) => {
   res.json(await lessons.unmarkComplete(req.auth!.sub, req.params.id!));
 };
 
+export const revise: RequestHandler = async (req, res) => {
+  res.json(await lessons.reviseLesson(req.auth!.sub, req.params.id!));
+};
+
 export const subjectProgress: RequestHandler = async (req, res) => {
   const { subjectId } = subjectIdQuery.parse(req.query);
   res.json(await lessons.getSubjectProgress(req.auth!.sub, subjectId));

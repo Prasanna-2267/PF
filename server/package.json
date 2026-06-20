@@ -19,6 +19,7 @@
     "test:smoke:realtime": "cross-env NODE_ENV=test tsx src/scripts/smoke-realtime.ts",
     "test:smoke:commerce": "cross-env NODE_ENV=test STORAGE_DIR=.test-storage tsx src/scripts/smoke-commerce.ts",
     "test:smoke:payments": "cross-env NODE_ENV=test RAZORPAY_KEY_SECRET=test_secret_key RAZORPAY_WEBHOOK_SECRET=test_webhook_secret tsx src/scripts/smoke-payments.ts",
+    "test:smoke:tracker": "cross-env NODE_ENV=test tsx src/scripts/smoke-tracker.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

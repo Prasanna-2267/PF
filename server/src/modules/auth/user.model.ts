@@ -13,6 +13,11 @@ const userSchema = new Schema(
     emailVerified: { type: Boolean, default: false },
     googleId: { type: String, index: true, sparse: true },
     activeStageId: { type: Schema.Types.ObjectId, ref: 'Stage' },
+
+    // Study tracker (Phase 5)
+    examDate: { type: Date },
+    examLabel: { type: String, trim: true },
+    dailyTargetMinutes: { type: Number, default: 60 },
   },
   { timestamps: true },
 );

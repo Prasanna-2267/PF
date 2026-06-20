@@ -29,6 +29,7 @@ lessonsRouter.get('/:id/view', asyncHandler(lessons.viewLesson));
 lessonsRouter.get('/:id/pages/:n', pageLimiter, asyncHandler(lessons.pageImage));
 lessonsRouter.post('/:id/complete', asyncHandler(lessons.complete));
 lessonsRouter.delete('/:id/complete', asyncHandler(lessons.uncomplete));
+lessonsRouter.post('/:id/revise', asyncHandler(lessons.revise));
 
 /** Admin-only, mounted at /api/admin/lessons. */
 export const adminLessonsRouter = Router();

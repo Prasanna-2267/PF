@@ -7,6 +7,7 @@ import { getViewSession, issueViewSession } from '../../services/view-keys.js';
 import { UserModel, type UserDoc } from '../auth/user.model.js';
 import { SubjectModel } from '../content/subject.model.js';
 import { getOwnedLessonIds, hasLessonAccess } from '../commerce/commerce.entitlement.js';
+import { RevisionModel } from '../tracker/revision.model.js';
 import { AccessLogModel } from './access-log.model.js';
 import { LessonModel, type LessonDoc } from './lesson.model.js';
 import { ProgressModel } from './progress.model.js';
@@ -15,7 +16,7 @@ import type { CreateIsmInput, CreatePdfFields, UpdateLessonInput } from './lesso
 type RequestMeta = { ip?: string; userAgent?: string };
 
 /** Client-safe shape — never exposes fileKey/storage internals. */
-function publicLesson(l: LessonDoc, completed = false, locked = false) {
+function publicLesson(l: LessonDoc, completed = false, locked = false, revisions = 0) {
   return {
     id: l.id as string,
     title: l.title,
@@ -29,6 +30,7 @@ function publicLesson(l: LessonDoc, completed = false, locked = false) {
     isActive: l.isActive,
     completed,
     locked,
+    revisions,
   };
 }
 
@@ -104,10 +106,24 @@ export async function listLessonsForStudent(subjectId: string, userId: string) {
     .lean();
   const completed = new Set(completedRows.map((p) => String(p.lessonId)));
   const owned = await getOwnedLessonIds(userId);
+  const revRows = await RevisionModel.find({ userId, lessonId: { $in: lessons.map((l) => l._id) } })
+    .select('lessonId count')
+    .lean();
+  const revs = new Map(revRows.map((r) => [String(r.lessonId), r.count]));
   return lessons.map((l) => {
     const locked = l.type === 'pdf' && !l.isFree && !owned.has(String(l._id));
-    return publicLesson(l, completed.has(String(l._id)), locked);
+    return publicLesson(l, completed.has(String(l._id)), locked, revs.get(String(l._id)) ?? 0);
   });
+}
+
+export async function reviseLesson(userId: string, lessonId: string) {
+  if (!(await LessonModel.exists({ _id: lessonId }))) throw new HttpError(404, 'Lesson not found');
+  const rev = await RevisionModel.findOneAndUpdate(
+    { userId, lessonId },
+    { $inc: { count: 1 }, $set: { lastRevisedAt: new Date() } },
+    { upsert: true, new: true },
+  );
+  return { count: (rev?.count as number | undefined) ?? 1 };
 }
 
 export async function updateLesson(id: string, data: UpdateLessonInput) {

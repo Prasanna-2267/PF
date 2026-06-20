@@ -10,6 +10,7 @@ import { authRouter } from './modules/auth/auth.routes.js';
 import { adminContentRouter, contentRouter } from './modules/content/content.routes.js';
 import { adminLessonsRouter, lessonsRouter } from './modules/lessons/lesson.routes.js';
 import { adminCommerceRouter, commerceRouter } from './modules/commerce/commerce.routes.js';
+import { trackerRouter } from './modules/tracker/tracker.routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -43,6 +44,7 @@ export function createApp(): Express {
   app.use('/api/admin/lessons', adminLessonsRouter);
   app.use('/api/commerce', commerceRouter);
   app.use('/api/admin/commerce', adminCommerceRouter);
+  app.use('/api/tracker', trackerRouter);
 
   app.use(notFound);
   app.use(errorHandler);
