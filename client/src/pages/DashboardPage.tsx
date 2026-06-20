@@ -39,6 +39,9 @@ export function DashboardPage() {
             <Button variant="ghost" size="sm" onClick={() => navigate('/notes')}>
               Notes
             </Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/practice')}>
+              Practice
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => navigate('/tracker')}>
               Tracker
             </Button>

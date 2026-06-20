@@ -8,6 +8,7 @@ import { connectSocket, disconnectSocket } from './lib/socket';
 import { DashboardPage } from './pages/DashboardPage';
 import { NotesPage } from './pages/NotesPage';
 import { TrackerPage } from './pages/TrackerPage';
+import { PracticePage } from './pages/PracticePage';
 import { LessonViewerPage } from './pages/LessonViewerPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { LoginPage } from './pages/LoginPage';
@@ -19,6 +20,7 @@ import { AdminLayout } from './pages/admin/AdminLayout';
 import { AdminLoginPage } from './pages/admin/AdminLoginPage';
 import { AdminPackagesPage } from './pages/admin/AdminPackagesPage';
 import { AdminCouponsPage } from './pages/admin/AdminCouponsPage';
+import { AdminQuestionsPage } from './pages/admin/AdminQuestionsPage';
 
 function App() {
   const navigate = useNavigate();
@@ -55,6 +57,7 @@ function App() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/notes" element={<NotesPage />} />
         <Route path="/tracker" element={<TrackerPage />} />
+        <Route path="/practice" element={<PracticePage />} />
         <Route path="/lesson/:id" element={<LessonViewerPage />} />
       </Route>
 
@@ -65,6 +68,7 @@ function App() {
           <Route path="/admin" element={<AdminContentPage />} />
           <Route path="/admin/packages" element={<AdminPackagesPage />} />
           <Route path="/admin/coupons" element={<AdminCouponsPage />} />
+          <Route path="/admin/questions" element={<AdminQuestionsPage />} />
         </Route>
       </Route>
 

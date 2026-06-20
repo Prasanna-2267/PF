@@ -11,6 +11,7 @@ import { adminContentRouter, contentRouter } from './modules/content/content.rou
 import { adminLessonsRouter, lessonsRouter } from './modules/lessons/lesson.routes.js';
 import { adminCommerceRouter, commerceRouter } from './modules/commerce/commerce.routes.js';
 import { trackerRouter } from './modules/tracker/tracker.routes.js';
+import { adminQuestionsRouter, questionsRouter } from './modules/questions/question.routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -45,6 +46,8 @@ export function createApp(): Express {
   app.use('/api/commerce', commerceRouter);
   app.use('/api/admin/commerce', adminCommerceRouter);
   app.use('/api/tracker', trackerRouter);
+  app.use('/api/questions', questionsRouter);
+  app.use('/api/admin/questions', adminQuestionsRouter);
 
   app.use(notFound);
   app.use(errorHandler);
