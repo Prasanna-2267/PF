@@ -3,8 +3,10 @@ import { HttpError } from '../../middleware/error.js';
 import { isPaymentsConfigured } from '../../services/razorpay.js';
 import * as commerce from './commerce.service.js';
 import {
+  createCouponSchema,
   createOrderSchema,
   createPackageSchema,
+  updateCouponSchema,
   updatePackageSchema,
   verifyPaymentSchema,
 } from './commerce.validation.js';
@@ -50,5 +52,23 @@ export const updatePackage: RequestHandler = async (req, res) => {
 
 export const deletePackage: RequestHandler = async (req, res) => {
   await commerce.deletePackage(req.params.id!);
+  res.json({ ok: true });
+};
+
+// ── Admin coupons ──
+export const listCoupons: RequestHandler = async (_req, res) => {
+  res.json({ coupons: await commerce.listCoupons() });
+};
+
+export const createCoupon: RequestHandler = async (req, res) => {
+  res.status(201).json({ coupon: await commerce.createCoupon(createCouponSchema.parse(req.body)) });
+};
+
+export const updateCoupon: RequestHandler = async (req, res) => {
+  res.json({ coupon: await commerce.updateCoupon(req.params.id!, updateCouponSchema.parse(req.body)) });
+};
+
+export const deleteCoupon: RequestHandler = async (req, res) => {
+  await commerce.deleteCoupon(req.params.id!);
   res.json({ ok: true });
 };

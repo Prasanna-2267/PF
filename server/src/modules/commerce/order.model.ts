@@ -22,6 +22,8 @@ const orderSchema = new Schema(
     razorpayOrderId: { type: String, index: true },
     razorpayPaymentId: { type: String },
     idempotencyKey: { type: String }, // dedupes retried "Buy" requests
+    couponCode: { type: String },
+    discount: { type: Number, default: 0 }, // paise discounted off the total
   },
   { timestamps: true },
 );

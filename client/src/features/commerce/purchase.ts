@@ -3,17 +3,23 @@ import { openCheckout } from '../../lib/checkout';
 import { errorMessage } from '../auth/auth.api';
 
 /**
- * Run a full purchase: create the order, open Razorpay checkout, verify on
- * success. Calls onDone() once the payment is verified (caller refetches).
+ * Run a full purchase: create the order (with an optional coupon), open Razorpay
+ * checkout, verify on success. If a coupon makes it free, it's granted with no
+ * payment. Calls onDone() once granted/verified (caller refetches).
  */
 export async function purchase(
   items: OrderItem[],
   onDone: () => void,
   onError: (message: string) => void,
+  couponCode?: string,
 ): Promise<void> {
   try {
     // Stable key for this checkout attempt so retries don't create duplicate orders.
-    const order = await commerceApi.createOrder(items, crypto.randomUUID());
+    const order = await commerceApi.createOrder(items, crypto.randomUUID(), couponCode);
+    if (order.free) {
+      onDone(); // fully covered by the coupon — nothing to pay
+      return;
+    }
     if (!order.keyId) {
       onError('Payments are not set up yet.');
       return;

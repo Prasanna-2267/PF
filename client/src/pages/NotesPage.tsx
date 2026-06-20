@@ -31,10 +31,12 @@ export function NotesPage() {
 
   async function buyLesson(lesson: Lesson) {
     setPurchaseError('');
+    const coupon = window.prompt('Have a coupon code? (optional)')?.trim() || undefined;
     await purchase(
       [{ type: 'lesson', id: lesson.id }],
       () => void qc.invalidateQueries({ queryKey: ['pub', 'lessons', subjectId] }),
       setPurchaseError,
+      coupon,
     );
   }
 

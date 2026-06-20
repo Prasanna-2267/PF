@@ -18,6 +18,7 @@ import { ExamCategoryModel } from '../modules/content/exam-category.model.js';
 import { StageModel } from '../modules/content/stage.model.js';
 import { SubjectModel } from '../modules/content/subject.model.js';
 import { OrderModel } from '../modules/commerce/order.model.js';
+import { CouponModel } from '../modules/commerce/coupon.model.js';
 
 const PORT = 4105;
 const ROOT = `http://localhost:${PORT}/api`;
@@ -78,7 +79,9 @@ async function main(): Promise<void> {
     const paidId = ((await (await fetch(`${ROOT}/admin/lessons/pdf`, { method: 'POST', headers: adminHdr, body: pdfForm(99) })).json()) as { lesson?: { id?: string } }).lesson?.id ?? '';
     const pkgLessonId = ((await (await fetch(`${ROOT}/admin/lessons/pdf`, { method: 'POST', headers: adminHdr, body: pdfForm(149) })).json()) as { lesson?: { id?: string } }).lesson?.id ?? '';
     const freeId = ((await (await fetch(`${ROOT}/admin/lessons/pdf`, { method: 'POST', headers: adminHdr, body: pdfForm(0, true) })).json()) as { lesson?: { id?: string } }).lesson?.id ?? '';
-    check('uploaded paid + package + free lessons', !!paidId && !!pkgLessonId && !!freeId);
+    const couponL1 = ((await (await fetch(`${ROOT}/admin/lessons/pdf`, { method: 'POST', headers: adminHdr, body: pdfForm(100) })).json()) as { lesson?: { id?: string } }).lesson?.id ?? '';
+    const couponL2 = ((await (await fetch(`${ROOT}/admin/lessons/pdf`, { method: 'POST', headers: adminHdr, body: pdfForm(100) })).json()) as { lesson?: { id?: string } }).lesson?.id ?? '';
+    check('uploaded paid + package + free lessons', !!paidId && !!pkgLessonId && !!freeId && !!couponL1 && !!couponL2);
 
     // Package RBAC
     const pkgBody = JSON.stringify({ title: 'Tax bundle', lessonIds: [pkgLessonId], price: 199 });
@@ -129,6 +132,46 @@ async function main(): Promise<void> {
     // Cannot pay twice for something already owned
     r = await fetch(`${ROOT}/commerce/orders`, { method: 'POST', headers: { ...JSON_HEADERS, ...studHdr }, body: JSON.stringify({ items: [{ type: 'lesson', id: paidId }] }) });
     check('order for already-owned lesson -> 409', r.status === 409, `got ${r.status}`);
+
+    // ── Coupons ──
+    const mkCoupon = (body: object, hdr = adminHdr) =>
+      fetch(`${ROOT}/admin/commerce/coupons`, { method: 'POST', headers: { ...JSON_HEADERS, ...hdr }, body: JSON.stringify(body) });
+    const order = (items: object, couponCode?: string) =>
+      fetch(`${ROOT}/commerce/orders`, { method: 'POST', headers: { ...JSON_HEADERS, ...studHdr }, body: JSON.stringify({ items, couponCode }) });
+
+    r = await mkCoupon({ code: 'NOPERM', discountType: 'percent', discountValue: 50 }, studHdr);
+    check('student create coupon -> 403 (RBAC)', r.status === 403, `got ${r.status}`);
+
+    r = await mkCoupon({ code: 'fifty', discountType: 'percent', discountValue: 50, appliesTo: 'all' });
+    check('admin create coupon -> 201 (uppercased)', r.status === 201);
+    await mkCoupon({ code: 'FREEALL', discountType: 'percent', discountValue: 100, appliesTo: 'all', maxRedemptions: 1 });
+    await mkCoupon({ code: 'PKGONLY', discountType: 'flat', discountValue: 50, appliesTo: 'packages', packageIds: [pkgId] });
+    await mkCoupon({ code: 'EXPIRED', discountType: 'percent', discountValue: 50, appliesTo: 'all', expiresAt: new Date(Date.now() - 86_400_000).toISOString() });
+
+    r = await order([{ type: 'lesson', id: couponL2 }], 'NOPE999');
+    check('invalid coupon -> 400', r.status === 400, `got ${r.status}`);
+    r = await order([{ type: 'lesson', id: couponL2 }], 'PKGONLY');
+    check('coupon scoped to packages on a lesson -> 400', r.status === 400, `got ${r.status}`);
+
+    // 50% off ₹100 lesson → order stored at ₹50 (then 503 since Razorpay unset)
+    r = await order([{ type: 'lesson', id: couponL2 }], 'FIFTY');
+    const fiftyOrder = await OrderModel.findOne({ userId: student._id, couponCode: 'FIFTY' }).lean();
+    check('50% coupon computes discount (amount 5000, discount 5000)', fiftyOrder?.amount === 5000 && fiftyOrder?.discount === 5000, `amt=${fiftyOrder?.amount}`);
+
+    // 100% coupon → free order, granted immediately, redemption counted
+    r = await order([{ type: 'lesson', id: couponL1 }], 'FREEALL');
+    const freeRes = (await r.json()) as { free?: boolean };
+    check('100% coupon -> 200 free order', r.status === 201 && freeRes.free === true, `got ${r.status}`);
+    r = await fetch(`${ROOT}/lessons/${couponL1}/view`, { headers: studHdr });
+    check('coupon-granted lesson unlocks -> 200', r.status === 200, `got ${r.status}`);
+    const usedCoupon = await CouponModel.findOne({ code: 'FREEALL' }).lean();
+    check('coupon redemption counted on payment', usedCoupon?.redemptions === 1, `${usedCoupon?.redemptions}`);
+
+    // usage limit + expiry
+    r = await order([{ type: 'lesson', id: couponL2 }], 'FREEALL');
+    check('coupon over usage limit -> 400', r.status === 400, `got ${r.status}`);
+    r = await order([{ type: 'lesson', id: couponL2 }], 'EXPIRED');
+    check('expired coupon -> 400', r.status === 400, `got ${r.status}`);
 
     // Library
     r = await fetch(`${ROOT}/commerce/my`, { headers: studHdr });

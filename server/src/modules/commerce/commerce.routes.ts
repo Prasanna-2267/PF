@@ -21,3 +21,7 @@ adminCommerceRouter.get('/packages', asyncHandler(commerce.listAdminPackages));
 adminCommerceRouter.post('/packages', asyncHandler(commerce.createPackage));
 adminCommerceRouter.patch('/packages/:id', asyncHandler(commerce.updatePackage));
 adminCommerceRouter.delete('/packages/:id', asyncHandler(commerce.deletePackage));
+adminCommerceRouter.get('/coupons', asyncHandler(commerce.listCoupons));
+adminCommerceRouter.post('/coupons', asyncHandler(commerce.createCoupon));
+adminCommerceRouter.patch('/coupons/:id', asyncHandler(commerce.updateCoupon));
+adminCommerceRouter.delete('/coupons/:id', asyncHandler(commerce.deleteCoupon));

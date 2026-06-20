@@ -33,6 +33,7 @@ export function AdminLayout() {
       <nav className="flex gap-1 border-b border-line bg-surface px-6 py-2 text-sm">
         <AdminNav to="/admin" label="Content" end />
         <AdminNav to="/admin/packages" label="Packages" />
+        <AdminNav to="/admin/coupons" label="Coupons" />
       </nav>
       <main className="p-6">
         <Outlet />
