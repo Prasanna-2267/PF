@@ -13,6 +13,7 @@ export const updatePackageSchema = createPackageSchema.partial();
 
 export const createOrderSchema = z.object({
   items: z.array(z.object({ type: z.enum(['lesson', 'package']), id: objectId })).min(1),
+  idempotencyKey: z.string().min(8).max(100).optional(),
 });
 
 export const verifyPaymentSchema = z.object({

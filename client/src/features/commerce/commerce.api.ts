@@ -21,11 +21,11 @@ export type OrderItem = { type: 'lesson' | 'package'; id: string };
 export const commerceApi = {
   packages: () =>
     api.get<{ packages: Package[]; paymentsEnabled: boolean }>('/commerce/packages').then((r) => r.data),
-  createOrder: (items: OrderItem[]) =>
+  createOrder: (items: OrderItem[], idempotencyKey: string) =>
     api
       .post<{ orderId: string; razorpayOrderId: string; amount: number; currency: string; keyId: string | null }>(
         '/commerce/orders',
-        { items },
+        { items, idempotencyKey },
       )
       .then((r) => r.data),
   verify: (d: RazorpayResult) => api.post('/commerce/verify', d).then((r) => r.data),

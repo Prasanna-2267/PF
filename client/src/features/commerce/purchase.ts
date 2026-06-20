@@ -12,7 +12,8 @@ export async function purchase(
   onError: (message: string) => void,
 ): Promise<void> {
   try {
-    const order = await commerceApi.createOrder(items);
+    // Stable key for this checkout attempt so retries don't create duplicate orders.
+    const order = await commerceApi.createOrder(items, crypto.randomUUID());
     if (!order.keyId) {
       onError('Payments are not set up yet.');
       return;

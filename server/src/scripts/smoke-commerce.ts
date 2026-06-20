@@ -103,6 +103,14 @@ async function main(): Promise<void> {
     r = await fetch(`${ROOT}/commerce/orders`, { method: 'POST', headers: { ...JSON_HEADERS, ...studHdr }, body: JSON.stringify({ items: [{ type: 'lesson', id: paidId }] }) });
     check('order for paid lesson (no Razorpay keys) -> 503', r.status === 503, `got ${r.status}`);
 
+    // Idempotency: the same key must not create a second order
+    const idemKey = `idem-${Date.now()}`;
+    const idemBody = JSON.stringify({ items: [{ type: 'lesson', id: paidId }], idempotencyKey: idemKey });
+    await fetch(`${ROOT}/commerce/orders`, { method: 'POST', headers: { ...JSON_HEADERS, ...studHdr }, body: idemBody });
+    await fetch(`${ROOT}/commerce/orders`, { method: 'POST', headers: { ...JSON_HEADERS, ...studHdr }, body: idemBody });
+    const dupCount = await OrderModel.countDocuments({ idempotencyKey: idemKey });
+    check('idempotency key dedupes order creation', dupCount === 1, `${dupCount} orders`);
+
     // Grant entitlement directly (simulating a paid order), then it unlocks
     await OrderModel.create({ userId: student._id, items: [{ type: 'lesson', refId: paidId }], amount: 9900, status: 'paid' });
     r = await fetch(`${ROOT}/lessons/${paidId}/view`, { headers: studHdr });
@@ -117,6 +125,10 @@ async function main(): Promise<void> {
     await OrderModel.create({ userId: student._id, items: [{ type: 'package', refId: pkgId }], amount: 19900, status: 'paid' });
     r = await fetch(`${ROOT}/lessons/${pkgLessonId}/view`, { headers: studHdr });
     check('after package purchase: lesson view -> 200', r.status === 200, `got ${r.status}`);
+
+    // Cannot pay twice for something already owned
+    r = await fetch(`${ROOT}/commerce/orders`, { method: 'POST', headers: { ...JSON_HEADERS, ...studHdr }, body: JSON.stringify({ items: [{ type: 'lesson', id: paidId }] }) });
+    check('order for already-owned lesson -> 409', r.status === 409, `got ${r.status}`);
 
     // Library
     r = await fetch(`${ROOT}/commerce/my`, { headers: studHdr });

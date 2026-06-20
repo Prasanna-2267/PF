@@ -13,12 +13,18 @@ export function getKeyId(): string | null {
 type RazorpayOrder = { id: string; amount: number; currency: string; status: string };
 
 /** Create a Razorpay order (amount in paise). */
-export async function createRazorpayOrder(amountPaise: number, receipt: string): Promise<RazorpayOrder> {
+export async function createRazorpayOrder(
+  amountPaise: number,
+  receipt: string,
+  idempotencyKey?: string,
+): Promise<RazorpayOrder> {
   if (!isPaymentsConfigured()) throw new HttpError(503, 'Payments are not configured');
   const auth = Buffer.from(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`).toString('base64');
+  const headers: Record<string, string> = { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' };
+  if (idempotencyKey) headers['X-Razorpay-Idempotency-Key'] = idempotencyKey;
   const res = await fetch('https://api.razorpay.com/v1/orders', {
     method: 'POST',
-    headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ amount: amountPaise, currency: 'INR', receipt }),
   });
   if (!res.ok) {

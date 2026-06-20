@@ -21,8 +21,15 @@ const orderSchema = new Schema(
     status: { type: String, enum: ['created', 'paid', 'failed'], default: 'created', index: true },
     razorpayOrderId: { type: String, index: true },
     razorpayPaymentId: { type: String },
+    idempotencyKey: { type: String }, // dedupes retried "Buy" requests
   },
   { timestamps: true },
+);
+
+// One order per (user, idempotency key) — a retried request reuses the order.
+orderSchema.index(
+  { userId: 1, idempotencyKey: 1 },
+  { unique: true, partialFilterExpression: { idempotencyKey: { $type: 'string' } } },
 );
 
 export type Order = InferSchemaType<typeof orderSchema>;

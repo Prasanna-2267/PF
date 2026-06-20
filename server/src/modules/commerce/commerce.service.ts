@@ -48,20 +48,42 @@ export async function listPackages(includeInactive = false) {
 }
 
 // ── Checkout ──
+function checkoutInfo(order: OrderDoc) {
+  return {
+    orderId: order.id as string,
+    razorpayOrderId: order.razorpayOrderId ?? '',
+    amount: order.amount,
+    currency: order.currency,
+    keyId: getKeyId(),
+  };
+}
+
 export async function createOrder(userId: string, input: CreateOrderInput) {
+  // Idempotency: a retried "Buy" with the same key reuses the existing order.
+  if (input.idempotencyKey) {
+    const existing = await OrderModel.findOne({ userId, idempotencyKey: input.idempotencyKey });
+    if (existing) return checkoutInfo(existing);
+  }
+
   let rupees = 0;
   const items: { type: 'lesson' | 'package'; refId: string }[] = [];
+  const owned = await getOwnedLessonIds(userId); // guard against paying twice
 
   for (const it of input.items) {
     if (it.type === 'lesson') {
       const lesson = await LessonModel.findById(it.id);
       if (!lesson || !lesson.isActive || lesson.type !== 'pdf') throw new HttpError(400, 'Invalid lesson');
       if (lesson.isFree) throw new HttpError(400, 'That lesson is free');
+      if (owned.has(String(lesson.id))) throw new HttpError(409, 'You already own this lesson');
       rupees += lesson.price;
       items.push({ type: 'lesson', refId: lesson.id as string });
     } else {
       const pkg = await PackageModel.findById(it.id);
       if (!pkg || !pkg.isActive) throw new HttpError(400, 'Invalid package');
+      const lessonIds = pkg.lessonIds.map((l) => String(l));
+      if (lessonIds.length > 0 && lessonIds.every((id) => owned.has(id))) {
+        throw new HttpError(409, 'You already own everything in this package');
+      }
       rupees += pkg.price;
       items.push({ type: 'package', refId: pkg.id as string });
     }
@@ -70,28 +92,35 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
   if (rupees <= 0) throw new HttpError(400, 'Nothing to purchase');
   const amount = Math.round(rupees * 100); // paise
 
-  const order = await OrderModel.create({ userId, items, amount, status: 'created' });
-  const rzp = await createRazorpayOrder(amount, String(order.id));
+  let order: OrderDoc;
+  try {
+    order = await OrderModel.create({ userId, items, amount, status: 'created', idempotencyKey: input.idempotencyKey });
+  } catch (err) {
+    // Lost the race on the same idempotency key — return the winning order.
+    if ((err as { code?: number }).code === 11000 && input.idempotencyKey) {
+      const existing = await OrderModel.findOne({ userId, idempotencyKey: input.idempotencyKey });
+      if (existing) return checkoutInfo(existing);
+    }
+    throw err;
+  }
+
+  const rzp = await createRazorpayOrder(amount, String(order.id), input.idempotencyKey);
   order.razorpayOrderId = rzp.id;
   await order.save();
-
-  return { orderId: order.id as string, razorpayOrderId: rzp.id, amount, currency: 'INR', keyId: getKeyId() };
-}
-
-async function markPaid(order: OrderDoc, paymentId: string): Promise<void> {
-  if (order.status === 'paid') return; // idempotent
-  order.status = 'paid';
-  order.razorpayPaymentId = paymentId;
-  await order.save();
+  return checkoutInfo(order);
 }
 
 export async function verifyPayment(userId: string, input: VerifyPaymentInput) {
   if (!verifyPaymentSignature(input.razorpay_order_id, input.razorpay_payment_id, input.razorpay_signature)) {
     throw new HttpError(400, 'Invalid payment signature');
   }
-  const order = await OrderModel.findOne({ razorpayOrderId: input.razorpay_order_id, userId });
+  // Atomic + idempotent: setting an already-paid order to paid is a no-op.
+  const order = await OrderModel.findOneAndUpdate(
+    { razorpayOrderId: input.razorpay_order_id, userId },
+    { $set: { status: 'paid', razorpayPaymentId: input.razorpay_payment_id } },
+    { new: true },
+  );
   if (!order) throw new HttpError(404, 'Order not found');
-  await markPaid(order, input.razorpay_payment_id);
   return { ok: true };
 }
 
@@ -104,8 +133,11 @@ export async function handleWebhook(rawBody: Buffer, signature: string): Promise
   };
   const entity = event.payload?.payment?.entity;
   if (event.event === 'payment.captured' && entity?.order_id) {
-    const order = await OrderModel.findOne({ razorpayOrderId: entity.order_id });
-    if (order) await markPaid(order, entity.id ?? 'webhook');
+    // Only act if not already paid (don't clobber the verify result).
+    await OrderModel.findOneAndUpdate(
+      { razorpayOrderId: entity.order_id, status: { $ne: 'paid' } },
+      { $set: { status: 'paid', razorpayPaymentId: entity.id ?? 'webhook' } },
+    );
   }
 }
 
