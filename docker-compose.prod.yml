@@ -1,0 +1,55 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Production stack for a VPS (e.g. Oracle Cloud "Always Free" ARM VM).
+#
+#   app   — the combined same-origin image (API + SPA) on an internal :4000
+#   caddy — terminates HTTPS with an auto-renewing Let's Encrypt cert and
+#           reverse-proxies everything (REST + Socket.io) to app
+#
+# Prerequisites on the box:
+#   1. A DNS A record for your domain → this server's public IP.
+#   2. Ports 80 and 443 open (firewall + cloud security list).
+#   3. cp .env.example .env  and fill it in (DOMAIN + secrets).
+#
+# Deploy / update:
+#   docker compose -f docker-compose.prod.yml up -d --build
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+    restart: unless-stopped
+    env_file: ./.env # MONGODB_URI, JWT secrets, R2, Razorpay, mail, OpenAI, …
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      # Public origin — derived from DOMAIN so it can't drift out of sync.
+      # Used for the Socket.io origin check and Secure-cookie behavior.
+      CLIENT_ORIGIN: "https://${DOMAIN:?set DOMAIN in .env, e.g. app.example.com}"
+    volumes:
+      - storage:/app/storage # local-disk fallback when R2 isn't configured
+    expose:
+      - '4000'
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data # persisted TLS certificates — do not delete
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  storage:
+  caddy_data:
+  caddy_config:

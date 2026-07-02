@@ -98,6 +98,40 @@ redeploy.
 
 ---
 
+## Path D — Oracle Cloud ARM VM (chosen host; Docker + auto-HTTPS)
+
+A single always-free ARM VM running the **combined image** (API serves the SPA)
+behind **Caddy** for automatic Let's Encrypt HTTPS. Files: root `Dockerfile`,
+`docker-compose.prod.yml`, `Caddyfile`, `.env.example`.
+
+**On the VM (Ubuntu), one-time:**
+1. Install Docker: `curl -fsSL https://get.docker.com | sh` (then `sudo usermod -aG docker $USER` and re-login).
+2. Open **80** and **443** — both in the VM firewall (`ufw`/`iptables`) **and** the Oracle **security list / NSG** for the subnet.
+3. Point your domain's **DNS A record** at the VM's public IP.
+
+**Deploy:**
+```bash
+git clone https://github.com/winnowms/parallax-flow.git && cd parallax-flow
+cp .env.example .env      # set DOMAIN, MONGODB_URI, JWT secrets (+ optional keys)
+docker compose -f docker-compose.prod.yml config   # sanity-check
+docker compose -f docker-compose.prod.yml up -d --build
+```
+Caddy fetches the TLS cert automatically once DNS + ports 80/443 are live. Then
+open `https://<your-domain>`.
+
+**Update later:** `git pull && docker compose -f docker-compose.prod.yml up -d --build`.
+
+- `CLIENT_ORIGIN` is derived from `DOMAIN` by the compose file — set `DOMAIN` once.
+- Storage: the `storage` volume persists across redeploys, but **Cloudflare R2**
+  is still recommended for real PDFs (backups, no VM disk pressure).
+- ARM note: `mupdf` is WASM (arch-independent) and `@napi-rs/canvas` ships a
+  `linux-arm64-gnu` prebuild, so the glibc `node:22-slim` image builds on Ampere.
+- Ops (seed admin, forensic) run locally against Atlas, or on the VM:
+  `docker compose -f docker-compose.prod.yml exec app node -e "..."` — but the
+  seed script is TS; easiest is to run `npm run seed:admin` from your own machine.
+
+---
+
 ## Post-deploy checklist
 
 - [ ] `GET /health` returns `{ "status": "ok" }`.

@@ -1,0 +1,8 @@
+# Automatic HTTPS for the app. Caddy fetches and auto-renews a Let's Encrypt
+# certificate for $DOMAIN (needs port 80 reachable + DNS pointing here), then
+# reverse-proxies everything to the app container. Websocket upgrades for
+# Socket.io (single-device logout) are handled transparently.
+{$DOMAIN} {
+	encode gzip zstd
+	reverse_proxy app:4000
+}

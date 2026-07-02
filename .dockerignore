@@ -1,0 +1,13 @@
+# Keep the build context small and avoid copying host artifacts (wrong-arch
+# node_modules, local builds, secrets) into image layers.
+**/node_modules
+**/dist
+**/.git
+.git
+**/.env
+**/.env.*
+!**/.env.example
+**/storage
+**/.test-storage
+**/*.log
+npm-debug.log*
