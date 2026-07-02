@@ -7,6 +7,7 @@ import { pinoHttp } from 'pino-http';
 import { env, isProd } from './config/env.js';
 import { logger } from './lib/logger.js';
 import { errorHandler, notFound } from './middleware/error.js';
+import { serveClient } from './middleware/serve-client.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { adminContentRouter, contentRouter } from './modules/content/content.routes.js';
 import { adminLessonsRouter, lessonsRouter } from './modules/lessons/lesson.routes.js';
@@ -62,6 +63,15 @@ export function createApp(): Express {
   app.use('/api/admin/questions', adminQuestionsRouter);
   app.use('/api/admin/audit', adminAuditRouter);
 
+  // Unknown /api routes → JSON 404 (before the SPA fallback below, so a mistyped
+  // API path never returns the HTML shell).
+  app.use('/api', notFound);
+
+  // Same-origin SPA hosting (production): serve the built client + client-side
+  // routing fallback. No-op if no build is present, so dev/API-only is unaffected.
+  serveClient(app);
+
+  // Anything still unmatched (no client build present) → JSON 404.
   app.use(notFound);
   app.use(errorHandler);
 

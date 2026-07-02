@@ -67,6 +67,37 @@ After deploy, seed the admin by running `npm run seed:admin` with `ADMIN_EMAIL`/
 
 ---
 
+## Path C — Render Blueprint (recommended; no Docker, no server admin)
+
+The simplest path: **one same-origin web service** where the Express API also
+serves the built React SPA. Everything lives on a single `https://<name>.onrender.com`
+URL, so auth cookies stay first-party and there's no CORS to configure. Defined
+by `render.yaml` at the repo root.
+
+1. Push this repo to GitHub.
+2. Create a free **MongoDB Atlas** cluster and copy its `mongodb+srv://…` URI
+   (add `0.0.0.0/0` to Atlas Network Access so Render can connect).
+3. Go to **dashboard.render.com → New → Blueprint**, pick the repo. Render reads
+   `render.yaml` and creates the service.
+4. When prompted, paste `MONGODB_URI`. Leave the rest blank for now — they all
+   degrade gracefully (JWT secrets are auto-generated). Deploy.
+5. Seed the first admin: open the service's **Shell** tab and run
+   ```bash
+   cd server && ADMIN_EMAIL=you@example.com ADMIN_PASSWORD=change-me-12 npm run seed:admin
+   ```
+
+`CLIENT_ORIGIN` is auto-derived from Render's injected `RENDER_EXTERNAL_URL`, so
+there's nothing to set for cookies/websockets to work. Add R2 / Razorpay / Resend /
+OpenAI / Google keys in the dashboard whenever you're ready — each triggers a
+redeploy.
+
+> **Notes.** The **free** plan spins down when idle (first request after a lull is
+> slow) and its disk is **ephemeral** — set Cloudflare R2 before uploading real
+> PDFs, or they vanish on redeploy. Bump to the **starter** plan to remove the
+> spin-down.
+
+---
+
 ## Post-deploy checklist
 
 - [ ] `GET /health` returns `{ "status": "ok" }`.

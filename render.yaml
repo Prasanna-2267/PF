@@ -1,0 +1,78 @@
+# Render Blueprint — one same-origin web service.
+#
+# The Express API also serves the built React SPA, so the whole app lives on a
+# single URL (https://<name>.onrender.com). That keeps auth cookies first-party
+# and removes all CORS/cross-site concerns — nothing to configure.
+#
+# Deploy: push this repo to GitHub → https://dashboard.render.com → New →
+# Blueprint → pick the repo. Render reads this file and creates the service.
+# Fill the values marked `sync: false` in the dashboard (they are never committed).
+#
+# Secrets degrade gracefully: only MONGODB_URI is required to boot. Add the rest
+# whenever you're ready (payments, email, storage, AI, Google SSO).
+
+services:
+  - type: web
+    name: parallax-flow
+    runtime: node
+    plan: free # bump to "starter" (~$7/mo) to remove idle spin-down / cold starts
+    region: singapore # lowest latency to India; change if you prefer
+    branch: main
+    # --include=dev forces Vite/tsc to install even though NODE_ENV=production.
+    buildCommand: |
+      npm --prefix client ci --include=dev && npm --prefix client run build
+      npm --prefix server ci --include=dev && npm --prefix server run build
+    # Run from server/ so relative paths (../client/dist, storage) resolve as in dev.
+    startCommand: cd server && node dist/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # ── Auth secrets — generated once by Render, then held securely ──
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+
+      # ── Database — REQUIRED. Paste your MongoDB Atlas mongodb+srv:// URI ──
+      - key: MONGODB_URI
+        sync: false
+
+      # ── PDF storage: Cloudflare R2 (strongly recommended) ──
+      # Render's disk is EPHEMERAL — uploaded PDFs are lost on every redeploy
+      # unless R2 is set. Fine to leave blank while testing.
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+
+      # ── Email OTP + receipts: Resend ── (blank → OTPs print to the logs)
+      - key: MAIL_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+
+      # ── Payments: Razorpay ── (blank → checkout returns 503)
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+
+      # ── AI grading: OpenAI ── (blank → keyword heuristic fallback)
+      - key: OPENAI_API_KEY
+        sync: false
+
+      # ── Google SSO (optional) ── both must hold the SAME client ID.
+      # VITE_GOOGLE_CLIENT_ID is read at build time by the client; GOOGLE_CLIENT_ID
+      # is read at runtime by the API.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: VITE_GOOGLE_CLIENT_ID
+        sync: false

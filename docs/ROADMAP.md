@@ -32,13 +32,13 @@
 
 ## Launch prerequisites (provide these, then deploy)
 
-Real third-party credentials — all degrade gracefully until set: MongoDB Atlas URI + JWT secrets (required), Cloudflare R2 (PDF storage), Razorpay (payments), Resend (OTP email), OpenAI (AI grading), Google OAuth client ID (SSO). Hosting target is the remaining decision — see `DEPLOY.md` (Docker/VPS or managed PaaS).
+Real third-party credentials — all degrade gracefully until set: MongoDB Atlas URI (required; JWT secrets are auto-generated on Render), Cloudflare R2 (PDF storage), Razorpay (payments), Resend (OTP email), OpenAI (AI grading), Google OAuth client ID (SSO). Hosting is decided — **Render** via the `render.yaml` Blueprint (`DEPLOY.md` Path C).
 
-## Decide-at-their-phase (defaults set, confirm when reached)
+## Decide-at-their-phase — resolved
 
-- OTP/email sending provider (Resend / AWS SES / Brevo) — Phase 1.
-- UI/branding direction for Parallax Flow — start of frontend work.
-- Deployment target/host — before Phase 7.
+- OTP/email sending provider → **Resend** (already wired; add `MAIL_API_KEY`/`MAIL_FROM` to send real mail).
+- UI/branding direction → **launch with the current flat/themed UI**; dedicated branding pass is post-launch polish.
+- Deployment target/host → **Render** (managed PaaS, no Docker). One same-origin web service (API serves the SPA); see `DEPLOY.md` Path C and `render.yaml`.
 
 ## Deferred (post-MVP)
 

@@ -25,6 +25,9 @@ const schema = z.object({
   DNS_SERVERS: z.string().optional(),
   // Local-disk storage directory (used until Cloudflare R2 is configured).
   STORAGE_DIR: z.string().optional(),
+  // Override for the built client directory to serve (default: ../client/dist).
+  // Leave unset unless the SPA build lives somewhere non-standard.
+  CLIENT_DIST_DIR: z.string().optional(),
 
   // Phase 1+ (optional until those phases wire them in)
   JWT_ACCESS_SECRET: z.string().optional(),
@@ -48,6 +51,14 @@ const schema = z.object({
 
   OPENAI_API_KEY: z.string().optional(),
 });
+
+// On Render (and similar PaaS), the public URL is injected as RENDER_EXTERNAL_URL.
+// Default CLIENT_ORIGIN to it so the same-origin deploy needs no manual URL entry
+// (used for the Socket.io origin check + Secure-cookie behavior). Explicit
+// CLIENT_ORIGIN still wins.
+if (!process.env.CLIENT_ORIGIN && process.env.RENDER_EXTERNAL_URL) {
+  process.env.CLIENT_ORIGIN = process.env.RENDER_EXTERNAL_URL;
+}
 
 const parsed = schema.safeParse(process.env);
 
