@@ -38,7 +38,7 @@ Real third-party credentials — all degrade gracefully until set: MongoDB Atlas
 
 - OTP/email sending provider → **Resend** (already wired; add `MAIL_API_KEY`/`MAIL_FROM` to send real mail).
 - UI/branding direction → **launch with the current flat/themed UI**; dedicated branding pass is post-launch polish.
-- Deployment target/host → **Oracle Cloud "Always Free" ARM VM** (Docker Compose + Caddy auto-HTTPS), on a purchased domain. One same-origin container (API serves the SPA); see `DEPLOY.md` Path D, `Dockerfile`, `docker-compose.prod.yml`, `Caddyfile`. Render (`render.yaml`, Path C) remains a documented one-click alternative.
+- Deployment target/host → **Render** is the immediate path (managed, no Docker) via `render.yaml` / `DEPLOY.md` Path C. A `$0` self-host **Oracle Cloud ARM** stack (Docker + Caddy, `DEPLOY.md` Path D) is fully prepared as an alternative. Both use the same same-origin architecture (API serves the SPA).
 
 ## Deferred (post-MVP)
 
