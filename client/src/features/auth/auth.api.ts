@@ -31,6 +31,13 @@ export const authApi = {
 
   setPhone: (phone: string) =>
     api.patch<{ user: AuthUser }>('/auth/phone', { phone }).then((r) => r.data.user),
+
+  uploadAvatar: (file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post<{ user: AuthUser }>('/auth/avatar', fd).then((r) => r.data.user);
+  },
+  removeAvatar: () => api.delete<{ user: AuthUser }>('/auth/avatar').then((r) => r.data.user),
 };
 
 /** Silent login on app load using the refresh cookie. */

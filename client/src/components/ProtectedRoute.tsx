@@ -1,10 +1,11 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuthStore } from '../lib/auth-store';
-import { Spinner } from './ui';
+import { FullPageLoader } from './ui';
 
+/** Requires any authenticated user. */
 export function ProtectedRoute() {
   const status = useAuthStore((s) => s.status);
-  if (status === 'loading') return <Spinner full />;
+  if (status === 'loading') return <FullPageLoader />;
   if (status === 'unauthenticated') return <Navigate to="/login" replace />;
   return <Outlet />;
 }

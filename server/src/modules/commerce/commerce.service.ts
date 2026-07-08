@@ -53,7 +53,19 @@ export async function deletePackage(id: string): Promise<void> {
 export async function listPackages(includeInactive = false) {
   const filter = includeInactive ? {} : { isActive: true };
   const pkgs = await PackageModel.find(filter).sort({ createdAt: -1 });
-  return pkgs.map(publicPackage);
+
+  // Resolve the included lessons (title + type) so students can see what's inside.
+  const allIds = [...new Set(pkgs.flatMap((p) => p.lessonIds.map((l) => String(l))))];
+  const lessons = await LessonModel.find({ _id: { $in: allIds } }).select('title type').lean();
+  const map = new Map(lessons.map((l) => [String(l._id), l]));
+
+  return pkgs.map((p) => ({
+    ...publicPackage(p),
+    lessons: p.lessonIds
+      .map((l) => map.get(String(l)))
+      .filter((l): l is NonNullable<typeof l> => Boolean(l))
+      .map((l) => ({ id: String(l._id), title: l.title, type: l.type })),
+  }));
 }
 
 // ── Checkout ──
@@ -101,7 +113,13 @@ async function applyCoupon(code: string, resolved: ResolvedItem[], total: number
 }
 
 async function redeemCoupon(code: string): Promise<void> {
-  await CouponModel.updateOne({ code }, { $inc: { redemptions: 1 } });
+  // Conditional increment so concurrent redemptions can't push past the cap
+  // (the create-time check alone races). `maxRedemptions: null` also matches
+  // missing (unlimited) coupons in MongoDB.
+  await CouponModel.updateOne(
+    { code, $or: [{ maxRedemptions: null }, { $expr: { $lt: ['$redemptions', '$maxRedemptions'] } }] },
+    { $inc: { redemptions: 1 } },
+  );
 }
 
 export async function createOrder(userId: string, input: CreateOrderInput) {
@@ -147,8 +165,10 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
   const discount = Math.round(discountRupees * 100);
   const items = resolved.map((r) => ({ type: r.type, refId: r.refId, title: r.title, price: Math.round(r.price * 100) }));
 
-  // Fully covered by the coupon → grant immediately, no payment needed.
-  if (amount <= 0) {
+  // Covered by the coupon down to < ₹1 → grant immediately. Razorpay rejects
+  // any charge below its 100-paise minimum, so a 1–99 paise remainder can't be
+  // charged; treat it as fully covered rather than creating an uncompletable order.
+  if (amount < 100) {
     const order = await OrderModel.create({ userId, items, amount: 0, discount, couponCode, status: 'paid', idempotencyKey: input.idempotencyKey });
     if (couponCode) await redeemCoupon(couponCode);
     await generateReceiptForOrder(order);

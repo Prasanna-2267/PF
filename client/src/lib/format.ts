@@ -8,9 +8,14 @@ export function formatMinutes(mins: number): string {
   return `${h}h ${r}m`;
 }
 
-/** Paise → "₹1,234.00". */
+/** Paise → "₹1,234.00" (order/receipt amounts are stored in paise). */
 export function formatINR(paise: number): string {
   return `₹${(paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/** Whole rupees → "₹1,234" (catalog list prices — lessons/packages — are stored in rupees). */
+export function formatRupees(rupees: number): string {
+  return `₹${rupees.toLocaleString('en-IN')}`;
 }
 
 /** Map a 0–100 exam-pressure score to a semantic bar/badge tone. */

@@ -1,8 +1,14 @@
 import { Router } from 'express';
+import multer from 'multer';
 import rateLimit from 'express-rate-limit';
 import { asyncHandler } from '../../middleware/error.js';
 import { requireAuth } from '../../middleware/auth.js';
 import * as authController from './auth.controller.js';
+
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB — reprocessed to a 512px square
+});
 
 // In-memory rate limiting (sufficient for a single server at current scale;
 // swap for a shared store if we ever run multiple instances).
@@ -32,3 +38,14 @@ authRouter.post('/refresh', asyncHandler(authController.refresh));
 authRouter.post('/logout', requireAuth, asyncHandler(authController.logout));
 authRouter.get('/me', requireAuth, asyncHandler(authController.me));
 authRouter.patch('/phone', requireAuth, asyncHandler(authController.updatePhone));
+authRouter.post(
+  '/avatar',
+  requireAuth,
+  avatarUpload.single('file'),
+  asyncHandler(authController.uploadAvatar),
+);
+authRouter.delete('/avatar', requireAuth, asyncHandler(authController.removeAvatar));
+
+/** Public: avatar image serving (usable in <img>). Mounted at /api/users. */
+export const usersRouter = Router();
+usersRouter.get('/:id/avatar', asyncHandler(authController.avatarPublic));

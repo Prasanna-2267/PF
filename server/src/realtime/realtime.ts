@@ -41,3 +41,14 @@ export async function kickOtherDevices(userId: string, keepDeviceId: string): Pr
     logger.warn({ err: String(err) }, 'kickOtherDevices failed');
   }
 }
+
+/** Instantly log out ALL of a user's devices (admin force-logout / deactivate). */
+export async function kickAllDevices(userId: string): Promise<void> {
+  if (!io) return;
+  try {
+    const sockets = await io.in(`user:${userId}`).fetchSockets();
+    for (const s of sockets) s.emit('force-logout');
+  } catch (err) {
+    logger.warn({ err: String(err) }, 'kickAllDevices failed');
+  }
+}

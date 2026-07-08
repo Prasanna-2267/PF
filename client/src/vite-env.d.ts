@@ -10,3 +10,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/** Self-hosted variable font, imported for its side effect (CSS + font files). */
+declare module '@fontsource-variable/manrope';

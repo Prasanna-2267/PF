@@ -18,6 +18,12 @@ const studySessionSchema = new Schema(
 );
 
 studySessionSchema.index({ userId: 1, checkOutAt: 1 });
+// At most one OPEN session per user — rejects a second concurrent check-in
+// (two tabs/devices/retries) that would otherwise double-count live minutes.
+studySessionSchema.index(
+  { userId: 1 },
+  { unique: true, partialFilterExpression: { checkOutAt: null } },
+);
 
 export type StudySession = InferSchemaType<typeof studySessionSchema>;
 export type StudySessionDoc = HydratedDocument<StudySession>;

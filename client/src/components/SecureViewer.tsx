@@ -1,7 +1,18 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { lessonsApi } from '../features/lessons/lessons.api';
 import { authApi, errorInfo, errorMessage } from '../features/auth/auth.api';
 import { useAuthStore } from '../lib/auth-store';
+import { cn } from '../lib/cn';
+import {
+  ArrowLeftIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
+  CheckIcon,
+  ShieldIcon,
+  CloseIcon,
+  EyeIcon,
+  LockIcon,
+} from './ui/icons';
 
 /**
  * In-app viewer for secured PDFs. Pages arrive ENCRYPTED (AES-GCM) — the
@@ -19,6 +30,33 @@ async function decryptPage(cipher: ArrayBuffer, keyB64: string): Promise<ArrayBu
   return crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes.slice(0, 12) }, key, bytes.slice(12));
 }
 
+function ToolButton({
+  onClick,
+  title,
+  children,
+  className,
+}: {
+  onClick: () => void;
+  title: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      className={cn(
+        'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-white/80 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50',
+        className,
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function SecureViewer({ lessonId, onClose }: { lessonId: string; onClose: () => void }) {
   const setUser = useAuthStore((s) => s.setUser);
   const [meta, setMeta] = useState<{ title: string; pageCount: number } | null>(null);
@@ -26,10 +64,12 @@ export function SecureViewer({ lessonId, onClose }: { lessonId: string; onClose:
   const [zoom, setZoom] = useState(1);
   const [error, setError] = useState('');
   const [needPhone, setNeedPhone] = useState(false);
+  const [needPurchase, setNeedPurchase] = useState(false);
   const [phone, setPhone] = useState('');
   const [blurred, setBlurred] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [showNotice, setShowNotice] = useState(true);
 
   useEffect(() => {
     let active = true;
@@ -45,6 +85,7 @@ export function SecureViewer({ lessonId, onClose }: { lessonId: string; onClose:
         if (!active) return;
         const { status, code } = errorInfo(err);
         if (status === 403 && code === 'PHONE_REQUIRED') setNeedPhone(true);
+        else if (status === 402 || code === 'PURCHASE_REQUIRED') setNeedPurchase(true);
         else setError(errorMessage(err));
       });
     return () => {
@@ -117,100 +158,167 @@ export function SecureViewer({ lessonId, onClose }: { lessonId: string; onClose:
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-slate-950/95 text-slate-100"
+      className="fixed inset-0 z-50 flex flex-col bg-[#0b1020] text-white"
       onContextMenu={(e) => e.preventDefault()}
     >
-      <header className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-2.5">
-        <span className="truncate text-sm font-medium">{meta?.title ?? 'Secured notes'}</span>
-        <div className="flex items-center gap-2">
-          {meta && !needPhone && (
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setZoom((z) => clampZoom(z - 0.25))}
-                className="rounded border border-slate-700 px-2 py-1 text-sm hover:bg-slate-800"
-                title="Zoom out"
-              >
-                −
-              </button>
-              <span className="w-12 text-center text-xs text-slate-400">{Math.round(zoom * 100)}%</span>
-              <button
-                type="button"
-                onClick={() => setZoom((z) => clampZoom(z + 0.25))}
-                className="rounded border border-slate-700 px-2 py-1 text-sm hover:bg-slate-800"
-                title="Zoom in"
-              >
-                +
-              </button>
+      <header className="flex items-center justify-between gap-3 border-b border-white/10 bg-white/[0.03] px-3 py-2.5 backdrop-blur sm:px-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <ToolButton onClick={onClose} title="Back" className="px-2">
+            <ArrowLeftIcon size={18} />
+          </ToolButton>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">{meta?.title ?? 'Secured notes'}</p>
+            {meta ? (
+              <p className="text-[11px] text-white/45 tabular">{meta.pageCount} pages</p>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1 sm:gap-2">
+          {meta && !needPhone ? (
+            <div className="hidden items-center rounded-xl bg-white/5 p-0.5 sm:flex">
+              <ToolButton onClick={() => setZoom((z) => clampZoom(z - 0.25))} title="Zoom out">
+                <ZoomOutIcon size={17} />
+              </ToolButton>
               <button
                 type="button"
                 onClick={() => setZoom(1)}
-                className="rounded border border-slate-700 px-2 py-1 text-xs hover:bg-slate-800"
                 title="Reset zoom"
+                className="w-14 text-center text-xs font-semibold text-white/70 tabular hover:text-white"
               >
-                Reset
+                {Math.round(zoom * 100)}%
               </button>
+              <ToolButton onClick={() => setZoom((z) => clampZoom(z + 0.25))} title="Zoom in">
+                <ZoomInIcon size={17} />
+              </ToolButton>
             </div>
-          )}
-          {meta && (
+          ) : null}
+
+          {meta ? (
             <button
               type="button"
               onClick={toggleComplete}
-              className="rounded bg-violet-600 px-3 py-1 text-sm hover:bg-violet-500"
+              className={cn(
+                'inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold transition-colors',
+                completed
+                  ? 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
+                  : 'bg-white text-navy-900 hover:bg-white/90',
+              )}
             >
-              {completed ? '✓ Completed' : 'Mark complete'}
+              <CheckIcon size={16} />
+              <span className="hidden sm:inline">{completed ? 'Completed' : 'Mark complete'}</span>
             </button>
-          )}
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded border border-slate-700 px-3 py-1 text-sm hover:bg-slate-800"
-          >
-            Close
-          </button>
+          ) : null}
+
+          <ToolButton onClick={onClose} title="Close" className="px-2">
+            <CloseIcon size={18} />
+          </ToolButton>
         </div>
       </header>
 
-      <div className="relative flex-1 select-none overflow-auto p-4">
-        {error && (
-          <p className="mx-auto max-w-md rounded bg-rose-500/10 p-3 text-center text-sm text-rose-300">{error}</p>
-        )}
+      {showNotice && meta && !needPhone ? (
+        <div className="flex items-center gap-2.5 border-b border-white/10 bg-white/[0.02] px-4 py-2 text-xs text-white/70">
+          <ShieldIcon size={16} className="shrink-0 text-gold-400" />
+          <p className="flex-1">
+            Protected study material — this content is personalised and watermarked for your account.
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowNotice(false)}
+            className="rounded p-1 text-white/50 hover:text-white"
+            aria-label="Dismiss"
+          >
+            <CloseIcon size={14} />
+          </button>
+        </div>
+      ) : null}
 
-        {needPhone && (
+      <div className="relative flex-1 select-none overflow-auto p-4">
+        {error ? (
+          <div className="mx-auto max-w-md rounded-xl border border-rose-500/30 bg-rose-500/10 p-3.5 text-center text-sm text-rose-200">
+            {error}
+          </div>
+        ) : null}
+
+        {needPhone ? (
           <form
             onSubmit={submitPhone}
-            className="mx-auto mt-10 max-w-sm space-y-3 rounded-xl border border-slate-800 bg-slate-900/60 p-6"
+            className="mx-auto mt-10 max-w-sm space-y-4 rounded-2xl border border-white/10 bg-white/5 p-6"
           >
-            <h2 className="text-lg font-medium">Add your phone number</h2>
-            <p className="text-sm text-slate-400">
-              Secured notes are watermarked with your details. Add a phone number to continue.
-            </p>
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gold-400/15 text-gold-400">
+              <ShieldIcon size={22} />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold">Add your phone number</h2>
+              <p className="mt-1 text-sm text-white/60">
+                Secured notes are watermarked with your details. A verified contact number is
+                required before secure content can open.
+              </p>
+            </div>
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               required
+              inputMode="tel"
               placeholder="Phone number"
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-violet-500"
+              className="h-11 w-full rounded-xl border border-white/15 bg-white/5 px-3.5 text-[15px] text-white outline-none transition-colors placeholder:text-white/40 focus:border-white/40"
             />
-            <button type="submit" className="w-full rounded-lg bg-violet-600 px-3 py-2 text-sm font-medium hover:bg-violet-500">
-              Save & open
+            <button
+              type="submit"
+              className="h-11 w-full rounded-xl bg-white text-sm font-semibold text-navy-900 transition-colors hover:bg-white/90"
+            >
+              Save &amp; open
             </button>
           </form>
-        )}
+        ) : null}
 
-        {meta && viewKey && !needPhone && (
-          <div className="mx-auto space-y-4" style={{ width: `${Math.round(zoom * 800)}px`, maxWidth: '100%' }}>
+        {meta && viewKey && !needPhone ? (
+          <div
+            className="mx-auto space-y-4"
+            style={{ width: `${Math.round(zoom * 800)}px`, maxWidth: '100%' }}
+          >
             {Array.from({ length: meta.pageCount }, (_, i) => i + 1).map((p) => (
               <PageCanvas key={p} lessonId={lessonId} page={p} viewKey={viewKey} onError={setError} />
             ))}
           </div>
-        )}
+        ) : null}
 
-        {blurred && (
-          <div className="absolute inset-0 flex items-center justify-center bg-slate-950/90 backdrop-blur-xl">
-            <p className="text-slate-300">Content hidden — return focus to this tab to continue.</p>
+        {needPurchase ? (
+          <div className="mx-auto mt-10 max-w-sm space-y-4 rounded-2xl border border-white/10 bg-white/5 p-6 text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gold-400/15 text-gold-400">
+              <LockIcon size={24} />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold">This is a paid lesson</h2>
+              <p className="mt-1 text-sm text-white/60">
+                You don&apos;t own this lesson yet. Buy it from Notes to read it — access is instant
+                and yours forever.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-11 w-full rounded-xl bg-white text-sm font-semibold text-navy-900 transition-colors hover:bg-white/90"
+            >
+              Back to notes
+            </button>
           </div>
-        )}
+        ) : null}
+
+        {!meta && !needPhone && !needPurchase && !error ? (
+          <div className="mx-auto max-w-md space-y-4 pt-10">
+            <div className="h-[70vh] w-full animate-shimmer rounded-xl bg-white/5" />
+          </div>
+        ) : null}
+
+        {blurred ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#0b1020]/92 text-center backdrop-blur-xl">
+            <EyeIcon size={30} className="text-white/40" />
+            <p className="max-w-xs text-sm text-white/70">
+              Content hidden — return focus to this tab to continue reading.
+            </p>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -270,15 +378,25 @@ function PageCanvas({
   }, [lessonId, page, viewKey, onError]);
 
   return (
-    <div ref={wrapRef} className={`relative w-full rounded bg-slate-900/40 ${loaded ? '' : 'min-h-[70vh]'}`}>
+    <div
+      ref={wrapRef}
+      className={cn(
+        'relative w-full overflow-hidden rounded-lg',
+        loaded ? 'shadow-[0_6px_30px_rgba(0,0,0,0.4)] ring-1 ring-white/10' : 'min-h-[70vh] bg-white/5',
+      )}
+    >
       <canvas
         ref={canvasRef}
         onContextMenu={(e) => e.preventDefault()}
-        className={`block w-full rounded shadow-lg ${loaded ? '' : 'hidden'}`}
+        className={cn('block w-full', loaded ? '' : 'hidden')}
       />
-      {!loaded && (
-        <p className="absolute inset-0 flex items-center justify-center text-sm text-slate-500">Page {page}…</p>
-      )}
+      {!loaded ? (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-white/40 tabular">
+            Page {page}…
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }

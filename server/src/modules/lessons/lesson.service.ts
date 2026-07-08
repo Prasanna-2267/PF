@@ -1,6 +1,9 @@
 import { createCipheriv, randomBytes, randomUUID } from 'node:crypto';
+import mongoose from 'mongoose';
 import { PDFDocument } from 'pdf-lib';
 import { HttpError } from '../../middleware/error.js';
+import { OrderModel } from '../commerce/order.model.js';
+import { PackageModel } from '../commerce/package.model.js';
 import { storage } from '../../services/storage.js';
 import { renderWatermarkedPage } from '../../services/pdf-render.js';
 import { getViewSession, issueViewSession } from '../../services/view-keys.js';
@@ -40,12 +43,26 @@ async function ensureSubject(subjectId: string): Promise<void> {
   }
 }
 
+/**
+ * A subject holds EITHER sub-subjects OR notes — never both. Notes may only be
+ * attached to a leaf subject (one with no sub-subjects).
+ */
+async function assertLeafSubject(subjectId: string): Promise<void> {
+  if (await SubjectModel.exists({ parentSubjectId: subjectId })) {
+    throw new HttpError(
+      400,
+      'This subject has sub-subjects — add notes to a sub-subject instead, not to a subject that contains other subjects.',
+    );
+  }
+}
+
 export async function createPdfLesson(
   fields: CreatePdfFields,
   file: Express.Multer.File | undefined,
   userId: string,
 ) {
   await ensureSubject(fields.subjectId);
+  await assertLeafSubject(fields.subjectId);
   if (!file) throw new HttpError(400, 'A PDF file is required');
   if (file.mimetype !== 'application/pdf') throw new HttpError(400, 'Only PDF files are allowed');
 
@@ -78,6 +95,7 @@ export async function createPdfLesson(
 
 export async function createIsmLesson(data: CreateIsmInput, userId: string) {
   await ensureSubject(data.subjectId);
+  await assertLeafSubject(data.subjectId);
   const lesson = await LessonModel.create({
     title: data.title,
     subjectId: data.subjectId,
@@ -127,17 +145,122 @@ export async function reviseLesson(userId: string, lessonId: string) {
 }
 
 export async function updateLesson(id: string, data: UpdateLessonInput) {
-  const lesson = await LessonModel.findByIdAndUpdate(id, data, { new: true, runValidators: true });
+  const existing = await LessonModel.findById(id).select('type').lean();
+  if (!existing) throw new HttpError(404, 'Lesson not found');
+
+  // ISM ("government link") lessons are always free, public resources — their
+  // externalUrl is served to every student and has no entitlement gate, so a
+  // non-free ISM lesson would leak its link. Force free regardless of input.
+  const patch: UpdateLessonInput = { ...data };
+  if (existing.type === 'ism') {
+    patch.isFree = true;
+    patch.price = 0;
+  }
+
+  const lesson = await LessonModel.findByIdAndUpdate(id, patch, { new: true, runValidators: true });
   if (!lesson) throw new HttpError(404, 'Lesson not found');
   return publicLesson(lesson);
+}
+
+/** True if any student has a PAID entitlement to this lesson (directly or via a purchased package). */
+async function lessonHasPurchasers(lessonId: string): Promise<boolean> {
+  const oid = new mongoose.Types.ObjectId(lessonId);
+  if (await OrderModel.exists({ status: 'paid', items: { $elemMatch: { type: 'lesson', refId: oid } } })) {
+    return true;
+  }
+  const pkgIds = (await PackageModel.find({ lessonIds: oid }).select('_id').lean()).map((p) => p._id);
+  if (pkgIds.length) {
+    return Boolean(
+      await OrderModel.exists({
+        status: 'paid',
+        items: { $elemMatch: { type: 'package', refId: { $in: pkgIds } } },
+      }),
+    );
+  }
+  return false;
 }
 
 export async function deleteLesson(id: string): Promise<void> {
   const lesson = await LessonModel.findById(id);
   if (!lesson) throw new HttpError(404, 'Lesson not found');
+  // Never destroy content that students have paid for — unpublish keeps their
+  // access while removing it from the catalogue.
+  if (await lessonHasPurchasers(id)) {
+    throw new HttpError(
+      409,
+      'Students have already purchased this lesson. Unpublish it to remove it from the catalogue while keeping their access, or refund those orders first.',
+    );
+  }
   if (lesson.type === 'pdf' && lesson.fileKey) await storage.delete(lesson.fileKey);
   await lesson.deleteOne();
   await ProgressModel.deleteMany({ lessonId: id });
+}
+
+/** Admin insight for one lesson: who purchased it (directly or via a package), who completed it. */
+export async function getLessonInsights(lessonId: string) {
+  const lesson = await LessonModel.findById(lessonId).select('title').lean();
+  if (!lesson) throw new HttpError(404, 'Lesson not found');
+  const oid = new mongoose.Types.ObjectId(lessonId);
+
+  const [directOrders, pkgs, progress, revAgg, viewCount] = await Promise.all([
+    OrderModel.find({ status: 'paid', items: { $elemMatch: { type: 'lesson', refId: oid } } })
+      .select('userId createdAt')
+      .lean(),
+    PackageModel.find({ lessonIds: oid }).select('_id title').lean(),
+    ProgressModel.find({ lessonId }).select('userId completedAt').lean(),
+    RevisionModel.aggregate([{ $match: { lessonId: oid } }, { $group: { _id: null, sum: { $sum: '$count' } } }]),
+    AccessLogModel.countDocuments({ lessonId: oid }),
+  ]);
+
+  const pkgMap = new Map(pkgs.map((p) => [String(p._id), p.title]));
+  const pkgOrders = pkgs.length
+    ? await OrderModel.find({
+        status: 'paid',
+        items: { $elemMatch: { type: 'package', refId: { $in: pkgs.map((p) => p._id) } } },
+      })
+        .select('userId createdAt items')
+        .lean()
+    : [];
+
+  const purchaserMap = new Map<string, { at: Date; via: string }>();
+  for (const o of directOrders) purchaserMap.set(String(o.userId), { at: o.createdAt, via: 'Direct' });
+  for (const o of pkgOrders) {
+    if (purchaserMap.has(String(o.userId))) continue;
+    const item = o.items.find((it) => it.type === 'package' && pkgMap.has(String(it.refId)));
+    purchaserMap.set(String(o.userId), {
+      at: o.createdAt,
+      via: item ? `Package · ${pkgMap.get(String(item.refId))}` : 'Package',
+    });
+  }
+
+  const completedSet = new Set(progress.map((p) => String(p.userId)));
+  const userIds = [...new Set([...purchaserMap.keys(), ...progress.map((p) => String(p.userId))])];
+  const users = await UserModel.find({ _id: { $in: userIds } }).select('name email').lean();
+  const uMap = new Map(users.map((u) => [String(u._id), u]));
+
+  return {
+    lesson: { id: lessonId, title: lesson.title },
+    counts: {
+      purchasers: purchaserMap.size,
+      completed: progress.length,
+      revisions: (revAgg as { sum?: number }[])[0]?.sum ?? 0,
+      views: viewCount,
+    },
+    purchasers: [...purchaserMap.entries()].map(([uid, v]) => ({
+      userId: uid,
+      name: uMap.get(uid)?.name ?? '—',
+      email: uMap.get(uid)?.email ?? '',
+      at: v.at,
+      via: v.via,
+      completed: completedSet.has(uid),
+    })),
+    completers: progress.map((p) => ({
+      userId: String(p.userId),
+      name: uMap.get(String(p.userId))?.name ?? '—',
+      email: uMap.get(String(p.userId))?.email ?? '',
+      at: p.completedAt ?? null,
+    })),
+  };
 }
 
 // ── Progress ──
@@ -169,13 +292,15 @@ async function assertViewable(lesson: LessonDoc, user: UserDoc): Promise<void> {
   if (lesson.type !== 'pdf' || !lesson.fileKey) {
     throw new HttpError(400, 'This lesson is not a secured PDF');
   }
-  if (!lesson.isActive) throw new HttpError(404, 'Lesson not found');
-
   const isAdmin = user.role === 'admin' || user.role === 'superadmin';
-  // Free lessons + admins are always allowed; otherwise require a paid entitlement.
-  if (!lesson.isFree && !isAdmin) {
-    const owns = await hasLessonAccess(user.id as string, lesson.id as string);
-    if (!owns) throw new HttpError(402, 'Purchase required to view this lesson', { code: 'PURCHASE_REQUIRED' });
+  if (isAdmin) return; // admins may always preview any lesson
+
+  // A paid owner keeps access even if the lesson is later UNPUBLISHED — they
+  // bought it. Non-owners can't see an unpublished lesson at all.
+  const owns = lesson.isFree ? false : await hasLessonAccess(user.id as string, lesson.id as string);
+  if (!lesson.isActive && !owns) throw new HttpError(404, 'Lesson not found');
+  if (!lesson.isFree && !owns) {
+    throw new HttpError(402, 'Purchase required to view this lesson', { code: 'PURCHASE_REQUIRED' });
   }
   // Phone required so the watermark always carries it (students only).
   if (user.role === 'student' && !user.phone) {

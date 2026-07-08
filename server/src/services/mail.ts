@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import nodemailer, { type Transporter } from 'nodemailer';
 import { env, isProd } from '../config/env.js';
 import { logger } from '../lib/logger.js';
 
@@ -8,10 +9,22 @@ export interface Mailer {
   send(input: MailInput): Promise<void>;
 }
 
-/** Dev fallback: logs the email (incl. OTP) so you can test without a provider. */
+const ESC: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ESC[c] as string);
+}
+
+/** Dev fallback: logs the email so you can test without a provider. */
 class ConsoleMailer implements Mailer {
   async send({ to, subject, text, html }: MailInput): Promise<void> {
-    logger.info({ to, subject, body: text ?? html }, '📧 [dev] email not sent (no mail provider configured)');
+    // In dev, include the body so you can read the OTP without a provider set.
+    // In prod (only reached on misconfiguration) NEVER log the body — it holds
+    // the plaintext OTP / reset code.
+    if (isProd) {
+      logger.warn({ to, subject }, '📧 email NOT delivered — no mail provider configured');
+    } else {
+      logger.info({ to, subject, body: text ?? html }, '📧 [dev] email not sent (no mail provider configured)');
+    }
   }
 }
 
@@ -29,13 +42,52 @@ class ResendMailer implements Mailer {
   }
 }
 
+/** SMTP (incl. Gmail via an App Password). port 465 = implicit TLS, 587 = STARTTLS. */
+class SmtpMailer implements Mailer {
+  private transporter: Transporter;
+  constructor(
+    opts: { host: string; port: number; user: string; pass: string },
+    private from: string,
+  ) {
+    this.transporter = nodemailer.createTransport({
+      host: opts.host,
+      port: opts.port,
+      secure: opts.port === 465,
+      auth: { user: opts.user, pass: opts.pass },
+    });
+  }
+  async send({ to, subject, html, text }: MailInput): Promise<void> {
+    await this.transporter.sendMail({ from: this.from, to, subject, html, text });
+  }
+}
+
 function createMailer(): Mailer {
-  if (env.MAIL_API_KEY && env.MAIL_FROM) {
+  const provider = (env.MAIL_PROVIDER ?? '').toLowerCase();
+
+  // Gmail / generic SMTP (nodemailer). `MAIL_PROVIDER=gmail` fills in the Gmail
+  // host/port so you only need SMTP_USER (your address) + SMTP_PASS (App Password).
+  const wantsSmtp = provider === 'gmail' || provider === 'smtp' || (!provider && !!env.SMTP_HOST);
+  if (wantsSmtp) {
+    const host = provider === 'gmail' ? 'smtp.gmail.com' : (env.SMTP_HOST ?? 'smtp.gmail.com');
+    const port = env.SMTP_PORT ?? 465;
+    const user = env.SMTP_USER;
+    const pass = env.SMTP_PASS;
+    const from = env.MAIL_FROM ?? user;
+    if (user && pass && from) {
+      logger.info(`Mail provider: SMTP (${host}:${port})`);
+      return new SmtpMailer({ host, port, user, pass }, from);
+    }
+    logger.warn('Mail: SMTP selected but SMTP_USER/SMTP_PASS/MAIL_FROM incomplete — emails will be logged');
+  }
+
+  // Resend (transactional API) — used when a MAIL_API_KEY is set.
+  if (provider !== 'gmail' && provider !== 'smtp' && env.MAIL_API_KEY && env.MAIL_FROM) {
     logger.info('Mail provider: Resend');
     return new ResendMailer(env.MAIL_API_KEY, env.MAIL_FROM);
   }
+
   if (isProd) {
-    logger.warn('Mail: MAIL_API_KEY/MAIL_FROM not set — emails will be logged, not delivered');
+    logger.warn('Mail: no provider configured — emails will be logged, not delivered');
   }
   return new ConsoleMailer();
 }
@@ -76,11 +128,11 @@ export async function sendReceiptEmail(to: string, r: ReceiptForEmail): Promise<
   const rows = r.lines
     .map(
       (l) =>
-        `<tr><td style="padding:4px 0">${l.title} <span style="color:#888">(${l.type})</span></td><td style="text-align:right">${inr(l.price)}</td></tr>`,
+        `<tr><td style="padding:4px 0">${escapeHtml(l.title)} <span style="color:#888">(${escapeHtml(l.type)})</span></td><td style="text-align:right">${inr(l.price)}</td></tr>`,
     )
     .join('');
   const discountRow = r.discount
-    ? `<tr><td style="padding:4px 0">Discount${r.couponCode ? ` (${r.couponCode})` : ''}</td><td style="text-align:right">−${inr(r.discount)}</td></tr>`
+    ? `<tr><td style="padding:4px 0">Discount${r.couponCode ? ` (${escapeHtml(r.couponCode)})` : ''}</td><td style="text-align:right">−${inr(r.discount)}</td></tr>`
     : '';
   const date = new Date(r.paidAt).toLocaleString('en-IN');
 
@@ -110,5 +162,35 @@ export async function sendPasswordResetEmail(to: string, code: string): Promise<
     html: `<p>Your Parallax Flow password reset code is:</p>
 <h2 style="letter-spacing:4px;font-family:monospace">${code}</h2>
 <p>It expires in 15 minutes. If you didn't request this, you can safely ignore this email.</p>`,
+  });
+}
+
+/** Security confirmation after a successful password change. */
+export async function sendPasswordChangedEmail(to: string): Promise<void> {
+  await activeMailer.send({
+    to,
+    subject: 'Your Parallax Flow password was changed',
+    text: `Your password was just changed. If this wasn't you, reset it immediately with "Forgot password" and contact support.`,
+    html: `<p>Your Parallax Flow password was just changed.</p>
+<p>If this wasn't you, use <strong>Forgot password</strong> to reset it immediately and contact support.</p>`,
+  });
+}
+
+/** Notify a buyer that their order was refunded and access removed. */
+export async function sendRefundEmail(
+  to: string,
+  r: { amount: number; receiptNumber?: string | null; refundedAt: Date | string },
+): Promise<void> {
+  const when = new Date(r.refundedAt).toLocaleString('en-IN');
+  const ref = r.receiptNumber ? ` (${escapeHtml(r.receiptNumber)})` : '';
+  await activeMailer.send({
+    to,
+    subject: 'Your Parallax Flow order was refunded',
+    text: `Your order${ref} of ${inr(r.amount)} was refunded on ${when}. Access to the refunded items has been removed. If you believe this is a mistake, contact support.`,
+    html: `<div style="font-family:system-ui,sans-serif;max-width:480px">
+<h2>Parallax Flow</h2>
+<p>Your order${ref} of <strong>${inr(r.amount)}</strong> has been <strong>refunded</strong> on ${when}.</p>
+<p>Access to the refunded items has been removed. If you believe this is a mistake, please contact support.</p>
+</div>`,
   });
 }

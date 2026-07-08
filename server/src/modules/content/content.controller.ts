@@ -4,6 +4,7 @@ import {
   createCategorySchema,
   createStageSchema,
   createSubjectSchema,
+  subdivideSchema,
   updateCategorySchema,
   updateStageSchema,
   updateSubjectSchema,
@@ -54,6 +55,10 @@ export const createSubject: RequestHandler = async (req, res) => {
 };
 export const updateSubject: RequestHandler = async (req, res) => {
   res.json({ subject: await content.updateSubject(req.params.id!, updateSubjectSchema.parse(req.body)) });
+};
+export const subdivideSubject: RequestHandler = async (req, res) => {
+  const { name } = subdivideSchema.parse(req.body);
+  res.status(201).json({ subject: await content.subdivideSubject(req.params.id!, name) });
 };
 export const deleteSubject: RequestHandler = async (req, res) => {
   await content.deleteSubject(req.params.id!);

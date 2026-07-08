@@ -19,6 +19,7 @@ export function LessonViewerPage() {
       lessonId={id}
       onClose={() => {
         void qc.invalidateQueries({ queryKey: ['tracker'] });
+        void qc.invalidateQueries({ queryKey: ['lessons'] });
         void qc.invalidateQueries({ queryKey: ['pub'] });
         navigate(-1);
       }}

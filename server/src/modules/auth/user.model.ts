@@ -11,6 +11,14 @@ const userSchema = new Schema(
     phone: { type: String, trim: true }, // required for email signup; collected later for SSO
     role: { type: String, enum: USER_ROLES, default: 'student', index: true },
     emailVerified: { type: Boolean, default: false },
+    // Admin can disable an account: blocks every login path + kills live sessions.
+    disabled: { type: Boolean, default: false, index: true },
+
+    // Profile picture: an uploaded avatar (in object storage) and/or the Google
+    // account picture used by default for SSO users.
+    hasAvatar: { type: Boolean, default: false },
+    avatarUpdatedAt: { type: Date },
+    googleAvatarUrl: { type: String },
     googleId: { type: String, index: true, sparse: true },
     activeStageId: { type: Schema.Types.ObjectId, ref: 'Stage' },
 

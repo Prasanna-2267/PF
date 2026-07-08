@@ -24,6 +24,7 @@ export type SubjectNode = {
   isActive: boolean;
   parentSubjectId: string | null;
   children: SubjectNode[];
+  lessonCount: number;
 };
 
 const ADMIN = '/admin/content';
@@ -49,6 +50,9 @@ export const adminContentApi = {
     api.get<{ subjects: SubjectNode[] }>(`${ADMIN}/stages/${stageId}/subjects`).then((r) => r.data.subjects),
   createSubject: (d: { name: string; stageId: string; parentSubjectId?: string | null }) =>
     api.post(`${ADMIN}/subjects`, d).then((r) => r.data),
+  /** Convert a notes-bearing subject into a parent by moving its notes into a new sub-subject. */
+  subdivideSubject: (id: string, name: string) =>
+    api.post(`${ADMIN}/subjects/${id}/subdivide`, { name }).then((r) => r.data),
   updateSubject: (id: string, d: Partial<{ name: string; isActive: boolean }>) =>
     api.patch(`${ADMIN}/subjects/${id}`, d).then((r) => r.data),
   deleteSubject: (id: string) => api.delete(`${ADMIN}/subjects/${id}`).then((r) => r.data),

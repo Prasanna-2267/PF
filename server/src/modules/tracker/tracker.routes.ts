@@ -7,6 +7,7 @@ import * as tracker from './tracker.controller.js';
 export const trackerRouter = Router();
 trackerRouter.use(requireAuth);
 trackerRouter.get('/', asyncHandler(tracker.get));
+trackerRouter.get('/insights', asyncHandler(tracker.insights));
 trackerRouter.post('/checkin', asyncHandler(tracker.checkIn));
 trackerRouter.post('/checkout', asyncHandler(tracker.checkOut));
 trackerRouter.patch('/settings', asyncHandler(tracker.settings));

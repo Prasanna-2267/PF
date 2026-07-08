@@ -33,6 +33,10 @@ export const remove: RequestHandler = async (req, res) => {
   res.json({ ok: true });
 };
 
+export const insights: RequestHandler = async (req, res) => {
+  res.json(await lessons.getLessonInsights(req.params.id!));
+};
+
 // ── Student ──
 export const listForStudent: RequestHandler = async (req, res) => {
   const { subjectId } = subjectIdQuery.parse(req.query);

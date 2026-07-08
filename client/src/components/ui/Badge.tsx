@@ -1,24 +1,56 @@
 import type { ReactNode } from 'react';
 import { cn } from '../../lib/cn';
 
-type Tone = 'neutral' | 'accent' | 'success' | 'warn' | 'danger';
+export type BadgeTone =
+  | 'neutral'
+  | 'primary'
+  | 'gold'
+  | 'success'
+  | 'warn'
+  | 'danger'
+  | 'info';
+export type BadgeSize = 'sm' | 'md';
 
-const tones: Record<Tone, string> = {
-  neutral: 'border-line bg-canvas text-muted',
-  accent: 'border-transparent bg-accent-soft text-accent',
-  success: 'border-transparent bg-success-soft text-success',
-  warn: 'border-transparent bg-warn-soft text-warn',
-  danger: 'border-transparent bg-danger-soft text-danger',
+const toneClass: Record<BadgeTone, string> = {
+  neutral: 'bg-sunken text-muted',
+  primary: 'bg-primary-soft text-primary-soft-fg',
+  gold: 'bg-gold-soft text-gold-soft-fg',
+  success: 'bg-success-soft text-success-fg',
+  warn: 'bg-warn-soft text-warn-fg',
+  danger: 'bg-danger-soft text-danger-fg',
+  info: 'bg-info-soft text-info-fg',
 };
 
-export function Badge({ tone = 'neutral', children }: { tone?: Tone; children: ReactNode }) {
+const sizeClass: Record<BadgeSize, string> = {
+  sm: 'h-5 px-1.5 text-[11px] gap-1',
+  md: 'h-6 px-2 text-xs gap-1.5',
+};
+
+export function Badge({
+  children,
+  tone = 'neutral',
+  size = 'md',
+  icon,
+  dot = false,
+  className,
+}: {
+  children: ReactNode;
+  tone?: BadgeTone;
+  size?: BadgeSize;
+  icon?: ReactNode;
+  dot?: boolean;
+  className?: string;
+}) {
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide',
-        tones[tone],
+        'inline-flex items-center rounded-full font-semibold leading-none',
+        toneClass[tone],
+        sizeClass[size],
+        className,
       )}
     >
+      {dot ? <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" /> : icon}
       {children}
     </span>
   );

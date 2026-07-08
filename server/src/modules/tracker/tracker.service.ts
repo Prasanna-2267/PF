@@ -5,17 +5,21 @@ import { AccessLogModel } from '../lessons/access-log.model.js';
 import { LessonModel } from '../lessons/lesson.model.js';
 import { ProgressModel } from '../lessons/progress.model.js';
 import { SubjectModel } from '../content/subject.model.js';
+import { StageModel } from '../content/stage.model.js';
+import { ExamCategoryModel } from '../content/exam-category.model.js';
 import { RevisionModel } from './revision.model.js';
 import { StudySessionModel, type StudySessionDoc } from './study-session.model.js';
+import { IST_TIMEZONE, istDayKey } from '../../lib/day.js';
 import type { SettingsInput } from './tracker.validation.js';
 
 const MAX_SESSION_MINUTES = 480; // 8h cap
 const AUTO_CLOSE_AFTER_MINUTES = 480;
 const DAY_MS = 86_400_000;
 
-function dayKey(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
+// Day buckets are IST (the app's timezone), so streaks/today/heatmap roll over
+// at IST midnight — not UTC's 05:30-IST boundary. Subtracting whole 24h days
+// from any instant still moves the IST calendar date back exactly one (no DST).
+const dayKey = istDayKey;
 function minsSince(start: Date): number {
   return Math.round((Date.now() - start.getTime()) / 60000);
 }
@@ -38,7 +42,14 @@ export async function checkIn(userId: string) {
   const open = await autoCloseStale(userId);
   if (open) return { alreadyCheckedIn: true };
   const now = new Date();
-  await StudySessionModel.create({ userId, checkInAt: now, day: dayKey(now) });
+  try {
+    await StudySessionModel.create({ userId, checkInAt: now, day: dayKey(now) });
+  } catch (err) {
+    // Lost the race to a concurrent check-in (partial-unique index on the open
+    // session) — treat as already checked in rather than erroring.
+    if ((err as { code?: number }).code === 11000) return { alreadyCheckedIn: true };
+    throw err;
+  }
   return { alreadyCheckedIn: false };
 }
 
@@ -119,11 +130,14 @@ export async function getTracker(userId: string) {
   if (!user) throw new HttpError(404, 'Account not found');
   const stageId = user.activeStageId ? String(user.activeStageId) : undefined;
 
-  const [streak, todayMins, syllabus, open, revAgg, lastLog] = await Promise.all([
+  // Materialise an over-8h abandoned session as closed on load, so `checkedIn`
+  // and today's minutes reflect reality (not just on the next check-in/out).
+  const openSession = await autoCloseStale(userId);
+
+  const [streak, todayMins, syllabus, revAgg, lastLog] = await Promise.all([
     computeStreak(userId),
     todayMinutes(userId),
     computeSyllabus(userId, stageId),
-    StudySessionModel.exists({ userId, checkOutAt: null }),
     RevisionModel.aggregate([
       { $match: { userId: new mongoose.Types.ObjectId(userId) } },
       { $group: { _id: null, sum: { $sum: '$count' } } },
@@ -140,8 +154,26 @@ export async function getTracker(userId: string) {
     if (l) lastLesson = { id: String(l._id), title: l.title };
   }
 
+  // Resolve the active stage to its exam + name so the client can display and
+  // pre-select it (the raw id alone can't say which exam it belongs to).
+  let activeStage:
+    | { id: string; name: string; categoryId: string; categoryName: string }
+    | null = null;
+  if (stageId) {
+    const stage = await StageModel.findById(stageId).select('name examCategoryId').lean();
+    if (stage) {
+      const cat = await ExamCategoryModel.findById(stage.examCategoryId).select('name').lean();
+      activeStage = {
+        id: String(stage._id),
+        name: stage.name,
+        categoryId: String(stage.examCategoryId),
+        categoryName: cat?.name ?? '',
+      };
+    }
+  }
+
   return {
-    checkedIn: !!open,
+    checkedIn: !!openSession,
     streak,
     todayMinutes: todayMins,
     targetMinutes: user.dailyTargetMinutes ?? 60,
@@ -151,6 +183,154 @@ export async function getTracker(userId: string) {
     exam: { date: user.examDate ?? null, label: user.examLabel ?? null, daysLeft, pressure },
     lastLesson,
     activeStageId: stageId ?? null,
+    activeStage,
+  };
+}
+
+/** Per top-level subject progress (rolled up through the tree) for a stage. */
+async function subjectProgress(userId: string, stageId: string) {
+  const subjects = await SubjectModel.find({ stageId })
+    .select('name order parentSubjectId isActive')
+    .sort({ order: 1, createdAt: 1 })
+    .lean();
+  if (subjects.length === 0) return [];
+
+  const byId = new Map(subjects.map((s) => [String(s._id), s]));
+  const rootOf = (id: string): string => {
+    let cur = byId.get(id);
+    let guard = 0;
+    while (cur?.parentSubjectId && guard++ < 20) {
+      const parent = byId.get(String(cur.parentSubjectId));
+      if (!parent) break;
+      cur = parent;
+    }
+    return cur ? String(cur._id) : id;
+  };
+
+  const lessons = await LessonModel.find({
+    subjectId: { $in: subjects.map((s) => s._id) },
+    isActive: true,
+  })
+    .select('_id subjectId')
+    .lean();
+  if (lessons.length === 0) return [];
+
+  const completed = new Set(
+    (
+      await ProgressModel.find({ userId, lessonId: { $in: lessons.map((l) => l._id) } })
+        .select('lessonId')
+        .lean()
+    ).map((p) => String(p.lessonId)),
+  );
+
+  type Row = { id: string; name: string; order: number; total: number; completed: number };
+  const roots = new Map<string, Row>();
+  for (const s of subjects) {
+    if (!s.parentSubjectId && s.isActive) {
+      roots.set(String(s._id), {
+        id: String(s._id),
+        name: s.name,
+        order: s.order,
+        total: 0,
+        completed: 0,
+      });
+    }
+  }
+  for (const l of lessons) {
+    const row = roots.get(rootOf(String(l.subjectId)));
+    if (!row) continue;
+    row.total += 1;
+    if (completed.has(String(l._id))) row.completed += 1;
+  }
+
+  return [...roots.values()]
+    .filter((r) => r.total > 0)
+    .sort((a, b) => a.order - b.order)
+    .map(({ id, name, total, completed }) => ({ id, name, total, completed }));
+}
+
+/** Study-activity insights: daily minutes, per-subject progress, study-time-of-day + pace. */
+export async function getStudyInsights(userId: string) {
+  const uid = new mongoose.Types.ObjectId(userId);
+  const user = await UserModel.findById(userId).select('activeStageId').lean();
+  const stageId = user?.activeStageId ? String(user.activeStageId) : null;
+
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const DAYS = 84; // 12 weeks — enough for a heatmap + charts
+  const since = new Date(startOfToday.getTime() - (DAYS - 1) * DAY_MS);
+  const sinceKey = dayKey(since);
+
+  const [byDay, totalAgg, distinctDays, completedLessons, recentCompleted14, hourAgg, subjects] =
+    await Promise.all([
+      StudySessionModel.aggregate([
+        { $match: { userId: uid, day: { $gte: sinceKey } } },
+        { $group: { _id: '$day', minutes: { $sum: '$durationMins' } } },
+      ]),
+      StudySessionModel.aggregate([
+        { $match: { userId: uid } },
+        { $group: { _id: null, sum: { $sum: '$durationMins' } } },
+      ]),
+      StudySessionModel.aggregate([
+        { $match: { userId: uid } },
+        { $group: { _id: '$day', m: { $sum: '$durationMins' } } },
+        { $match: { m: { $gt: 0 } } },
+        { $count: 'n' },
+      ]),
+      ProgressModel.countDocuments({ userId }),
+      ProgressModel.countDocuments({
+        userId,
+        completedAt: { $gte: new Date(Date.now() - 14 * DAY_MS) },
+      }),
+      StudySessionModel.aggregate([
+        { $match: { userId: uid, checkOutAt: { $ne: null } } },
+        {
+          $group: {
+            _id: { $hour: { date: '$checkInAt', timezone: IST_TIMEZONE } },
+            mins: { $sum: '$durationMins' },
+          },
+        },
+      ]),
+      stageId ? subjectProgress(userId, stageId) : Promise.resolve([]),
+    ]);
+
+  const dayMap = new Map(
+    (byDay as { _id: string; minutes: number }[]).map((r) => [r._id, r.minutes]),
+  );
+  const daily: { date: string; minutes: number }[] = [];
+  for (let i = 0; i < DAYS; i++) {
+    const key = dayKey(new Date(since.getTime() + i * DAY_MS));
+    daily.push({ date: key, minutes: dayMap.get(key) ?? 0 });
+  }
+
+  const hourly = new Array<number>(24).fill(0);
+  for (const h of hourAgg as { _id: number; mins: number }[]) {
+    if (typeof h._id === 'number' && h._id >= 0 && h._id < 24) hourly[h._id] = h.mins;
+  }
+  const peakMins = Math.max(...hourly);
+  const peakHour = peakMins > 0 ? hourly.indexOf(peakMins) : null;
+
+  const sumRange = (arr: { minutes: number }[]) => arr.reduce((a, b) => a + b.minutes, 0);
+  const totalMinutes = (totalAgg as { sum?: number }[])[0]?.sum ?? 0;
+  const daysStudied = (distinctDays as { n?: number }[])[0]?.n ?? 0;
+  const best = daily.reduce((m, d) => (d.minutes > m.minutes ? d : m), { date: '', minutes: 0 });
+
+  return {
+    daily,
+    hourly,
+    peakHour,
+    subjects,
+    summary: {
+      totalMinutes,
+      daysStudied,
+      avgPerActiveDay: daysStudied ? Math.round(totalMinutes / daysStudied) : 0,
+      weekMinutes: sumRange(daily.slice(-7)),
+      lastWeekMinutes: sumRange(daily.slice(-14, -7)),
+      bestDayMinutes: best.minutes,
+      bestDayDate: best.minutes > 0 ? best.date : null,
+      completedLessons,
+      recentCompleted14,
+    },
   };
 }
 

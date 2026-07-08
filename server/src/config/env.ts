@@ -35,9 +35,14 @@ const schema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
 
-  MAIL_PROVIDER: z.string().optional(),
-  MAIL_API_KEY: z.string().optional(),
-  MAIL_FROM: z.string().optional(),
+  MAIL_PROVIDER: z.string().optional(), // 'gmail' | 'smtp' | 'resend'
+  MAIL_API_KEY: z.string().optional(), // Resend
+  MAIL_FROM: z.string().optional(), // e.g. "Parallax Flow <you@gmail.com>"
+  // SMTP / Gmail (used when MAIL_PROVIDER=gmail|smtp)
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().positive().optional(),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
 
   R2_ACCOUNT_ID: z.string().optional(),
   R2_ACCESS_KEY_ID: z.string().optional(),

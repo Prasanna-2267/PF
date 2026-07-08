@@ -7,6 +7,8 @@ export type Package = {
   price: number;
   lessonCount: number;
   lessonIds: string[];
+  /** The included lessons (title + type) so students see what's inside. */
+  lessons?: { id: string; title: string; type: 'pdf' | 'ism' }[];
   isActive: boolean;
 };
 
@@ -22,7 +24,7 @@ export type Order = {
   id: string;
   amount: number;
   currency: string;
-  status: 'created' | 'paid' | 'failed';
+  status: 'created' | 'paid' | 'failed' | 'refunded';
   itemCount: number;
   createdAt: string;
   receiptId: string | null;

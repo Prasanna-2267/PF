@@ -32,6 +32,10 @@ export const createSubjectSchema = z.object({
 });
 export const updateSubjectSchema = createSubjectSchema.partial();
 
+export const subdivideSchema = z.object({
+  name: z.string().min(1).max(120),
+});
+
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
 export type CreateStageInput = z.infer<typeof createStageSchema>;
 export type CreateSubjectInput = z.infer<typeof createSubjectSchema>;

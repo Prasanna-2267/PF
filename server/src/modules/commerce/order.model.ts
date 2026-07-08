@@ -22,12 +22,21 @@ const orderSchema = new Schema(
     items: { type: [orderItemSchema], required: true },
     amount: { type: Number, required: true }, // paise
     currency: { type: String, default: 'INR' },
-    status: { type: String, enum: ['created', 'paid', 'failed'], default: 'created', index: true },
+    status: {
+      type: String,
+      enum: ['created', 'paid', 'failed', 'refunded'],
+      default: 'created',
+      index: true,
+    },
     razorpayOrderId: { type: String, index: true },
     razorpayPaymentId: { type: String },
     idempotencyKey: { type: String }, // dedupes retried "Buy" requests
     couponCode: { type: String },
     discount: { type: Number, default: 0 }, // paise discounted off the total
+    // How the order came to exist: a real purchase, or a complimentary admin grant (amount 0).
+    source: { type: String, enum: ['purchase', 'admin_grant'], default: 'purchase' },
+    refundedAt: { type: Date }, // set when an admin revokes/refunds (access recomputes away)
+    refundedBy: { type: Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true },
 );

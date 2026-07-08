@@ -2,6 +2,7 @@ import type { Request, RequestHandler, Response } from 'express';
 import { authConfig } from '../../config/auth.js';
 import { HttpError } from '../../middleware/error.js';
 import * as authService from './auth.service.js';
+import * as avatarService from './avatar.service.js';
 import {
   forgotPasswordSchema,
   googleSchema,
@@ -102,6 +103,30 @@ export const me: RequestHandler = async (req, res) => {
   const user = await UserModel.findById(req.auth!.sub);
   if (!user) throw new HttpError(404, 'Account not found');
   res.json({ user: authService.publicUser(user) });
+};
+
+export const uploadAvatar: RequestHandler = async (req, res) => {
+  res.json({ user: await avatarService.uploadAvatar(req.auth!.sub, req.file) });
+};
+
+export const removeAvatar: RequestHandler = async (req, res) => {
+  res.json({ user: await avatarService.removeAvatar(req.auth!.sub) });
+};
+
+/** Public: streams the uploaded avatar, or redirects to the Google picture. Safe to use in <img>. */
+export const avatarPublic: RequestHandler = async (req, res) => {
+  const result = await avatarService.getAvatar(req.params.id!);
+  if (!result) {
+    res.status(404).end();
+    return;
+  }
+  if ('redirect' in result) {
+    res.redirect(302, result.redirect);
+    return;
+  }
+  res.set('Content-Type', 'image/jpeg');
+  res.set('Cache-Control', 'public, max-age=300');
+  res.send(result.buffer);
 };
 
 export const updatePhone: RequestHandler = async (req, res) => {

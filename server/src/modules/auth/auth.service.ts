@@ -2,7 +2,12 @@ import bcrypt from 'bcryptjs';
 import { randomInt, randomUUID } from 'node:crypto';
 import { authConfig } from '../../config/auth.js';
 import { HttpError } from '../../middleware/error.js';
-import { sendOtpEmail, sendPasswordResetEmail } from '../../services/mail.js';
+import {
+  sendOtpEmail,
+  sendPasswordResetEmail,
+  sendPasswordChangedEmail,
+} from '../../services/mail.js';
+import { logger } from '../../lib/logger.js';
 import { verifyGoogleIdToken } from '../../services/google.js';
 import { kickOtherDevices } from '../../realtime/realtime.js';
 import { hashPassword, verifyPassword } from './auth.password.js';
@@ -16,6 +21,7 @@ import {
 import { PasswordResetModel } from './password-reset.model.js';
 import { PendingRegistrationModel } from './pending-registration.model.js';
 import { SessionModel } from './session.model.js';
+import { avatarUrlFor } from './avatar-url.js';
 import { UserModel, type UserDoc } from './user.model.js';
 import type { SignupInput } from './auth.validation.js';
 
@@ -39,6 +45,12 @@ export function publicUser(user: UserDoc) {
     role: user.role,
     emailVerified: user.emailVerified,
     activeStageId: user.activeStageId ? String(user.activeStageId) : null,
+    avatarUrl: avatarUrlFor(
+      user.id as string,
+      user.hasAvatar,
+      user.googleAvatarUrl,
+      user.avatarUpdatedAt,
+    ),
   };
 }
 
@@ -76,7 +88,7 @@ export async function signup(input: SignupInput): Promise<{ signupToken: string 
 
   const code = generateOtp();
   const signupToken = randomUUID();
-  await PendingRegistrationModel.create({
+  const pending = await PendingRegistrationModel.create({
     email,
     name: input.name,
     phone: input.phone,
@@ -85,7 +97,15 @@ export async function signup(input: SignupInput): Promise<{ signupToken: string 
     sessionTokenHash: hashToken(signupToken),
     expiresAt: signupExpiry(),
   });
-  await sendOtpEmail(email, code);
+  try {
+    await sendOtpEmail(email, code);
+  } catch (err) {
+    // SMTP/Gmail sends can fail transiently. Roll back the pending record so the
+    // user isn't stranded (no signup cookie was issued) and can simply retry.
+    await pending.deleteOne().catch(() => undefined);
+    logger.error({ err }, 'signup: failed to send verification email');
+    throw new HttpError(502, "We couldn't send your verification email. Please try again in a moment.");
+  }
   return { signupToken };
 }
 
@@ -160,6 +180,9 @@ export async function login(rawEmail: string, password: string, meta: RequestMet
     if (!user.passwordHash || !(await verifyPassword(password, user.passwordHash))) {
       throw new HttpError(401, 'Invalid email or password');
     }
+    if (user.disabled) {
+      throw new HttpError(403, 'This account has been disabled. Please contact support.');
+    }
     const tokens = await createSession(user, meta);
     return { status: 'ok', user: publicUser(user), tokens };
   }
@@ -198,6 +221,7 @@ export async function googleLogin(credential: string, meta: RequestMeta) {
       email: profile.email,
       googleId: profile.googleId,
       emailVerified: true, // Google has verified the address
+      googleAvatarUrl: profile.picture ?? undefined, // default profile picture
     });
   } else {
     // Link the Google identity to an existing email account on first use.
@@ -210,9 +234,16 @@ export async function googleLogin(credential: string, meta: RequestMeta) {
       user.emailVerified = true;
       changed = true;
     }
+    if (profile.picture && user.googleAvatarUrl !== profile.picture) {
+      user.googleAvatarUrl = profile.picture;
+      changed = true;
+    }
     if (changed) await user.save();
   }
 
+  if (user.disabled) {
+    throw new HttpError(403, 'This account has been disabled. Please contact support.');
+  }
   const tokens = await createSession(user, meta);
   return { user: publicUser(user), tokens };
 }
@@ -234,6 +265,7 @@ export async function refresh(refreshToken: string | undefined) {
 
   const user = await UserModel.findById(payload.sub);
   if (!user) throw new HttpError(401, 'Account not found');
+  if (user.disabled) throw new HttpError(403, 'This account has been disabled.');
 
   const accessToken = signAccessToken({
     sub: user.id as string,
@@ -306,6 +338,11 @@ export async function resetPassword(rawEmail: string, code: string, newPassword:
   await user.save();
   // Force re-login everywhere after a password change.
   await SessionModel.deleteMany({ userId: user.id });
+
+  // Security confirmation — non-fatal.
+  await sendPasswordChangedEmail(user.email).catch((err) =>
+    logger.warn({ err }, 'password-changed email failed'),
+  );
 
   return { message: 'Password updated. Please log in with your new password.' };
 }

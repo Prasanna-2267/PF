@@ -8,13 +8,15 @@ import { env, isProd } from './config/env.js';
 import { logger } from './lib/logger.js';
 import { errorHandler, notFound } from './middleware/error.js';
 import { serveClient } from './middleware/serve-client.js';
-import { authRouter } from './modules/auth/auth.routes.js';
+import { authRouter, usersRouter } from './modules/auth/auth.routes.js';
 import { adminContentRouter, contentRouter } from './modules/content/content.routes.js';
 import { adminLessonsRouter, lessonsRouter } from './modules/lessons/lesson.routes.js';
 import { adminCommerceRouter, commerceRouter } from './modules/commerce/commerce.routes.js';
 import { trackerRouter } from './modules/tracker/tracker.routes.js';
 import { adminQuestionsRouter, questionsRouter } from './modules/questions/question.routes.js';
 import { adminAuditRouter } from './modules/audit/audit.routes.js';
+import { adminConsoleRouter } from './modules/admin-console/admin-console.routes.js';
+import { settingsRouter, adminSettingsRouter } from './modules/settings/settings.routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -52,6 +54,7 @@ export function createApp(): Express {
 
   // Feature routers (more mounted here as phases land).
   app.use('/api/auth', authRouter);
+  app.use('/api/users', usersRouter);
   app.use('/api/content', contentRouter);
   app.use('/api/admin/content', adminContentRouter);
   app.use('/api/lessons', lessonsRouter);
@@ -62,6 +65,11 @@ export function createApp(): Express {
   app.use('/api/questions', questionsRouter);
   app.use('/api/admin/questions', adminQuestionsRouter);
   app.use('/api/admin/audit', adminAuditRouter);
+  app.use('/api/settings', settingsRouter);
+  app.use('/api/admin/settings', adminSettingsRouter);
+  // Command centre (overview, students, orders, control actions). Mounted last on
+  // /api/admin so the specific prefixes above match first; uses per-route guards.
+  app.use('/api/admin', adminConsoleRouter);
 
   // Unknown /api routes → JSON 404 (before the SPA fallback below, so a mistyped
   // API path never returns the HTML shell).

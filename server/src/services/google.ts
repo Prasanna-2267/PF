@@ -17,6 +17,7 @@ export type GoogleProfile = {
   email: string;
   name: string;
   emailVerified: boolean;
+  picture: string | null;
 };
 
 /** Verify a Google ID token (the `credential` from Google Identity Services). */
@@ -40,5 +41,6 @@ export async function verifyGoogleIdToken(credential: string): Promise<GooglePro
     email: payload.email.toLowerCase(),
     name: payload.name ?? payload.email,
     emailVerified: Boolean(payload.email_verified),
+    picture: payload.picture ?? null,
   };
 }

@@ -6,6 +6,10 @@ export const get: RequestHandler = async (req, res) => {
   res.json(await tracker.getTracker(req.auth!.sub));
 };
 
+export const insights: RequestHandler = async (req, res) => {
+  res.json(await tracker.getStudyInsights(req.auth!.sub));
+};
+
 export const checkIn: RequestHandler = async (req, res) => {
   res.json(await tracker.checkIn(req.auth!.sub));
 };

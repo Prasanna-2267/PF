@@ -27,5 +27,6 @@ adminContentRouter.delete('/stages/:id', asyncHandler(content.deleteStage));
 
 adminContentRouter.get('/stages/:stageId/subjects', asyncHandler(content.getSubjectTree));
 adminContentRouter.post('/subjects', asyncHandler(content.createSubject));
+adminContentRouter.post('/subjects/:id/subdivide', asyncHandler(content.subdivideSubject));
 adminContentRouter.patch('/subjects/:id', asyncHandler(content.updateSubject));
 adminContentRouter.delete('/subjects/:id', asyncHandler(content.deleteSubject));

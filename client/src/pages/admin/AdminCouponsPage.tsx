@@ -1,183 +1,393 @@
-import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Badge, Button, Card, Input, Select } from '../../components/ui';
-import { adminContentApi, type SubjectNode } from '../../features/admin/content.api';
-import { commerceApi, type NewCoupon } from '../../features/commerce/commerce.api';
+import { useId, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  ErrorState,
+  Input,
+  Modal,
+  MultiSelect,
+  RadioGroup,
+  SegmentedControl,
+  Skeleton,
+  useToast,
+  PlusIcon,
+  TagIcon,
+  TrashIcon,
+  type BadgeTone,
+  type MultiOption,
+} from '../../components/ui';
+import { PageHeader } from '../../components/layout';
+import { useDisclosure } from '../../hooks';
+import {
+  CatalogPicker,
+  flattenSubjects,
+  useSubjectTree,
+  type CatalogSelection,
+} from '../../features/catalog';
+import { commerceApi, type Coupon, type NewCoupon } from '../../features/commerce/commerce.api';
 import { errorMessage } from '../../features/auth/auth.api';
+import { ConfirmDialog, useAdminAction } from './admin-shared';
 
 type AppliesTo = 'all' | 'packages' | 'subjects';
 
+const COUPONS_KEY: unknown[][] = [['admin', 'coupons']];
+
+function couponStatus(c: Coupon): { tone: BadgeTone; label: string } {
+  if (!c.isActive) return { tone: 'neutral', label: 'Disabled' };
+  if (c.expiresAt && new Date(c.expiresAt).getTime() < Date.now())
+    return { tone: 'danger', label: 'Expired' };
+  if (c.maxRedemptions != null && c.redemptions >= c.maxRedemptions)
+    return { tone: 'warn', label: 'Limit reached' };
+  return { tone: 'success', label: 'Active' };
+}
+
+function discountLabel(c: Coupon): string {
+  return c.discountType === 'percent' ? `${c.discountValue}% off` : `₹${c.discountValue} off`;
+}
+
+function scopeLabel(c: Coupon): string {
+  if (c.appliesTo === 'all') return 'All items';
+  if (c.appliesTo === 'packages')
+    return `${c.packageIds.length} package${c.packageIds.length === 1 ? '' : 's'}`;
+  return `${c.subjectIds.length} subject${c.subjectIds.length === 1 ? '' : 's'}`;
+}
+
 export function AdminCouponsPage() {
-  const qc = useQueryClient();
-  const [error, setError] = useState('');
-  const [code, setCode] = useState('');
-  const [discountType, setDiscountType] = useState<'percent' | 'flat'>('percent');
-  const [discountValue, setDiscountValue] = useState('');
-  const [appliesTo, setAppliesTo] = useState<AppliesTo>('all');
-  const [maxRedemptions, setMaxRedemptions] = useState('');
-  const [expiresAt, setExpiresAt] = useState('');
-  const [pkgSel, setPkgSel] = useState<Record<string, string>>({});
-  const [subSel, setSubSel] = useState<Record<string, string>>({});
-  const [catId, setCatId] = useState('');
-  const [stageId, setStageId] = useState('');
-
   const coupons = useQuery({ queryKey: ['admin', 'coupons'], queryFn: commerceApi.coupons });
-  const packages = useQuery({ queryKey: ['admin', 'packages'], queryFn: commerceApi.adminPackages, enabled: appliesTo === 'packages' });
-  const categories = useQuery({ queryKey: ['admin', 'categories'], queryFn: adminContentApi.listCategories, enabled: appliesTo === 'subjects' });
-  const stages = useQuery({ queryKey: ['admin', 'stages', catId], queryFn: () => adminContentApi.listStages(catId), enabled: appliesTo === 'subjects' && !!catId });
-  const subjects = useQuery({ queryKey: ['admin', 'subjtree', stageId], queryFn: () => adminContentApi.getSubjectTree(stageId), enabled: appliesTo === 'subjects' && !!stageId });
-
-  async function run(fn: () => Promise<unknown>): Promise<void> {
-    try {
-      setError('');
-      await fn();
-      await qc.invalidateQueries({ queryKey: ['admin', 'coupons'] });
-    } catch (e) {
-      setError(errorMessage(e));
-    }
-  }
-
-  const toggle = (set: (u: (s: Record<string, string>) => Record<string, string>) => void) => (id: string, label: string) =>
-    set((s) => {
-      const n = { ...s };
-      if (n[id]) delete n[id];
-      else n[id] = label;
-      return n;
-    });
-  const togglePkg = toggle(setPkgSel);
-  const toggleSub = toggle(setSubSel);
-
-  async function create() {
-    const value = Number(discountValue);
-    if (!code.trim() || Number.isNaN(value) || value < 0) {
-      setError('Enter a code and a valid discount.');
-      return;
-    }
-    const payload: NewCoupon = { code: code.trim(), discountType, discountValue: value, appliesTo };
-    if (appliesTo === 'packages') payload.packageIds = Object.keys(pkgSel);
-    if (appliesTo === 'subjects') payload.subjectIds = Object.keys(subSel);
-    if (maxRedemptions) payload.maxRedemptions = Number(maxRedemptions);
-    if (expiresAt) payload.expiresAt = new Date(`${expiresAt}T23:59:59`).toISOString();
-
-    await run(() => commerceApi.createCoupon(payload));
-    setCode('');
-    setDiscountValue('');
-    setMaxRedemptions('');
-    setExpiresAt('');
-    setPkgSel({});
-    setSubSel({});
-  }
-
-  const subjectOptions = subjects.data ? flatten(subjects.data) : [];
+  const { run } = useAdminAction();
+  const create = useDisclosure();
+  const [deleteTarget, setDeleteTarget] = useState<Coupon | null>(null);
 
   return (
-    <div className="space-y-6">
-      <h1 className="font-display text-xl font-semibold tracking-tight">Coupons</h1>
-      <Alert>{error}</Alert>
+    <>
+      <PageHeader
+        breadcrumbs={[{ label: 'Admin', to: '/admin' }, { label: 'Coupons' }]}
+        title="Coupons"
+        description="Percent or flat discounts, scoped to everything, specific packages or subjects."
+        actions={
+          <Button leftIcon={<PlusIcon size={16} />} onClick={create.open}>
+            New coupon
+          </Button>
+        }
+      />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card className="p-4">
-          <h2 className="font-display text-sm font-medium">Existing</h2>
-          <div className="mt-3 space-y-2">
-            {coupons.data?.length === 0 && <p className="text-sm text-muted">No coupons yet.</p>}
-            {coupons.data?.map((c) => (
-              <div key={c.id} className="flex items-center gap-2 rounded-lg border border-line p-3">
-                <div className="min-w-0 flex-1">
-                  <p className="flex items-center gap-2 truncate text-sm font-medium">
-                    <span className="font-mono">{c.code}</span>
-                    {!c.isActive && <Badge tone="danger">off</Badge>}
-                  </p>
-                  <p className="font-mono text-xs text-muted">
-                    {c.discountType === 'percent' ? `${c.discountValue}% off` : `₹${c.discountValue} off`} ·{' '}
-                    {c.appliesTo === 'all' ? 'all items' : c.appliesTo === 'packages' ? `${c.packageIds.length} pkgs` : `${c.subjectIds.length} subj`} ·{' '}
-                    {c.redemptions}
-                    {c.maxRedemptions != null ? `/${c.maxRedemptions}` : ''} used
-                    {c.expiresAt ? ` · till ${new Date(c.expiresAt).toLocaleDateString()}` : ''}
-                  </p>
+      {coupons.isLoading ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <Skeleton shape="block" className="h-36" />
+          <Skeleton shape="block" className="h-36" />
+          <Skeleton shape="block" className="h-36" />
+        </div>
+      ) : coupons.isError ? (
+        <ErrorState message={errorMessage(coupons.error)} onRetry={() => void coupons.refetch()} />
+      ) : coupons.data && coupons.data.length > 0 ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {coupons.data.map((c) => {
+            const status = couponStatus(c);
+            return (
+              <Card key={c.id} className="flex flex-col gap-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate font-mono text-base font-bold text-fg">{c.code}</p>
+                    <p className="mt-0.5 text-sm text-muted">
+                      {discountLabel(c)} · {scopeLabel(c)}
+                    </p>
+                  </div>
+                  <Badge tone={status.tone}>{status.label}</Badge>
                 </div>
-                <Button size="sm" variant="secondary" onClick={() => void run(() => commerceApi.updateCoupon(c.id, { isActive: !c.isActive }))}>
-                  {c.isActive ? 'Disable' : 'Enable'}
-                </Button>
-                <Button size="sm" variant="danger" onClick={() => { if (window.confirm(`Delete ${c.code}?`)) void run(() => commerceApi.deleteCoupon(c.id)); }}>
-                  Delete
-                </Button>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        <Card className="space-y-3 p-4">
-          <h2 className="font-display text-sm font-medium">New coupon</h2>
-          <Input label="Code" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="SAVE20" />
-          <div className="flex gap-2">
-            <Select label="Discount" value={discountType} onChange={(e) => setDiscountType(e.target.value as 'percent' | 'flat')} className="w-32">
-              <option value="percent">Percent %</option>
-              <option value="flat">Flat ₹</option>
-            </Select>
-            <Input label={discountType === 'percent' ? 'Value (%)' : 'Value (₹)'} inputMode="numeric" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} className="w-28" />
-          </div>
-
-          <Select label="Applies to" value={appliesTo} onChange={(e) => setAppliesTo(e.target.value as AppliesTo)}>
-            <option value="all">All items</option>
-            <option value="packages">Specific packages</option>
-            <option value="subjects">Specific subjects</option>
-          </Select>
-
-          {appliesTo === 'packages' && (
-            <div className="max-h-36 space-y-1 overflow-auto rounded-lg border border-line p-2">
-              {packages.data?.length === 0 && <p className="text-xs text-muted">No packages.</p>}
-              {packages.data?.map((p) => (
-                <label key={p.id} className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={!!pkgSel[p.id]} onChange={() => togglePkg(p.id, p.title)} />
-                  <span className="truncate">{p.title}</span>
-                </label>
-              ))}
-            </div>
-          )}
-
-          {appliesTo === 'subjects' && (
-            <div className="space-y-2">
-              <div className="flex flex-wrap gap-2">
-                <Select value={catId} onChange={(e) => { setCatId(e.target.value); setStageId(''); }} className="w-32">
-                  <option value="">Exam</option>
-                  {categories.data?.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
-                </Select>
-                <Select value={stageId} onChange={(e) => setStageId(e.target.value)} disabled={!catId} className="w-32">
-                  <option value="">Stage</option>
-                  {stages.data?.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
-                </Select>
-              </div>
-              {stageId && (
-                <div className="max-h-36 space-y-1 overflow-auto rounded-lg border border-line p-2">
-                  {subjectOptions.map((o) => (
-                    <label key={o.id} className="flex items-center gap-2 text-sm">
-                      <input type="checkbox" checked={!!subSel[o.id]} onChange={() => toggleSub(o.id, o.label)} />
-                      <span className="truncate">{o.label}</span>
-                    </label>
-                  ))}
+                <p className="tabular text-xs text-muted">
+                  {c.redemptions}
+                  {c.maxRedemptions != null ? `/${c.maxRedemptions}` : ''} used
+                  {c.expiresAt
+                    ? ` · expires ${new Date(c.expiresAt).toLocaleDateString('en-IN', {
+                        dateStyle: 'medium',
+                      })}`
+                    : ''}
+                </p>
+                <div className="mt-auto flex flex-wrap gap-2 pt-1">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() =>
+                      run(() => commerceApi.updateCoupon(c.id, { isActive: !c.isActive }), {
+                        invalidate: COUPONS_KEY,
+                        success: c.isActive ? 'Coupon disabled' : 'Coupon enabled',
+                      })
+                    }
+                  >
+                    {c.isActive ? 'Disable' : 'Enable'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-danger hover:text-danger"
+                    leftIcon={<TrashIcon size={16} />}
+                    onClick={() => setDeleteTarget(c)}
+                  >
+                    Delete
+                  </Button>
                 </div>
-              )}
-              {Object.keys(subSel).length > 0 && <p className="text-xs text-muted">{Object.keys(subSel).length} subject(s) selected</p>}
-            </div>
-          )}
+              </Card>
+            );
+          })}
+        </div>
+      ) : (
+        <EmptyState
+          icon={<TagIcon size={22} />}
+          title="No coupons yet"
+          description="Create a coupon to offer a percent or flat discount at checkout."
+          action={
+            <Button size="sm" leftIcon={<PlusIcon size={16} />} onClick={create.open}>
+              New coupon
+            </Button>
+          }
+        />
+      )}
 
-          <div className="flex gap-2">
-            <Input label="Max uses (optional)" inputMode="numeric" value={maxRedemptions} onChange={(e) => setMaxRedemptions(e.target.value)} className="w-32" />
-            <Input label="Expires (optional)" type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
-          </div>
-
-          <Button onClick={() => void create()}>Create coupon</Button>
-        </Card>
-      </div>
-    </div>
+      {create.isOpen ? <CouponForm open onClose={create.close} /> : null}
+      {deleteTarget ? (
+        <ConfirmDialog
+          open
+          onClose={() => setDeleteTarget(null)}
+          title={`Delete ${deleteTarget.code}?`}
+          description="The coupon can no longer be applied at checkout. Past orders are unaffected."
+          confirmLabel="Delete coupon"
+          onConfirm={() => commerceApi.deleteCoupon(deleteTarget.id)}
+          invalidate={COUPONS_KEY}
+          success="Coupon deleted"
+        />
+      ) : null}
+    </>
   );
 }
 
-function flatten(nodes: SubjectNode[], depth = 0): { id: string; label: string }[] {
-  const out: { id: string; label: string }[] = [];
-  for (const n of nodes) {
-    out.push({ id: n.id, label: `${'— '.repeat(depth)}${n.name}` });
-    out.push(...flatten(n.children, depth + 1));
+function CouponForm({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const formId = useId();
+  const [code, setCode] = useState('');
+  const [discountType, setDiscountType] = useState<'percent' | 'flat'>('percent');
+  const [value, setValue] = useState('');
+  const [appliesTo, setAppliesTo] = useState<AppliesTo>('all');
+  const [pkgIds, setPkgIds] = useState<string[]>([]);
+  const [subSel, setSubSel] = useState<Record<string, string>>({});
+  const [sel, setSel] = useState<CatalogSelection>({
+    categoryId: null,
+    stageId: null,
+    subjectId: null,
+  });
+  const [maxUses, setMaxUses] = useState('');
+  const [expiresAt, setExpiresAt] = useState('');
+  const [error, setError] = useState('');
+
+  const packages = useQuery({
+    queryKey: ['admin', 'packages'],
+    queryFn: commerceApi.adminPackages,
+    enabled: appliesTo === 'packages',
+  });
+  const subjectTree = useSubjectTree(appliesTo === 'subjects' ? sel.stageId : null);
+
+  const flatSubjects = subjectTree.data ? flattenSubjects(subjectTree.data) : [];
+  const subjectOptions: MultiOption[] = flatSubjects.map((s) => ({
+    value: s.id,
+    label: `${'  '.repeat(s.depth)}${s.depth > 0 ? '↳ ' : ''}${s.name}`,
+  }));
+  const currentSubjectIds = new Set(flatSubjects.map((s) => s.id));
+  const subValues = Object.keys(subSel).filter((id) => currentSubjectIds.has(id));
+
+  const packageOptions: MultiOption[] =
+    packages.data?.map((p) => ({ value: p.id, label: p.title })) ?? [];
+
+  const mutation = useMutation({
+    mutationFn: () => {
+      const payload: NewCoupon = {
+        code: code.trim().toUpperCase(),
+        discountType,
+        discountValue: Number(value),
+        appliesTo,
+      };
+      if (appliesTo === 'packages') payload.packageIds = pkgIds;
+      if (appliesTo === 'subjects') payload.subjectIds = Object.keys(subSel);
+      if (maxUses) payload.maxRedemptions = Number(maxUses);
+      if (expiresAt) payload.expiresAt = new Date(`${expiresAt}T23:59:59`).toISOString();
+      return commerceApi.createCoupon(payload);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'coupons'] });
+      toast.success('Coupon created');
+      onClose();
+    },
+    onError: (err) => setError(errorMessage(err)),
+  });
+
+  function onSubjectsChange(vals: string[]) {
+    setSubSel((prev) => {
+      const next = { ...prev };
+      currentSubjectIds.forEach((id) => delete next[id]);
+      vals.forEach((id) => {
+        const s = flatSubjects.find((x) => x.id === id);
+        next[id] = s ? s.name : prev[id] ?? '';
+      });
+      return next;
+    });
   }
-  return out;
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const num = Number(value);
+    if (!code.trim()) {
+      setError('Enter a coupon code.');
+      return;
+    }
+    if (!value.trim() || Number.isNaN(num) || num <= 0) {
+      setError('Enter a discount value greater than zero.');
+      return;
+    }
+    if (discountType === 'percent' && num > 100) {
+      setError('A percent discount can’t exceed 100.');
+      return;
+    }
+    if (appliesTo === 'packages' && pkgIds.length === 0) {
+      setError('Pick at least one package, or change the scope to All items.');
+      return;
+    }
+    if (appliesTo === 'subjects' && Object.keys(subSel).length === 0) {
+      setError('Pick at least one subject, or change the scope to All items.');
+      return;
+    }
+    mutation.mutate();
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="lg"
+      title="New coupon"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={mutation.isPending}>
+            Cancel
+          </Button>
+          <Button type="submit" form={formId} loading={mutation.isPending}>
+            Create coupon
+          </Button>
+        </>
+      }
+    >
+      <form id={formId} onSubmit={submit} className="space-y-4">
+        {error ? <Alert tone="danger">{error}</Alert> : null}
+
+        <Input
+          label="Code"
+          value={code}
+          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          placeholder="SAVE20"
+          className="font-mono uppercase"
+        />
+
+        <div className="space-y-1.5">
+          <span className="text-sm font-medium text-fg">Discount</span>
+          <div className="flex flex-wrap items-center gap-3">
+            <SegmentedControl
+              aria-label="Discount type"
+              value={discountType}
+              onChange={(v) => setDiscountType(v as 'percent' | 'flat')}
+              options={[
+                { value: 'percent', label: 'Percent %' },
+                { value: 'flat', label: 'Flat ₹' },
+              ]}
+            />
+            <Input
+              aria-label={discountType === 'percent' ? 'Percent off' : 'Rupees off'}
+              inputMode="numeric"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder={discountType === 'percent' ? '20' : '100'}
+              wrapperClassName="w-28"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <span className="text-sm font-medium text-fg">Applies to</span>
+          <RadioGroup
+            aria-label="Coupon scope"
+            columns={3}
+            value={appliesTo}
+            onChange={(v) => setAppliesTo(v as AppliesTo)}
+            options={[
+              { value: 'all', label: 'All items' },
+              { value: 'packages', label: 'Packages', description: 'Chosen packages only' },
+              { value: 'subjects', label: 'Subjects', description: 'Lessons in chosen subjects' },
+            ]}
+          />
+        </div>
+
+        {appliesTo === 'packages' ? (
+          packages.isLoading ? (
+            <Skeleton className="h-11" />
+          ) : packageOptions.length === 0 ? (
+            <p className="text-sm text-muted">No packages exist yet.</p>
+          ) : (
+            <MultiSelect
+              label="Packages"
+              values={pkgIds}
+              onChange={setPkgIds}
+              options={packageOptions}
+              placeholder="Select packages…"
+            />
+          )
+        ) : null}
+
+        {appliesTo === 'subjects' ? (
+          <div className="space-y-2">
+            <CatalogPicker value={sel} onChange={setSel} includeSubject={false} />
+            {sel.stageId ? (
+              subjectTree.isLoading ? (
+                <Skeleton className="h-11" />
+              ) : subjectOptions.length === 0 ? (
+                <p className="text-sm text-muted">This stage has no subjects yet.</p>
+              ) : (
+                <MultiSelect
+                  label="Subjects in this stage"
+                  values={subValues}
+                  onChange={onSubjectsChange}
+                  options={subjectOptions}
+                  placeholder="Select subjects…"
+                />
+              )
+            ) : (
+              <p className="text-sm text-muted">Pick a stage to list its subjects.</p>
+            )}
+            {Object.keys(subSel).length > 0 ? (
+              <p className="text-xs text-muted">
+                {Object.keys(subSel).length} subject
+                {Object.keys(subSel).length === 1 ? '' : 's'} selected across all stages.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Input
+            label="Max uses (optional)"
+            inputMode="numeric"
+            value={maxUses}
+            onChange={(e) => setMaxUses(e.target.value)}
+            placeholder="Unlimited"
+          />
+          <Input
+            label="Expires (optional)"
+            type="date"
+            value={expiresAt}
+            onChange={(e) => setExpiresAt(e.target.value)}
+          />
+        </div>
+      </form>
+    </Modal>
+  );
 }

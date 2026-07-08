@@ -8,6 +8,7 @@ export type AuthUser = {
   role: 'student' | 'admin' | 'superadmin';
   emailVerified: boolean;
   activeStageId: string | null;
+  avatarUrl: string | null;
 };
 
 type AuthState = {

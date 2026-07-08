@@ -36,6 +36,7 @@ lessonsRouter.post('/:id/revise', asyncHandler(lessons.revise));
 export const adminLessonsRouter = Router();
 adminLessonsRouter.use(requireAuth, requireRole('admin', 'superadmin'), auditMutations('lessons'));
 adminLessonsRouter.get('/', asyncHandler(lessons.listAdmin));
+adminLessonsRouter.get('/:id/insights', asyncHandler(lessons.insights));
 adminLessonsRouter.post('/pdf', upload.single('file'), asyncHandler(lessons.uploadPdf));
 adminLessonsRouter.post('/ism', asyncHandler(lessons.createIsm));
 adminLessonsRouter.patch('/:id', asyncHandler(lessons.update));

@@ -1,256 +1,211 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import type { ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, AppHeader, Badge, Button, Card, Select } from '../components/ui';
-import { contentApi, type PubSubject } from '../features/content/content.api';
-import { lessonsApi, type Lesson } from '../features/lessons/lessons.api';
-import { purchase } from '../features/commerce/purchase';
-import { SecureViewer } from '../components/SecureViewer';
+import {
+  Alert,
+  EmptyState,
+  ErrorState,
+  Input,
+  Skeleton,
+  Tabs,
+} from '../components/ui';
+import { GraduationIcon, NotesIcon, PackageIcon, SearchIcon } from '../components/ui/icons';
+import { BooksArt } from '../components/decor';
+import { PageHeader } from '../components/layout';
+import { StageSetupCard, SubjectCard, useActiveStage, useSubjectTree } from '../features/catalog';
+import { commerceApi } from '../features/commerce/commerce.api';
+import { PackageCard } from '../features/commerce/PackageCard';
+import { errorMessage } from '../features/auth/auth.api';
 
+/**
+ * Notes home. Lists every subject in the student's saved stage as a card; each
+ * opens its own drill-in page (`/notes/:subjectId`). No exam/stage picker here —
+ * the stage comes from saved study preferences.
+ */
 export function NotesPage() {
   const qc = useQueryClient();
-  const navigate = useNavigate();
-  const [catId, setCatId] = useState('');
-  const [stageId, setStageId] = useState('');
-  const [subjectId, setSubjectId] = useState('');
-  const [viewerLessonId, setViewerLessonId] = useState<string | null>(null);
-  const [purchaseError, setPurchaseError] = useState('');
+  const [tab, setTab] = useState<'subjects' | 'packages'>('subjects');
+  const [subjectQuery, setSubjectQuery] = useState('');
 
-  const categories = useQuery({ queryKey: ['pub', 'categories'], queryFn: contentApi.categories });
-  const stages = useQuery({ queryKey: ['pub', 'stages', catId], queryFn: () => contentApi.stages(catId), enabled: !!catId });
-  const subjects = useQuery({ queryKey: ['pub', 'subjects', stageId], queryFn: () => contentApi.subjectTree(stageId), enabled: !!stageId });
-  const lessons = useQuery({ queryKey: ['pub', 'lessons', subjectId], queryFn: () => lessonsApi.list(subjectId), enabled: !!subjectId });
-  const progress = useQuery({ queryKey: ['pub', 'progress', subjectId], queryFn: () => lessonsApi.progress(subjectId), enabled: !!subjectId });
+  const stage = useActiveStage();
+  const subjects = useSubjectTree(stage.stageId);
 
-  async function toggleComplete(lesson: Lesson) {
-    if (lesson.completed) await lessonsApi.uncomplete(lesson.id);
-    else await lessonsApi.complete(lesson.id);
-    await qc.invalidateQueries({ queryKey: ['pub', 'lessons', subjectId] });
-    await qc.invalidateQueries({ queryKey: ['pub', 'progress', subjectId] });
+  const packages = useQuery({
+    queryKey: ['commerce', 'packages'],
+    queryFn: commerceApi.packages,
+    enabled: tab === 'packages',
+  });
+  const my = useQuery({
+    queryKey: ['commerce', 'my'],
+    queryFn: commerceApi.my,
+    enabled: tab === 'packages',
+  });
+
+  function afterPurchase() {
+    void qc.invalidateQueries({ queryKey: ['commerce', 'my'] });
+    void qc.invalidateQueries({ queryKey: ['lessons'] });
+    void qc.invalidateQueries({ queryKey: ['tracker'] });
   }
 
-  async function reviseLesson(lesson: Lesson) {
-    await lessonsApi.revise(lesson.id);
-    await qc.invalidateQueries({ queryKey: ['pub', 'lessons', subjectId] });
-    await qc.invalidateQueries({ queryKey: ['tracker'] });
+  const ownedLessonIds = my.data?.ownedLessonIds;
+  function packageOwned(ids: string[]): boolean {
+    if (!ownedLessonIds || ids.length === 0) return false;
+    return ids.every((id) => ownedLessonIds.includes(id));
   }
 
-  async function buyLesson(lesson: Lesson) {
-    setPurchaseError('');
-    const coupon = window.prompt('Have a coupon code? (optional)')?.trim() || undefined;
-    await purchase(
-      [{ type: 'lesson', id: lesson.id }],
-      () => void qc.invalidateQueries({ queryKey: ['pub', 'lessons', subjectId] }),
-      setPurchaseError,
-      coupon,
+  let subjectsContent: ReactNode;
+  if (stage.isLoading) {
+    subjectsContent = (
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} shape="block" className="h-[136px] w-full" />
+        ))}
+      </div>
+    );
+  } else if (stage.isError) {
+    subjectsContent = (
+      <ErrorState message={errorMessage(stage.error)} onRetry={() => void stage.refetch()} />
+    );
+  } else if (!stage.stageId) {
+    subjectsContent = (
+      <StageSetupCard
+        title="Choose your exam to unlock your notes"
+        description="Tell us your exam and stage once — your subjects and lessons will be waiting here every time you come back."
+      />
+    );
+  } else if (subjects.isLoading) {
+    subjectsContent = (
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} shape="block" className="h-[136px] w-full" />
+        ))}
+      </div>
+    );
+  } else if (subjects.isError) {
+    subjectsContent = (
+      <ErrorState message={errorMessage(subjects.error)} onRetry={() => void subjects.refetch()} />
+    );
+  } else if (!subjects.data || subjects.data.length === 0) {
+    subjectsContent = (
+      <EmptyState
+        illustration={<BooksArt className="h-32 w-auto" />}
+        title="No subjects yet"
+        description="Subjects for your stage will appear here once they're published."
+      />
+    );
+  } else {
+    const all = subjects.data;
+    const q = subjectQuery.trim().toLowerCase();
+    const filtered = q ? all.filter((s) => s.name.toLowerCase().includes(q)) : all;
+    subjectsContent = (
+      <div className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted">
+            <span className="font-semibold text-fg">{all.length}</span> subject
+            {all.length === 1 ? '' : 's'}
+            {stage.categoryName ? (
+              <span className="inline-flex items-center gap-1 text-muted">
+                {' '}·<GraduationIcon size={14} className="text-faint" />
+                {stage.categoryName}
+                {stage.stageName ? ` · ${stage.stageName}` : ''}
+              </span>
+            ) : null}
+          </p>
+          {all.length > 5 ? (
+            <div className="sm:w-64">
+              <Input
+                aria-label="Search subjects"
+                placeholder="Search subjects"
+                leftIcon={<SearchIcon size={18} />}
+                value={subjectQuery}
+                onChange={(e) => setSubjectQuery(e.target.value)}
+              />
+            </div>
+          ) : null}
+        </div>
+
+        {filtered.length === 0 ? (
+          <EmptyState
+            icon={<SearchIcon size={22} />}
+            title="No matching subjects"
+            description={`Nothing matches “${subjectQuery.trim()}”. Try a different search.`}
+          />
+        ) : (
+          <div className="pf-stagger grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {filtered.map((s, i) => (
+              <SubjectCard key={s.id} subject={s} index={i} />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  let packagesContent: ReactNode;
+  if (packages.isLoading) {
+    packagesContent = (
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} shape="block" className="h-44 w-full" />
+        ))}
+      </div>
+    );
+  } else if (packages.isError) {
+    packagesContent = (
+      <ErrorState message={errorMessage(packages.error)} onRetry={() => void packages.refetch()} />
+    );
+  } else if (!packages.data || packages.data.packages.length === 0) {
+    packagesContent = (
+      <EmptyState
+        title="No packages yet"
+        description="Lesson bundles will appear here when they're available."
+      />
+    );
+  } else {
+    packagesContent = (
+      <div className="pf-stagger grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {packages.data.packages.map((p) => (
+          <PackageCard
+            key={p.id}
+            pkg={p}
+            owned={packageOwned(p.lessonIds)}
+            onPurchased={afterPurchase}
+          />
+        ))}
+      </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-canvas text-ink">
-      <AppHeader
-        right={
-          <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
-            Dashboard
-          </Button>
-        }
+    <>
+      <PageHeader
+        eyebrow="Catalogue"
+        title="Notes"
+        description="Your subjects, curated for your exam. Buy once, own forever."
       />
 
-      <main className="mx-auto max-w-5xl px-6 py-8">
-        <h1 className="font-display text-2xl font-semibold tracking-tight">Notes</h1>
+      <Tabs
+        tabs={[
+          { value: 'subjects', label: 'Subjects', icon: <NotesIcon size={16} /> },
+          { value: 'packages', label: 'Packages', icon: <PackageIcon size={16} /> },
+        ]}
+        value={tab}
+        onChange={(v) => setTab(v as 'subjects' | 'packages')}
+        className="mb-5"
+      />
 
-        <div className="mt-4 flex flex-wrap gap-3">
-          <Select
-            value={catId}
-            onChange={(e) => {
-              setCatId(e.target.value);
-              setStageId('');
-              setSubjectId('');
-            }}
-            className="w-44"
-          >
-            <option value="">Select exam</option>
-            {categories.data?.map((c) => (
-              <option key={c._id} value={c._id}>
-                {c.name}
-              </option>
-            ))}
-          </Select>
-          <Select
-            value={stageId}
-            onChange={(e) => {
-              setStageId(e.target.value);
-              setSubjectId('');
-            }}
-            disabled={!catId}
-            className="w-44"
-          >
-            <option value="">Select stage</option>
-            {stages.data?.map((s) => (
-              <option key={s._id} value={s._id}>
-                {s.name}
-              </option>
-            ))}
-          </Select>
-        </div>
-
-        {stageId && (
-          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-[260px_1fr]">
-            <Card className="p-3">
-              <h2 className="mb-2 px-1 font-display text-sm font-medium">Subjects</h2>
-              {subjects.data?.length ? (
-                <SubjectNodes nodes={subjects.data} selectedId={subjectId} onSelect={setSubjectId} />
-              ) : (
-                <p className="px-1 text-sm text-muted">No subjects yet.</p>
-              )}
-            </Card>
-
-            <Card className="p-4">
-              {!subjectId && <p className="text-sm text-muted">Select a subject to see its notes.</p>}
-              {subjectId && (
-                <>
-                  <div className="mb-3 flex items-center justify-between">
-                    <h2 className="font-display text-sm font-medium">Lessons</h2>
-                    {progress.data && (
-                      <span className="font-mono text-xs text-muted">
-                        {progress.data.completed}/{progress.data.total} done
-                      </span>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Alert>{purchaseError}</Alert>
-                    {lessons.data?.length === 0 && <p className="text-sm text-muted">No lessons yet.</p>}
-                    {lessons.data?.map((lesson) => (
-                      <LessonRow
-                        key={lesson.id}
-                        lesson={lesson}
-                        onOpen={() => setViewerLessonId(lesson.id)}
-                        onToggle={() => void toggleComplete(lesson)}
-                        onBuy={() => void buyLesson(lesson)}
-                        onRevise={() => void reviseLesson(lesson)}
-                      />
-                    ))}
-                  </div>
-                </>
-              )}
-            </Card>
-          </div>
-        )}
-      </main>
-
-      {viewerLessonId && (
-        <SecureViewer
-          key={viewerLessonId}
-          lessonId={viewerLessonId}
-          onClose={() => {
-            setViewerLessonId(null);
-            void qc.invalidateQueries({ queryKey: ['pub', 'lessons', subjectId] });
-            void qc.invalidateQueries({ queryKey: ['pub', 'progress', subjectId] });
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-function SubjectNodes({
-  nodes,
-  selectedId,
-  onSelect,
-  depth = 0,
-}: {
-  nodes: PubSubject[];
-  selectedId: string;
-  onSelect: (id: string) => void;
-  depth?: number;
-}) {
-  return (
-    <ul className={depth ? 'ml-3 border-l border-line pl-2' : ''}>
-      {nodes.map((n) => (
-        <li key={n.id}>
-          <button
-            type="button"
-            onClick={() => onSelect(n.id)}
-            className={`block w-full truncate rounded px-2 py-1 text-left text-sm ${
-              selectedId === n.id ? 'bg-accent-soft text-accent' : 'text-ink hover:bg-canvas'
-            }`}
-          >
-            {n.name}
-          </button>
-          {n.children.length > 0 && (
-            <SubjectNodes nodes={n.children} selectedId={selectedId} onSelect={onSelect} depth={depth + 1} />
-          )}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function LessonRow({
-  lesson,
-  onOpen,
-  onToggle,
-  onBuy,
-  onRevise,
-}: {
-  lesson: Lesson;
-  onOpen: () => void;
-  onToggle: () => void;
-  onBuy: () => void;
-  onRevise: () => void;
-}) {
-  return (
-    <div className="flex items-center gap-3 rounded-lg border border-line p-3">
-      <div className="min-w-0 flex-1">
-        <p className="flex items-center gap-2 truncate text-sm font-medium">
-          {lesson.title}
-          {lesson.completed && <Badge tone="success">done</Badge>}
-          {lesson.locked && <Badge>locked</Badge>}
-          {lesson.revisions > 0 && <Badge tone="accent">{lesson.revisions}× revised</Badge>}
-        </p>
-        <p className="mt-0.5 flex items-center gap-2 text-xs text-muted">
-          <Badge>{lesson.type}</Badge>
-          <span className="font-mono">
-            {lesson.type === 'pdf' ? `${lesson.pageCount ?? 0} pages` : 'Government link'}
-          </span>
-          {lesson.isFree ? <Badge tone="accent">free</Badge> : lesson.price ? <span className="font-mono">₹{lesson.price}</span> : null}
-        </p>
-      </div>
-
-      {lesson.locked ? (
-        <Button size="sm" onClick={onBuy}>
-          Buy ₹{lesson.price}
-        </Button>
-      ) : lesson.type === 'pdf' ? (
-        <>
-          <Button size="sm" onClick={onOpen}>
-            Open
-          </Button>
-          <Button variant="secondary" size="sm" onClick={onToggle}>
-            {lesson.completed ? 'Undo' : 'Done'}
-          </Button>
-          <Button variant="ghost" size="sm" onClick={onRevise}>
-            Revise
-          </Button>
-        </>
+      {tab === 'subjects' ? (
+        subjectsContent
       ) : (
-        <>
-          <a
-            href={lesson.externalUrl ?? '#'}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center rounded-md border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink hover:bg-canvas"
-          >
-            Open ↗
-          </a>
-          <Button variant="secondary" size="sm" onClick={onToggle}>
-            {lesson.completed ? 'Undo' : 'Done'}
-          </Button>
-          <Button variant="ghost" size="sm" onClick={onRevise}>
-            Revise
-          </Button>
-        </>
+        <div className="space-y-4">
+          {packages.data && !packages.data.paymentsEnabled ? (
+            <Alert tone="warn" title="Payments not enabled yet">
+              You can browse packages, but purchasing isn't available right now.
+            </Alert>
+          ) : null}
+          {packagesContent}
+        </div>
       )}
-    </div>
+    </>
   );
 }

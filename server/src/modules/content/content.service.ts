@@ -1,4 +1,5 @@
 import { HttpError } from '../../middleware/error.js';
+import { LessonModel } from '../lessons/lesson.model.js';
 import { ExamCategoryModel } from './exam-category.model.js';
 import { StageModel } from './stage.model.js';
 import { SubjectModel } from './subject.model.js';
@@ -66,6 +67,42 @@ export async function deleteStage(id: string): Promise<void> {
 }
 
 // ── Subjects (tree) ───────────────────────────────────────────────
+
+/**
+ * A subject holds EITHER sub-subjects OR notes — never both. Reject turning a
+ * subject that already has notes into a parent (it must be a leaf to hold notes).
+ */
+async function assertParentHasNoLessons(parentSubjectId: string): Promise<void> {
+  if (await LessonModel.exists({ subjectId: parentSubjectId })) {
+    throw new HttpError(
+      409,
+      'This subject already has notes. A subject can hold notes or sub-subjects, but not both — move its notes into a sub-subject first.',
+      { code: 'SUBJECT_HAS_NOTES' },
+    );
+  }
+}
+
+/**
+ * Convert a notes-bearing subject into a parent: create a leaf sub-subject
+ * (`holderName`, e.g. "General") and move all of the subject's notes into it.
+ * Non-destructive — lessons keep their id, so student progress, revisions and
+ * purchases are preserved (only the subject pointer changes).
+ */
+export async function subdivideSubject(parentId: string, holderName: string) {
+  const parent = await SubjectModel.findById(parentId);
+  if (!parent) throw new HttpError(404, 'Subject not found');
+  if (await SubjectModel.exists({ parentSubjectId: parentId })) {
+    throw new HttpError(409, 'This subject already has sub-subjects.');
+  }
+  const holder = await SubjectModel.create({
+    name: holderName,
+    stageId: parent.stageId,
+    parentSubjectId: parent._id,
+  });
+  await LessonModel.updateMany({ subjectId: parentId }, { $set: { subjectId: holder._id } });
+  return holder;
+}
+
 type SubjectNode = {
   id: string;
   name: string;
@@ -73,6 +110,7 @@ type SubjectNode = {
   isActive: boolean;
   parentSubjectId: string | null;
   children: SubjectNode[];
+  lessonCount: number; // total lessons beneath this node (rolled up)
 };
 
 export async function getSubjectTree(stageId: string, includeInactive = false): Promise<SubjectNode[]> {
@@ -80,15 +118,32 @@ export async function getSubjectTree(stageId: string, includeInactive = false): 
     .sort(byOrder)
     .lean();
 
+  // Direct lesson count per subject; rolled up recursively so every node reports
+  // how many lessons live beneath it (students see "N lessons" on each card).
+  const lessonAgg = await LessonModel.aggregate([
+    {
+      $match: {
+        subjectId: { $in: subjects.map((s) => s._id) },
+        ...(includeInactive ? {} : { isActive: true }),
+      },
+    },
+    { $group: { _id: '$subjectId', n: { $sum: 1 } } },
+  ]);
+  const directCount = new Map<string, number>(
+    (lessonAgg as { _id: unknown; n: number }[]).map((r) => [String(r._id), r.n]),
+  );
+
   const nodes = new Map<string, SubjectNode>();
   for (const s of subjects) {
-    nodes.set(String(s._id), {
-      id: String(s._id),
+    const id = String(s._id);
+    nodes.set(id, {
+      id,
       name: s.name,
       order: s.order,
       isActive: s.isActive,
       parentSubjectId: s.parentSubjectId ? String(s.parentSubjectId) : null,
       children: [],
+      lessonCount: directCount.get(id) ?? 0,
     });
   }
 
@@ -98,6 +153,15 @@ export async function getSubjectTree(stageId: string, includeInactive = false): 
     if (parent) parent.children.push(node);
     else roots.push(node);
   }
+
+  const rollup = (node: SubjectNode): number => {
+    let sum = node.lessonCount;
+    for (const child of node.children) sum += rollup(child);
+    node.lessonCount = sum;
+    return sum;
+  };
+  roots.forEach(rollup);
+
   return roots;
 }
 
@@ -111,6 +175,7 @@ export async function createSubject(data: CreateSubjectInput) {
     if (String(parent.stageId) !== String(data.stageId)) {
       throw new HttpError(400, 'Parent subject must be in the same stage');
     }
+    await assertParentHasNoLessons(data.parentSubjectId);
   }
   return SubjectModel.create(data);
 }
@@ -120,6 +185,7 @@ export async function updateSubject(id: string, data: Partial<CreateSubjectInput
     if (data.parentSubjectId === id) throw new HttpError(400, 'A subject cannot be its own parent');
     const parent = await SubjectModel.findById(data.parentSubjectId);
     if (!parent) throw new HttpError(400, 'Invalid parentSubjectId');
+    await assertParentHasNoLessons(data.parentSubjectId);
   }
   const doc = await SubjectModel.findByIdAndUpdate(id, data, { new: true, runValidators: true });
   if (!doc) throw new HttpError(404, 'Subject not found');

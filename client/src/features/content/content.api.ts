@@ -8,6 +8,7 @@ export type PubSubject = {
   order: number;
   parentSubjectId: string | null;
   children: PubSubject[];
+  lessonCount: number;
 };
 
 export const contentApi = {

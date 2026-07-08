@@ -1,161 +1,308 @@
-import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Badge, Button, Card, Input, Select } from '../../components/ui';
-import { adminContentApi, type SubjectNode } from '../../features/admin/content.api';
+import { useId, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Alert,
+  Button,
+  Card,
+  EmptyState,
+  ErrorState,
+  Input,
+  Modal,
+  MultiSelect,
+  Skeleton,
+  useToast,
+  CloseIcon,
+  EditIcon,
+  PackageIcon,
+  PlusIcon,
+  TrashIcon,
+  type MultiOption,
+} from '../../components/ui';
+import { PageHeader } from '../../components/layout';
+import { useDisclosure } from '../../hooks';
+import { CatalogPicker, type CatalogSelection } from '../../features/catalog';
+import { commerceApi, type Package } from '../../features/commerce/commerce.api';
 import { adminLessonsApi } from '../../features/admin/admin-lessons.api';
-import { commerceApi } from '../../features/commerce/commerce.api';
 import { errorMessage } from '../../features/auth/auth.api';
+import { ConfirmDialog, PublishBadge, useAdminAction } from './admin-shared';
+
+const PACKAGES_KEY: unknown[][] = [['admin', 'packages']];
 
 export function AdminPackagesPage() {
-  const qc = useQueryClient();
-  const [error, setError] = useState('');
-  const [title, setTitle] = useState('');
-  const [price, setPrice] = useState('');
-  const [selected, setSelected] = useState<Record<string, string>>({});
-  const [catId, setCatId] = useState('');
-  const [stageId, setStageId] = useState('');
-  const [subjectId, setSubjectId] = useState('');
-
   const packages = useQuery({ queryKey: ['admin', 'packages'], queryFn: commerceApi.adminPackages });
-  const categories = useQuery({ queryKey: ['admin', 'categories'], queryFn: adminContentApi.listCategories });
-  const stages = useQuery({ queryKey: ['admin', 'stages', catId], queryFn: () => adminContentApi.listStages(catId), enabled: !!catId });
-  const subjects = useQuery({ queryKey: ['admin', 'subjtree', stageId], queryFn: () => adminContentApi.getSubjectTree(stageId), enabled: !!stageId });
-  const lessons = useQuery({ queryKey: ['admin', 'lessons', subjectId], queryFn: () => adminLessonsApi.list(subjectId), enabled: !!subjectId });
-
-  async function run(fn: () => Promise<unknown>): Promise<void> {
-    try {
-      setError('');
-      await fn();
-      await qc.invalidateQueries({ queryKey: ['admin', 'packages'] });
-    } catch (e) {
-      setError(errorMessage(e));
-    }
-  }
-
-  function toggleLesson(id: string, t: string) {
-    setSelected((s) => {
-      const next = { ...s };
-      if (next[id]) delete next[id];
-      else next[id] = t;
-      return next;
-    });
-  }
-
-  async function createPackage() {
-    const ids = Object.keys(selected);
-    const p = Number(price);
-    if (!title.trim() || ids.length === 0 || Number.isNaN(p) || p < 0) {
-      setError('Add a title, a price, and at least one lesson.');
-      return;
-    }
-    await run(() => commerceApi.createPackage({ title: title.trim(), price: p, lessonIds: ids }));
-    setTitle('');
-    setPrice('');
-    setSelected({});
-  }
-
-  const subjectOptions = subjects.data ? flatten(subjects.data) : [];
+  const { run } = useAdminAction();
+  const create = useDisclosure();
+  const [editTarget, setEditTarget] = useState<Package | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Package | null>(null);
 
   return (
-    <div className="space-y-6">
-      <h1 className="font-display text-xl font-semibold tracking-tight">Packages</h1>
-      <Alert>{error}</Alert>
+    <>
+      <PageHeader
+        breadcrumbs={[{ label: 'Admin', to: '/admin' }, { label: 'Packages' }]}
+        title="Packages"
+        description="Bundle lessons from across the catalogue and sell them together."
+        actions={
+          <Button leftIcon={<PlusIcon size={16} />} onClick={create.open}>
+            New package
+          </Button>
+        }
+      />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card className="p-4">
-          <h2 className="font-display text-sm font-medium">Existing</h2>
-          <div className="mt-3 space-y-2">
-            {packages.data?.length === 0 && <p className="text-sm text-muted">No packages yet.</p>}
-            {packages.data?.map((pkg) => (
-              <div key={pkg.id} className="flex items-center gap-2 rounded-lg border border-line p-3">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
-                    {pkg.title}
-                    {!pkg.isActive && <span className="ml-2 text-xs text-danger">hidden</span>}
-                  </p>
-                  <p className="font-mono text-xs text-muted">
-                    ₹{pkg.price} · {pkg.lessonCount} lessons
+      {packages.isLoading ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <Skeleton shape="block" className="h-40" />
+          <Skeleton shape="block" className="h-40" />
+          <Skeleton shape="block" className="h-40" />
+        </div>
+      ) : packages.isError ? (
+        <ErrorState message={errorMessage(packages.error)} onRetry={() => void packages.refetch()} />
+      ) : packages.data && packages.data.length > 0 ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {packages.data.map((pkg) => (
+            <Card key={pkg.id} className="flex flex-col gap-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-fg">{pkg.title}</p>
+                  <p className="mt-0.5 text-sm text-muted">
+                    {pkg.lessonCount} lesson{pkg.lessonCount === 1 ? '' : 's'}
                   </p>
                 </div>
-                <Button size="sm" variant="secondary" onClick={() => void run(() => commerceApi.updatePackage(pkg.id, { isActive: !pkg.isActive }))}>
+                <PublishBadge active={pkg.isActive} />
+              </div>
+              <p className="tabular text-xl font-bold text-fg">₹{pkg.price}</p>
+              <div className="mt-auto flex flex-wrap gap-2 pt-1">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() =>
+                    run(() => commerceApi.updatePackage(pkg.id, { isActive: !pkg.isActive }), {
+                      invalidate: PACKAGES_KEY,
+                      success: pkg.isActive ? 'Package hidden' : 'Package published',
+                    })
+                  }
+                >
                   {pkg.isActive ? 'Unpublish' : 'Publish'}
+                </Button>
+                <Button size="sm" variant="ghost" leftIcon={<EditIcon size={16} />} onClick={() => setEditTarget(pkg)}>
+                  Edit
                 </Button>
                 <Button
                   size="sm"
-                  variant="danger"
-                  onClick={() => {
-                    if (window.confirm(`Delete "${pkg.title}"?`)) void run(() => commerceApi.deletePackage(pkg.id));
-                  }}
+                  variant="ghost"
+                  className="text-danger hover:text-danger"
+                  leftIcon={<TrashIcon size={16} />}
+                  onClick={() => setDeleteTarget(pkg)}
                 >
                   Delete
                 </Button>
               </div>
-            ))}
-          </div>
-        </Card>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          icon={<PackageIcon size={22} />}
+          title="No packages yet"
+          description="Create a package to bundle several lessons at a single price."
+          action={
+            <Button size="sm" leftIcon={<PlusIcon size={16} />} onClick={create.open}>
+              New package
+            </Button>
+          }
+        />
+      )}
 
-        <Card className="space-y-3 p-4">
-          <h2 className="font-display text-sm font-medium">New package</h2>
-          <Input label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
-          <Input label="Price (₹)" inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} />
+      {create.isOpen ? <PackageForm open onClose={create.close} /> : null}
+      {editTarget ? (
+        <PackageForm open onClose={() => setEditTarget(null)} pkg={editTarget} />
+      ) : null}
+      {deleteTarget ? (
+        <ConfirmDialog
+          open
+          onClose={() => setDeleteTarget(null)}
+          title={`Delete “${deleteTarget.title}”?`}
+          description="The package is removed from the store. Students who already bought it keep the lessons they own."
+          confirmLabel="Delete package"
+          onConfirm={() => commerceApi.deletePackage(deleteTarget.id)}
+          invalidate={PACKAGES_KEY}
+          success="Package deleted"
+        />
+      ) : null}
+    </>
+  );
+}
 
-          <div className="space-y-1.5">
-            <span className="text-xs font-medium text-muted">Add lessons</span>
-            <div className="flex flex-wrap gap-2">
-              <Select value={catId} onChange={(e) => { setCatId(e.target.value); setStageId(''); setSubjectId(''); }} className="w-32">
-                <option value="">Exam</option>
-                {categories.data?.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
-              </Select>
-              <Select value={stageId} onChange={(e) => { setStageId(e.target.value); setSubjectId(''); }} disabled={!catId} className="w-32">
-                <option value="">Stage</option>
-                {stages.data?.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
-              </Select>
-              <Select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} disabled={!stageId} className="w-40">
-                <option value="">Subject</option>
-                {subjectOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-              </Select>
-            </div>
-            {subjectId && (
-              <div className="mt-2 max-h-40 space-y-1 overflow-auto rounded-lg border border-line p-2">
-                {lessons.data?.length === 0 && <p className="text-xs text-muted">No lessons.</p>}
-                {lessons.data?.map((l) => (
-                  <label key={l.id} className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={!!selected[l.id]} onChange={() => toggleLesson(l.id, l.title)} />
-                    <span className="truncate">{l.title}</span>
-                    {l.isFree && <Badge tone="accent">free</Badge>}
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
+function PackageForm({
+  open,
+  onClose,
+  pkg,
+}: {
+  open: boolean;
+  onClose: () => void;
+  pkg?: Package;
+}) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const formId = useId();
+  const [title, setTitle] = useState(pkg?.title ?? '');
+  const [price, setPrice] = useState(pkg ? String(pkg.price) : '');
+  const [selected, setSelected] = useState<Record<string, string>>(() =>
+    Object.fromEntries((pkg?.lessonIds ?? []).map((id) => [id, ''])),
+  );
+  const [sel, setSel] = useState<CatalogSelection>({
+    categoryId: null,
+    stageId: null,
+    subjectId: null,
+  });
+  const [error, setError] = useState('');
 
-          {Object.keys(selected).length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {Object.entries(selected).map(([id, t]) => (
+  const lessons = useQuery({
+    queryKey: ['admin', 'lessons', sel.subjectId],
+    queryFn: () => adminLessonsApi.list(sel.subjectId as string),
+    enabled: Boolean(sel.subjectId),
+  });
+
+  const currentIds = lessons.data?.map((l) => l.id) ?? [];
+  const currentIdSet = new Set(currentIds);
+  const values = Object.keys(selected).filter((id) => currentIdSet.has(id));
+  const options: MultiOption[] =
+    lessons.data?.map((l) => ({
+      value: l.id,
+      label: l.title,
+      description: l.isFree ? 'Free' : `₹${l.price}`,
+    })) ?? [];
+
+  const mutation = useMutation({
+    mutationFn: () => {
+      const lessonIds = Object.keys(selected);
+      const priceNum = Number(price);
+      return pkg
+        ? commerceApi.updatePackage(pkg.id, { title: title.trim(), price: priceNum, lessonIds })
+        : commerceApi.createPackage({ title: title.trim(), price: priceNum, lessonIds });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'packages'] });
+      toast.success(pkg ? 'Package updated' : 'Package created');
+      onClose();
+    },
+    onError: (err) => setError(errorMessage(err)),
+  });
+
+  function onLessonsChange(vals: string[]) {
+    setSelected((prev) => {
+      const next = { ...prev };
+      currentIds.forEach((id) => delete next[id]);
+      vals.forEach((id) => {
+        const l = lessons.data?.find((x) => x.id === id);
+        next[id] = l ? l.title : prev[id] ?? '';
+      });
+      return next;
+    });
+  }
+
+  function removeLesson(id: string) {
+    setSelected((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const priceNum = Number(price);
+    if (!title.trim()) {
+      setError('Enter a package title.');
+      return;
+    }
+    if (!price.trim() || Number.isNaN(priceNum) || priceNum < 0) {
+      setError('Enter a valid price in rupees.');
+      return;
+    }
+    if (Object.keys(selected).length === 0) {
+      setError('Add at least one lesson.');
+      return;
+    }
+    mutation.mutate();
+  }
+
+  const selectedEntries = Object.entries(selected);
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="lg"
+      title={pkg ? 'Edit package' : 'New package'}
+      description="Set a price, then browse the hierarchy and add lessons."
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={mutation.isPending}>
+            Cancel
+          </Button>
+          <Button type="submit" form={formId} loading={mutation.isPending}>
+            {pkg ? 'Save changes' : `Create package (${selectedEntries.length})`}
+          </Button>
+        </>
+      }
+    >
+      <form id={formId} onSubmit={submit} className="space-y-4">
+        {error ? <Alert tone="danger">{error}</Alert> : null}
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Input label="Title" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+          <Input
+            label="Price (₹)"
+            inputMode="numeric"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            placeholder="e.g. 999"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-sm font-semibold text-fg">Add lessons</p>
+          <CatalogPicker value={sel} onChange={setSel} />
+          {sel.subjectId ? (
+            lessons.isLoading ? (
+              <Skeleton className="h-11" />
+            ) : options.length === 0 ? (
+              <p className="text-sm text-muted">This subject has no lessons yet.</p>
+            ) : (
+              <MultiSelect
+                label="Lessons in this subject"
+                values={values}
+                onChange={onLessonsChange}
+                options={options}
+                placeholder="Select lessons to add…"
+              />
+            )
+          ) : (
+            <p className="text-sm text-muted">Pick a subject to list its lessons.</p>
+          )}
+        </div>
+
+        <div className="rounded-field border border-line bg-sunken/40 p-3">
+          <p className="text-sm font-semibold text-fg">Selected lessons ({selectedEntries.length})</p>
+          {selectedEntries.length === 0 ? (
+            <p className="mt-1 text-sm text-muted">None yet — add lessons from any subject above.</p>
+          ) : (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {selectedEntries.map(([id, label]) => (
                 <button
                   key={id}
                   type="button"
-                  onClick={() => toggleLesson(id, t)}
-                  className="inline-flex items-center gap-1 rounded border border-line px-2 py-0.5 text-xs text-muted hover:text-ink"
+                  onClick={() => removeLesson(id)}
+                  className="inline-flex items-center gap-1 rounded-full bg-primary-soft py-1 pl-2.5 pr-1.5 text-xs font-medium text-primary-soft-fg"
                 >
-                  {t} ✕
+                  <span className="max-w-[12rem] truncate">{label || `#${id.slice(-6)}`}</span>
+                  <CloseIcon size={12} />
                 </button>
               ))}
             </div>
           )}
-
-          <Button onClick={() => void createPackage()}>Create package ({Object.keys(selected).length})</Button>
-        </Card>
-      </div>
-    </div>
+        </div>
+      </form>
+    </Modal>
   );
-}
-
-function flatten(nodes: SubjectNode[], depth = 0): { id: string; label: string }[] {
-  const out: { id: string; label: string }[] = [];
-  for (const n of nodes) {
-    out.push({ id: n.id, label: `${'— '.repeat(depth)}${n.name}` });
-    out.push(...flatten(n.children, depth + 1));
-  }
-  return out;
 }

@@ -1,259 +1,412 @@
-import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Badge, Button, Card, Input, Select, Textarea } from '../../components/ui';
-import { adminContentApi, type SubjectNode } from '../../features/admin/content.api';
-import { questionsApi, type CreateQuestion, type QuestionType } from '../../features/questions/questions.api';
+import { useId, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  ErrorState,
+  IconButton,
+  Input,
+  Modal,
+  SegmentedControl,
+  Skeleton,
+  Textarea,
+  useToast,
+  CheckIcon,
+  CloseIcon,
+  EditIcon,
+  PlusIcon,
+  PracticeIcon,
+  TrashIcon,
+} from '../../components/ui';
+import { PageHeader } from '../../components/layout';
+import { cn } from '../../lib/cn';
+import { CatalogPicker, type CatalogSelection } from '../../features/catalog';
+import {
+  questionsApi,
+  type AdminQuestion,
+  type CreateQuestion,
+  type Difficulty,
+  type QuestionType,
+} from '../../features/questions/questions.api';
 import { errorMessage } from '../../features/auth/auth.api';
+import { ConfirmDialog, useAdminAction } from './admin-shared';
+
+const TYPE_LABEL: Record<QuestionType, string> = {
+  mcq: 'MCQ',
+  short: 'Short answer',
+  long: 'Long answer',
+};
 
 export function AdminQuestionsPage() {
-  const qc = useQueryClient();
-  const [error, setError] = useState('');
-  const [catId, setCatId] = useState('');
-  const [stageId, setStageId] = useState('');
-  const [subjectId, setSubjectId] = useState('');
+  const [scope, setScope] = useState<CatalogSelection>({
+    categoryId: null,
+    stageId: null,
+    subjectId: null,
+  });
+  const { run } = useAdminAction();
+  const [formOpen, setFormOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<AdminQuestion | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AdminQuestion | null>(null);
 
-  const categories = useQuery({ queryKey: ['admin', 'categories'], queryFn: adminContentApi.listCategories });
-  const stages = useQuery({ queryKey: ['admin', 'stages', catId], queryFn: () => adminContentApi.listStages(catId), enabled: !!catId });
-  const subjects = useQuery({ queryKey: ['admin', 'subjtree', stageId], queryFn: () => adminContentApi.getSubjectTree(stageId), enabled: !!stageId });
+  const stageId = scope.stageId;
+  const subjectId = scope.subjectId;
+
   const questions = useQuery({
-    queryKey: ['admin', 'questions', stageId, subjectId],
-    queryFn: () => questionsApi.adminList(stageId, subjectId || undefined),
-    enabled: !!stageId,
+    queryKey: ['admin', 'questions', stageId, subjectId ?? null],
+    queryFn: () => questionsApi.adminList(stageId as string, subjectId ?? undefined),
+    enabled: Boolean(stageId),
   });
 
-  const subjectOptions = subjects.data ? flatten(subjects.data) : [];
-
-  async function run(fn: () => Promise<unknown>): Promise<void> {
-    try {
-      setError('');
-      await fn();
-      await qc.invalidateQueries({ queryKey: ['admin', 'questions', stageId] });
-    } catch (e) {
-      setError(errorMessage(e));
-    }
-  }
+  const invalidate: unknown[][] = [['admin', 'questions', stageId]];
 
   return (
-    <div className="space-y-6">
-      <h1 className="font-display text-xl font-semibold tracking-tight">Question Bank</h1>
-      <Alert>{error}</Alert>
+    <>
+      <PageHeader
+        breadcrumbs={[{ label: 'Admin', to: '/admin' }, { label: 'Questions' }]}
+        title="Question Bank"
+        description="Author MCQ, short-answer and long-answer questions per stage and subject."
+        actions={
+          <Button
+            leftIcon={<PlusIcon size={16} />}
+            disabled={!stageId}
+            onClick={() => setFormOpen(true)}
+          >
+            New question
+          </Button>
+        }
+      />
 
-      <Card className="p-4">
-        <span className="text-xs font-medium text-muted">Scope</span>
-        <div className="mt-1.5 flex flex-wrap gap-2">
-          <Select value={catId} onChange={(e) => { setCatId(e.target.value); setStageId(''); setSubjectId(''); }} className="w-40">
-            <option value="">Exam</option>
-            {categories.data?.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
-          </Select>
-          <Select value={stageId} onChange={(e) => { setStageId(e.target.value); setSubjectId(''); }} disabled={!catId} className="w-40">
-            <option value="">Stage</option>
-            {stages.data?.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
-          </Select>
-          <Select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} disabled={!stageId} className="w-48">
-            <option value="">All subjects</option>
-            {subjectOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-          </Select>
-        </div>
+      <Card className="mb-4">
+        <p className="mb-2 text-sm font-semibold text-fg">Scope</p>
+        <CatalogPicker value={scope} onChange={setScope} subjectAllLabel="All subjects" />
       </Card>
 
       {!stageId ? (
-        <p className="text-sm text-muted">Pick an exam and stage to manage its questions.</p>
-      ) : (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Card className="p-4">
-            <h2 className="font-display text-sm font-medium">Existing ({questions.data?.length ?? 0})</h2>
-            <div className="mt-3 space-y-2">
-              {questions.data?.length === 0 && <p className="text-sm text-muted">No questions yet.</p>}
-              {questions.data?.map((q) => (
-                <div key={q._id} className="rounded-lg border border-line p-3">
-                  <div className="flex items-start gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                        <Badge tone="accent">{q.type}</Badge>
-                        <Badge>{q.difficulty}</Badge>
-                        <span className="font-mono text-xs text-muted">{q.maxScore} pt</span>
-                        {!q.isActive && <span className="text-xs text-danger">hidden</span>}
-                      </p>
-                      <p className="mt-1 line-clamp-2 text-sm">{q.prompt}</p>
-                    </div>
-                  </div>
-                  <div className="mt-2 flex gap-2">
-                    <Button size="sm" variant="secondary" onClick={() => void run(() => questionsApi.update(q._id, { isActive: !q.isActive }))}>
-                      {q.isActive ? 'Unpublish' : 'Publish'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      onClick={() => { if (window.confirm('Delete this question?')) void run(() => questionsApi.remove(q._id)); }}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          <QuestionForm
-            stageId={stageId}
-            subjectId={subjectId || null}
-            onCreate={(d) => run(() => questionsApi.create(d))}
-          />
+        <EmptyState
+          icon={<PracticeIcon size={22} />}
+          title="Pick an exam and stage"
+          description="Choose a stage above to manage its questions. Narrow further by subject if you like."
+        />
+      ) : questions.isLoading ? (
+        <div className="grid gap-3 lg:grid-cols-2">
+          <Skeleton shape="block" className="h-28" />
+          <Skeleton shape="block" className="h-28" />
         </div>
+      ) : questions.isError ? (
+        <ErrorState message={errorMessage(questions.error)} onRetry={() => void questions.refetch()} />
+      ) : questions.data && questions.data.length > 0 ? (
+        <div className="grid gap-3 lg:grid-cols-2">
+          {questions.data.map((q) => (
+            <Card key={q._id} className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Badge tone="primary" size="sm">
+                  {TYPE_LABEL[q.type]}
+                </Badge>
+                <Badge tone="neutral" size="sm">
+                  {q.difficulty}
+                </Badge>
+                <Badge tone="neutral" size="sm">
+                  {q.maxScore} pt
+                </Badge>
+                {!q.isActive ? (
+                  <Badge tone="warn" size="sm">
+                    Hidden
+                  </Badge>
+                ) : null}
+              </div>
+              <p className="line-clamp-2 text-sm text-fg">{q.prompt}</p>
+              <div className="mt-auto flex flex-wrap gap-2 pt-1">
+                <Button size="sm" variant="ghost" leftIcon={<EditIcon size={16} />} onClick={() => setEditTarget(q)}>
+                  Edit
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() =>
+                    run(() => questionsApi.update(q._id, { isActive: !q.isActive }), {
+                      invalidate,
+                      success: q.isActive ? 'Question unpublished' : 'Question published',
+                    })
+                  }
+                >
+                  {q.isActive ? 'Unpublish' : 'Publish'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-danger hover:text-danger"
+                  leftIcon={<TrashIcon size={16} />}
+                  onClick={() => setDeleteTarget(q)}
+                >
+                  Delete
+                </Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          icon={<PracticeIcon size={22} />}
+          title="No questions here yet"
+          description="Add the first question for this scope."
+          action={
+            <Button size="sm" leftIcon={<PlusIcon size={16} />} onClick={() => setFormOpen(true)}>
+              New question
+            </Button>
+          }
+        />
       )}
-    </div>
+
+      {formOpen && stageId ? (
+        <QuestionForm
+          open
+          onClose={() => setFormOpen(false)}
+          stageId={stageId}
+          subjectId={subjectId}
+          invalidate={invalidate}
+        />
+      ) : null}
+      {editTarget ? (
+        <QuestionForm
+          open
+          onClose={() => setEditTarget(null)}
+          stageId={editTarget.stageId}
+          subjectId={editTarget.subjectId}
+          question={editTarget}
+          invalidate={invalidate}
+        />
+      ) : null}
+      {deleteTarget ? (
+        <ConfirmDialog
+          open
+          onClose={() => setDeleteTarget(null)}
+          title="Delete this question?"
+          description="The question and every student attempt for it are permanently removed."
+          confirmLabel="Delete question"
+          onConfirm={() => questionsApi.remove(deleteTarget._id)}
+          invalidate={invalidate}
+          success="Question deleted"
+        />
+      ) : null}
+    </>
   );
 }
 
 function QuestionForm({
+  open,
+  onClose,
   stageId,
   subjectId,
-  onCreate,
+  question,
+  invalidate,
 }: {
+  open: boolean;
+  onClose: () => void;
   stageId: string;
   subjectId: string | null;
-  onCreate: (d: CreateQuestion) => Promise<void>;
+  question?: AdminQuestion;
+  invalidate: unknown[][];
 }) {
-  const [type, setType] = useState<QuestionType>('mcq');
-  const [prompt, setPrompt] = useState('');
-  const [options, setOptions] = useState<string[]>(['', '']);
-  const [correct, setCorrect] = useState(0);
-  const [modelAnswer, setModelAnswer] = useState('');
-  const [explanation, setExplanation] = useState('');
-  const [maxScore, setMaxScore] = useState('');
-  const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
-  const [localError, setLocalError] = useState('');
+  const qc = useQueryClient();
+  const toast = useToast();
+  const formId = useId();
+  const radioName = useId();
 
-  function reset() {
-    setPrompt('');
-    setOptions(['', '']);
-    setCorrect(0);
-    setModelAnswer('');
-    setExplanation('');
-    setMaxScore('');
-  }
+  const [type, setType] = useState<QuestionType>(question?.type ?? 'mcq');
+  const [prompt, setPrompt] = useState(question?.prompt ?? '');
+  const [options, setOptions] = useState<string[]>(question?.options ?? ['', '']);
+  const [correct, setCorrect] = useState(question?.correctOption ?? 0);
+  const [modelAnswer, setModelAnswer] = useState(question?.modelAnswer ?? '');
+  const [explanation, setExplanation] = useState(question?.explanation ?? '');
+  const [maxScore, setMaxScore] = useState(question ? String(question.maxScore) : '');
+  const [difficulty, setDifficulty] = useState<Difficulty>(question?.difficulty ?? 'medium');
+  const [error, setError] = useState('');
 
-  async function submit() {
-    setLocalError('');
-    if (!prompt.trim()) return setLocalError('Enter the question prompt.');
+  const mutation = useMutation({
+    mutationFn: () => {
+      const base: CreateQuestion = {
+        stageId,
+        subjectId: subjectId ?? null,
+        type,
+        prompt: prompt.trim(),
+        explanation: explanation.trim() || undefined,
+        difficulty,
+        maxScore: maxScore ? Number(maxScore) : undefined,
+      };
+      if (type === 'mcq') {
+        base.options = options.map((o) => o.trim()).filter(Boolean);
+        base.correctOption = correct;
+      } else {
+        base.modelAnswer = modelAnswer.trim();
+      }
+      return question ? questionsApi.update(question._id, base) : questionsApi.create(base);
+    },
+    onSuccess: () => {
+      invalidate.forEach((key) => qc.invalidateQueries({ queryKey: key }));
+      toast.success(question ? 'Question updated' : 'Question created');
+      onClose();
+    },
+    onError: (err) => setError(errorMessage(err)),
+  });
 
-    const base: CreateQuestion = {
-      stageId,
-      subjectId,
-      type,
-      prompt: prompt.trim(),
-      explanation: explanation.trim() || undefined,
-      difficulty,
-      maxScore: maxScore ? Number(maxScore) : undefined,
-    };
-
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!prompt.trim()) {
+      setError('Enter the question prompt.');
+      return;
+    }
     if (type === 'mcq') {
       const opts = options.map((o) => o.trim()).filter(Boolean);
-      if (opts.length < 2) return setLocalError('Add at least 2 non-empty options.');
-      if (correct >= opts.length) return setLocalError('Pick which option is correct.');
-      base.options = opts;
-      base.correctOption = correct;
-    } else {
-      if (!modelAnswer.trim()) return setLocalError('A model answer is required for written questions.');
-      base.modelAnswer = modelAnswer.trim();
+      if (opts.length < 2) {
+        setError('Add at least two non-empty options.');
+        return;
+      }
+      if (correct >= opts.length) {
+        setError('Select which option is correct.');
+        return;
+      }
+    } else if (!modelAnswer.trim()) {
+      setError('A model answer is required for written questions.');
+      return;
     }
-
-    await onCreate(base);
-    reset();
+    mutation.mutate();
   }
 
   return (
-    <Card className="space-y-3 p-4">
-      <h2 className="font-display text-sm font-medium">New question</h2>
-      {localError && <Alert>{localError}</Alert>}
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="lg"
+      title={question ? 'Edit question' : 'New question'}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={mutation.isPending}>
+            Cancel
+          </Button>
+          <Button type="submit" form={formId} loading={mutation.isPending}>
+            {question ? 'Save changes' : 'Add question'}
+          </Button>
+        </>
+      }
+    >
+      <form id={formId} onSubmit={submit} className="space-y-4">
+        {error ? <Alert tone="danger">{error}</Alert> : null}
 
-      <div className="flex gap-2">
-        {(['mcq', 'short', 'long'] as const).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setType(t)}
-            className={`rounded-md border px-3 py-1.5 text-xs font-medium ${
-              type === t ? 'border-accent bg-accent-soft text-accent' : 'border-line text-muted hover:text-ink'
-            }`}
-          >
-            {t === 'mcq' ? 'Multiple choice' : t === 'short' ? 'Short answer' : 'Long answer'}
-          </button>
-        ))}
-      </div>
-
-      <Textarea label="Prompt" rows={3} value={prompt} onChange={(e) => setPrompt(e.target.value)} />
-
-      {type === 'mcq' ? (
-        <div className="space-y-2">
-          <span className="text-xs font-medium text-muted">Options (select the correct one)</span>
-          {options.map((opt, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <input type="radio" name="correct" checked={correct === i} onChange={() => setCorrect(i)} />
-              <Input
-                value={opt}
-                placeholder={`Option ${i + 1}`}
-                onChange={(e) => setOptions((o) => o.map((v, j) => (j === i ? e.target.value : v)))}
-                className="flex-1"
-              />
-              {options.length > 2 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOptions((o) => o.filter((_, j) => j !== i));
-                    setCorrect((c) => (c >= i && c > 0 ? c - 1 : c));
-                  }}
-                  className="text-muted hover:text-danger"
-                  aria-label="Remove option"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-          ))}
-          {options.length < 8 && (
-            <Button size="sm" variant="ghost" onClick={() => setOptions((o) => [...o, ''])}>
-              + Add option
-            </Button>
-          )}
+        <div className="space-y-1.5">
+          <span className="text-sm font-medium text-fg">Type</span>
+          <SegmentedControl
+            aria-label="Question type"
+            fullWidth
+            value={type}
+            onChange={(v) => setType(v as QuestionType)}
+            options={[
+              { value: 'mcq', label: 'MCQ' },
+              { value: 'short', label: 'Short' },
+              { value: 'long', label: 'Long' },
+            ]}
+          />
         </div>
-      ) : (
+
+        <Textarea label="Prompt" rows={3} value={prompt} onChange={(e) => setPrompt(e.target.value)} />
+
+        {type === 'mcq' ? (
+          <div className="space-y-2">
+            <span className="text-sm font-medium text-fg">Options — select the correct one</span>
+            {options.map((opt, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <label className="flex h-11 w-9 shrink-0 cursor-pointer items-center justify-center">
+                  <input
+                    type="radio"
+                    name={radioName}
+                    checked={correct === i}
+                    onChange={() => setCorrect(i)}
+                    className="sr-only"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      'flex h-5 w-5 items-center justify-center rounded-full border-2 transition-colors',
+                      correct === i ? 'border-primary bg-primary text-primary-fg' : 'border-line-strong',
+                    )}
+                  >
+                    {correct === i ? <CheckIcon size={13} /> : null}
+                  </span>
+                </label>
+                <Input
+                  value={opt}
+                  placeholder={`Option ${i + 1}`}
+                  onChange={(e) =>
+                    setOptions((prev) => prev.map((v, j) => (j === i ? e.target.value : v)))
+                  }
+                  wrapperClassName="flex-1"
+                />
+                {options.length > 2 ? (
+                  <IconButton
+                    aria-label={`Remove option ${i + 1}`}
+                    icon={<CloseIcon size={16} />}
+                    variant="ghost"
+                    onClick={() => {
+                      setOptions((prev) => prev.filter((_, j) => j !== i));
+                      setCorrect((c) => (c >= i && c > 0 ? c - 1 : c));
+                    }}
+                  />
+                ) : null}
+              </div>
+            ))}
+            {options.length < 8 ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                leftIcon={<PlusIcon size={16} />}
+                onClick={() => setOptions((prev) => [...prev, ''])}
+              >
+                Add option
+              </Button>
+            ) : null}
+          </div>
+        ) : (
+          <Textarea
+            label="Model answer (used for grading)"
+            rows={4}
+            value={modelAnswer}
+            onChange={(e) => setModelAnswer(e.target.value)}
+          />
+        )}
+
         <Textarea
-          label="Model answer (used for grading)"
-          rows={4}
-          value={modelAnswer}
-          onChange={(e) => setModelAnswer(e.target.value)}
+          label="Explanation (shown after answering, optional)"
+          rows={2}
+          value={explanation}
+          onChange={(e) => setExplanation(e.target.value)}
         />
-      )}
 
-      <Textarea label="Explanation (shown after answering, optional)" rows={2} value={explanation} onChange={(e) => setExplanation(e.target.value)} />
-
-      <div className="flex gap-2">
-        <Input
-          label="Max score"
-          inputMode="numeric"
-          placeholder={type === 'mcq' ? '1' : '10'}
-          value={maxScore}
-          onChange={(e) => setMaxScore(e.target.value)}
-          className="w-28"
-        />
-        <Select label="Difficulty" value={difficulty} onChange={(e) => setDifficulty(e.target.value as 'easy' | 'medium' | 'hard')} className="w-32">
-          <option value="easy">Easy</option>
-          <option value="medium">Medium</option>
-          <option value="hard">Hard</option>
-        </Select>
-      </div>
-
-      <Button onClick={() => void submit()}>Add question</Button>
-    </Card>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Input
+            label="Max score"
+            inputMode="numeric"
+            placeholder={type === 'mcq' ? '1' : '10'}
+            value={maxScore}
+            onChange={(e) => setMaxScore(e.target.value)}
+          />
+          <div className="space-y-1.5">
+            <span className="text-sm font-medium text-fg">Difficulty</span>
+            <SegmentedControl
+              aria-label="Difficulty"
+              fullWidth
+              value={difficulty}
+              onChange={(v) => setDifficulty(v as Difficulty)}
+              options={[
+                { value: 'easy', label: 'Easy' },
+                { value: 'medium', label: 'Medium' },
+                { value: 'hard', label: 'Hard' },
+              ]}
+            />
+          </div>
+        </div>
+      </form>
+    </Modal>
   );
-}
-
-function flatten(nodes: SubjectNode[], depth = 0): { id: string; label: string }[] {
-  const out: { id: string; label: string }[] = [];
-  for (const n of nodes) {
-    out.push({ id: n.id, label: `${'— '.repeat(depth)}${n.name}` });
-    out.push(...flatten(n.children, depth + 1));
-  }
-  return out;
 }
