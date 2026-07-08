@@ -1,10 +1,18 @@
 import { HttpError } from '../../middleware/error.js';
 import { StageModel } from '../content/stage.model.js';
 import { SubjectModel } from '../content/subject.model.js';
+import { ExamCategoryModel } from '../content/exam-category.model.js';
 import { gradeWritten } from '../../services/ai-grade.js';
+import { generateQuestions, generateExplanation } from '../../services/ai-questions.js';
 import { QuestionModel, type Question } from './question.model.js';
 import { QuestionAttemptModel } from './attempt.model.js';
-import type { CreateQuestionInput, SubmitAnswerInput, UpdateQuestionInput } from './question.validation.js';
+import type {
+  CreateQuestionInput,
+  ExplainInput,
+  GenerateInput,
+  SubmitAnswerInput,
+  UpdateQuestionInput,
+} from './question.validation.js';
 
 const byOrder = { order: 1, createdAt: 1 } as const;
 
@@ -49,6 +57,47 @@ export async function deleteQuestion(id: string): Promise<void> {
   const doc = await QuestionModel.findByIdAndDelete(id);
   if (!doc) throw new HttpError(404, 'Question not found');
   await QuestionAttemptModel.deleteMany({ questionId: id });
+}
+
+// ── AI: draft generation, explanation, bulk-save ──────────────────
+
+/** Generate exam-quality draft questions for the given scope (admin reviews before saving). */
+export async function generateDrafts(input: GenerateInput) {
+  await assertScope(input.stageId, input.subjectId ?? undefined);
+  const stage = await StageModel.findById(input.stageId).select('name examCategoryId').lean();
+  if (!stage) throw new HttpError(400, 'Invalid stageId');
+  const exam = await ExamCategoryModel.findById(stage.examCategoryId).select('name').lean();
+  let subjectName: string | undefined;
+  if (input.subjectId) {
+    const s = await SubjectModel.findById(input.subjectId).select('name').lean();
+    subjectName = s?.name;
+  }
+  const drafts = await generateQuestions({
+    examName: exam?.name ?? 'the exam',
+    stageName: stage.name,
+    subjectName,
+    topic: input.topic,
+    type: input.type,
+    difficulty: input.difficulty,
+    count: input.count,
+  });
+  return { drafts };
+}
+
+export async function explainQuestion(input: ExplainInput) {
+  return { explanation: await generateExplanation(input) };
+}
+
+/** Persist reviewed AI drafts (each already validated by createQuestionSchema). */
+export async function bulkCreateQuestions(items: CreateQuestionInput[], createdBy: string) {
+  let created = 0;
+  for (const data of items) {
+    await assertScope(data.stageId, data.subjectId);
+    const maxScore = data.maxScore ?? (data.type === 'mcq' ? 1 : 10);
+    await QuestionModel.create({ ...data, maxScore, createdBy });
+    created += 1;
+  }
+  return { created };
 }
 
 // ── Student-facing ────────────────────────────────────────────────

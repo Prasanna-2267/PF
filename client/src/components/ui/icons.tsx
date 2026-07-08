@@ -344,3 +344,9 @@ export const QuoteIcon = (p: IconProps) => (
     <path d="M8 7H5a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h2v3M18 7h-3a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h2v3" />
   </Svg>
 );
+export const SparklesIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9z" />
+    <path d="M18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17z" />
+  </Svg>
+);

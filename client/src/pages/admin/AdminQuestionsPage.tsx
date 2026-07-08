@@ -19,6 +19,7 @@ import {
   EditIcon,
   PlusIcon,
   PracticeIcon,
+  SparklesIcon,
   TrashIcon,
 } from '../../components/ui';
 import { PageHeader } from '../../components/layout';
@@ -29,6 +30,7 @@ import {
   type AdminQuestion,
   type CreateQuestion,
   type Difficulty,
+  type DraftQuestion,
   type QuestionType,
 } from '../../features/questions/questions.api';
 import { errorMessage } from '../../features/auth/auth.api';
@@ -48,6 +50,7 @@ export function AdminQuestionsPage() {
   });
   const { run } = useAdminAction();
   const [formOpen, setFormOpen] = useState(false);
+  const [genOpen, setGenOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<AdminQuestion | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminQuestion | null>(null);
 
@@ -69,13 +72,19 @@ export function AdminQuestionsPage() {
         title="Question Bank"
         description="Author MCQ, short-answer and long-answer questions per stage and subject."
         actions={
-          <Button
-            leftIcon={<PlusIcon size={16} />}
-            disabled={!stageId}
-            onClick={() => setFormOpen(true)}
-          >
-            New question
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              leftIcon={<SparklesIcon size={16} />}
+              disabled={!stageId}
+              onClick={() => setGenOpen(true)}
+            >
+              Generate with AI
+            </Button>
+            <Button leftIcon={<PlusIcon size={16} />} disabled={!stageId} onClick={() => setFormOpen(true)}>
+              New question
+            </Button>
+          </div>
         }
       />
 
@@ -160,6 +169,15 @@ export function AdminQuestionsPage() {
         />
       )}
 
+      {genOpen && stageId ? (
+        <GenerateModal
+          open
+          onClose={() => setGenOpen(false)}
+          stageId={stageId}
+          subjectId={subjectId}
+          invalidate={invalidate}
+        />
+      ) : null}
       {formOpen && stageId ? (
         <QuestionForm
           open
@@ -248,6 +266,28 @@ function QuestionForm({
       invalidate.forEach((key) => qc.invalidateQueries({ queryKey: key }));
       toast.success(question ? 'Question updated' : 'Question created');
       onClose();
+    },
+    onError: (err) => setError(errorMessage(err)),
+  });
+
+  const cleanOptions = options.map((o) => o.trim()).filter(Boolean);
+  const canExplain =
+    prompt.trim().length > 0 &&
+    (type === 'mcq'
+      ? cleanOptions.length >= 2 && correct < cleanOptions.length
+      : modelAnswer.trim().length > 0);
+  const explainM = useMutation({
+    mutationFn: () =>
+      questionsApi.explain({
+        type,
+        prompt: prompt.trim(),
+        options: type === 'mcq' ? cleanOptions : undefined,
+        correctOption: type === 'mcq' ? correct : undefined,
+        modelAnswer: type !== 'mcq' ? modelAnswer.trim() : undefined,
+      }),
+    onSuccess: (ex) => {
+      setExplanation(ex);
+      setError('');
     },
     onError: (err) => setError(errorMessage(err)),
   });
@@ -376,12 +416,27 @@ function QuestionForm({
           />
         )}
 
-        <Textarea
-          label="Explanation (shown after answering, optional)"
-          rows={2}
-          value={explanation}
-          onChange={(e) => setExplanation(e.target.value)}
-        />
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-medium text-fg">Explanation (shown after answering, optional)</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              leftIcon={<SparklesIcon size={14} />}
+              loading={explainM.isPending}
+              disabled={!canExplain}
+              onClick={() => explainM.mutate()}
+            >
+              Generate
+            </Button>
+          </div>
+          <Textarea
+            rows={2}
+            value={explanation}
+            onChange={(e) => setExplanation(e.target.value)}
+          />
+        </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
           <Input
@@ -407,6 +462,248 @@ function QuestionForm({
           </div>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+const GEN_TYPES = [
+  { value: 'mcq', label: 'MCQ' },
+  { value: 'short', label: 'Short' },
+  { value: 'long', label: 'Long' },
+  { value: 'mixed', label: 'Mixed' },
+];
+const GEN_DIFFS = [
+  { value: 'easy', label: 'Easy' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'hard', label: 'Hard' },
+  { value: 'mixed', label: 'Mixed' },
+];
+
+/** AI drafts exam questions for the scope; admin reviews, deselects, then bulk-saves. */
+function GenerateModal({
+  open,
+  onClose,
+  stageId,
+  subjectId,
+  invalidate,
+}: {
+  open: boolean;
+  onClose: () => void;
+  stageId: string;
+  subjectId: string | null;
+  invalidate: unknown[][];
+}) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [type, setType] = useState<QuestionType | 'mixed'>('mcq');
+  const [difficulty, setDifficulty] = useState<Difficulty | 'mixed'>('medium');
+  const [count, setCount] = useState('5');
+  const [topic, setTopic] = useState('');
+  const [drafts, setDrafts] = useState<DraftQuestion[] | null>(null);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [error, setError] = useState('');
+
+  const gen = useMutation({
+    mutationFn: () =>
+      questionsApi.generate({
+        stageId,
+        subjectId: subjectId ?? null,
+        topic: topic.trim() || undefined,
+        type,
+        difficulty,
+        count: Math.min(15, Math.max(1, Number(count) || 5)),
+      }),
+    onSuccess: (d) => {
+      setDrafts(d);
+      setSelected(new Set(d.map((_, i) => i)));
+      setError(d.length ? '' : 'The AI returned no usable questions — try again or refine the topic.');
+    },
+    onError: (err) => setError(errorMessage(err)),
+  });
+
+  const save = useMutation({
+    mutationFn: () => {
+      const chosen = (drafts ?? [])
+        .filter((_, i) => selected.has(i))
+        .map<CreateQuestion>((d) => ({
+          stageId,
+          subjectId: subjectId ?? null,
+          type: d.type,
+          prompt: d.prompt,
+          options: d.options,
+          correctOption: d.correctOption,
+          modelAnswer: d.modelAnswer,
+          explanation: d.explanation,
+          difficulty: d.difficulty,
+        }));
+      return questionsApi.bulkCreate(chosen);
+    },
+    onSuccess: (n) => {
+      invalidate.forEach((k) => qc.invalidateQueries({ queryKey: k }));
+      toast.success(`${n} question${n === 1 ? '' : 's'} added`);
+      onClose();
+    },
+    onError: (err) => setError(errorMessage(err)),
+  });
+
+  const list = drafts ?? [];
+  const reviewing = drafts !== null && list.length > 0;
+  const toggle = (i: number) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="lg"
+      title="Generate questions with AI"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={gen.isPending || save.isPending}>
+            Cancel
+          </Button>
+          {reviewing ? (
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => gen.mutate()}
+                loading={gen.isPending}
+                disabled={save.isPending}
+              >
+                Regenerate
+              </Button>
+              <Button onClick={() => save.mutate()} loading={save.isPending} disabled={selected.size === 0}>
+                Save {selected.size} question{selected.size === 1 ? '' : 's'}
+              </Button>
+            </>
+          ) : (
+            <Button onClick={() => gen.mutate()} loading={gen.isPending} leftIcon={<SparklesIcon size={16} />}>
+              Generate
+            </Button>
+          )}
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {error ? <Alert tone="danger">{error}</Alert> : null}
+
+        {!reviewing ? (
+          <>
+            <p className="text-sm text-muted">
+              Draft exam questions for the selected stage/subject. Nothing is saved until you review
+              and confirm.
+            </p>
+            <div className="space-y-1.5">
+              <span className="text-sm font-medium text-fg">Type</span>
+              <SegmentedControl
+                aria-label="Type"
+                fullWidth
+                value={type}
+                onChange={(v) => setType(v as QuestionType | 'mixed')}
+                options={GEN_TYPES}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <span className="text-sm font-medium text-fg">Difficulty</span>
+              <SegmentedControl
+                aria-label="Difficulty"
+                fullWidth
+                value={difficulty}
+                onChange={(v) => setDifficulty(v as Difficulty | 'mixed')}
+                options={GEN_DIFFS}
+              />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                label="How many"
+                inputMode="numeric"
+                value={count}
+                hint="1–15"
+                onChange={(e) => setCount(e.target.value)}
+              />
+              <Input
+                label="Topic (optional)"
+                value={topic}
+                maxLength={200}
+                placeholder="e.g. Depreciation"
+                onChange={(e) => setTopic(e.target.value)}
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted">Review the drafts — untick any you don't want.</p>
+              <span className="text-xs font-semibold text-muted">
+                {selected.size}/{list.length} selected
+              </span>
+            </div>
+            <div className="max-h-[52vh] space-y-2 overflow-y-auto pr-1">
+              {list.map((d, i) => (
+                <label
+                  key={i}
+                  className={cn(
+                    'block cursor-pointer rounded-card border p-3 transition-colors',
+                    selected.has(i) ? 'border-primary/50 bg-primary-soft/30' : 'border-line',
+                  )}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(i)}
+                      onChange={() => toggle(i)}
+                      className="mt-1 h-4 w-4 shrink-0 accent-primary"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex flex-wrap gap-1.5">
+                        <Badge tone="primary" size="sm">
+                          {TYPE_LABEL[d.type]}
+                        </Badge>
+                        {d.difficulty ? (
+                          <Badge tone="neutral" size="sm">
+                            {d.difficulty}
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <p className="text-sm font-medium text-fg">{d.prompt}</p>
+                      {d.type === 'mcq' && d.options ? (
+                        <ul className="mt-1.5 space-y-0.5">
+                          {d.options.map((o, oi) => (
+                            <li
+                              key={oi}
+                              className={cn(
+                                'text-xs',
+                                oi === d.correctOption ? 'font-semibold text-success-fg' : 'text-muted',
+                              )}
+                            >
+                              {oi === d.correctOption ? '✓ ' : '• '}
+                              {o}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : d.modelAnswer ? (
+                        <p className="mt-1.5 line-clamp-3 text-xs text-muted">
+                          <span className="font-semibold">Model:</span> {d.modelAnswer}
+                        </p>
+                      ) : null}
+                      {d.explanation ? (
+                        <p className="mt-1 line-clamp-2 text-xs text-muted/80">
+                          <span className="font-semibold">Why:</span> {d.explanation}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
     </Modal>
   );
 }

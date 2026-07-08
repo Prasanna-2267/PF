@@ -63,6 +63,25 @@ export type CreateQuestion = {
   difficulty?: Difficulty;
 };
 
+export type DraftQuestion = {
+  type: QuestionType;
+  prompt: string;
+  options?: string[];
+  correctOption?: number;
+  modelAnswer?: string;
+  explanation?: string;
+  difficulty?: Difficulty;
+};
+
+export type GenerateInput = {
+  stageId: string;
+  subjectId?: string | null;
+  topic?: string;
+  type: QuestionType | 'mixed';
+  difficulty: Difficulty | 'mixed';
+  count: number;
+};
+
 export const questionsApi = {
   // student
   list: (stageId: string, subjectId?: string) =>
@@ -83,4 +102,18 @@ export const questionsApi = {
   update: (id: string, d: Partial<CreateQuestion> & { isActive?: boolean }) =>
     api.patch(`/admin/questions/${id}`, d).then((r) => r.data),
   remove: (id: string) => api.delete(`/admin/questions/${id}`).then((r) => r.data),
+
+  // admin AI
+  generate: (input: GenerateInput) =>
+    api.post<{ drafts: DraftQuestion[] }>('/admin/questions/generate', input).then((r) => r.data.drafts),
+  explain: (input: {
+    type: QuestionType;
+    prompt: string;
+    options?: string[];
+    correctOption?: number;
+    modelAnswer?: string;
+  }) =>
+    api.post<{ explanation: string }>('/admin/questions/explain', input).then((r) => r.data.explanation),
+  bulkCreate: (questions: CreateQuestion[]) =>
+    api.post<{ created: number }>('/admin/questions/bulk', { questions }).then((r) => r.data.created),
 };

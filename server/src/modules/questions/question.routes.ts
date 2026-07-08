@@ -22,10 +22,22 @@ questionsRouter.get('/', asyncHandler(questions.listForStudent));
 questionsRouter.get('/stats', asyncHandler(questions.stats));
 questionsRouter.post('/:id/answer', answerLimiter, asyncHandler(questions.answer));
 
+// Throttle the paid AI endpoints (generation/explanation) per admin.
+const aiLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.auth?.sub ?? 'anon',
+});
+
 /** Admin-only, mounted at /api/admin/questions. */
 export const adminQuestionsRouter = Router();
 adminQuestionsRouter.use(requireAuth, requireRole('admin', 'superadmin'), auditMutations('questions'));
 adminQuestionsRouter.get('/', asyncHandler(questions.listAdmin));
 adminQuestionsRouter.post('/', asyncHandler(questions.create));
+adminQuestionsRouter.post('/generate', aiLimiter, asyncHandler(questions.generate));
+adminQuestionsRouter.post('/explain', aiLimiter, asyncHandler(questions.explain));
+adminQuestionsRouter.post('/bulk', asyncHandler(questions.bulkCreate));
 adminQuestionsRouter.patch('/:id', asyncHandler(questions.update));
 adminQuestionsRouter.delete('/:id', asyncHandler(questions.remove));

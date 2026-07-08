@@ -1,6 +1,13 @@
 import type { RequestHandler } from 'express';
 import * as questions from './question.service.js';
-import { createQuestionSchema, submitAnswerSchema, updateQuestionSchema } from './question.validation.js';
+import {
+  bulkCreateSchema,
+  createQuestionSchema,
+  explainSchema,
+  generateSchema,
+  submitAnswerSchema,
+  updateQuestionSchema,
+} from './question.validation.js';
 
 // ── Admin ──
 export const listAdmin: RequestHandler = async (req, res) => {
@@ -25,6 +32,20 @@ export const update: RequestHandler = async (req, res) => {
 export const remove: RequestHandler = async (req, res) => {
   await questions.deleteQuestion(req.params.id!);
   res.json({ ok: true });
+};
+
+// ── Admin AI ──
+export const generate: RequestHandler = async (req, res) => {
+  res.json(await questions.generateDrafts(generateSchema.parse(req.body)));
+};
+
+export const explain: RequestHandler = async (req, res) => {
+  res.json(await questions.explainQuestion(explainSchema.parse(req.body)));
+};
+
+export const bulkCreate: RequestHandler = async (req, res) => {
+  const { questions: items } = bulkCreateSchema.parse(req.body);
+  res.status(201).json(await questions.bulkCreateQuestions(items, req.auth!.sub));
 };
 
 // ── Student ──

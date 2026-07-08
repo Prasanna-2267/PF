@@ -60,6 +60,31 @@ export const submitAnswerSchema = z
     message: 'Provide selectedOption (MCQ) or answerText (written)',
   });
 
+// ── AI: generate drafts / explanation / bulk-save reviewed drafts ──
+export const generateSchema = z.object({
+  stageId: objectId,
+  subjectId: objectId.nullable().optional(),
+  topic: z.string().max(200).optional(),
+  type: z.enum(['mcq', 'short', 'long', 'mixed']),
+  difficulty: z.enum(['easy', 'medium', 'hard', 'mixed']),
+  count: z.number().int().min(1).max(15),
+});
+
+export const explainSchema = z.object({
+  type: z.enum(QUESTION_TYPES),
+  prompt: z.string().min(1).max(4000),
+  options: z.array(z.string().max(500)).max(8).optional(),
+  correctOption: z.number().int().min(0).optional(),
+  modelAnswer: z.string().max(8000).optional(),
+});
+
+/** Admin bulk-saves reviewed AI drafts — each item is a full, validated question. */
+export const bulkCreateSchema = z.object({
+  questions: z.array(createQuestionSchema).min(1).max(30),
+});
+
+export type GenerateInput = z.infer<typeof generateSchema>;
+export type ExplainInput = z.infer<typeof explainSchema>;
 export type CreateQuestionInput = z.infer<typeof createQuestionSchema>;
 export type UpdateQuestionInput = z.infer<typeof updateQuestionSchema>;
 export type SubmitAnswerInput = z.infer<typeof submitAnswerSchema>;
