@@ -24,7 +24,28 @@ export function createApp(): Express {
   // Behind a reverse proxy in prod: makes req.ip and Secure cookies work.
   if (isProd) app.set('trust proxy', 1);
 
-  app.use(helmet());
+  // Helmet with a CSP that permits the app's external integrations. Without
+  // these, the default `*-src 'self'` blocks Google Identity Services and
+  // Razorpay Checkout in production (the SPA is served by Express here, so the
+  // CSP applies to the page — unlike dev, where Vite serves it).
+  const GOOGLE = 'https://accounts.google.com';
+  const RAZORPAY = ['https://checkout.razorpay.com', 'https://api.razorpay.com'];
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        useDefaults: true,
+        directives: {
+          scriptSrc: ["'self'", GOOGLE, 'https://checkout.razorpay.com'],
+          frameSrc: ["'self'", GOOGLE, ...RAZORPAY], // GIS button/One-Tap + Razorpay iframes
+          connectSrc: ["'self'", GOOGLE, ...RAZORPAY, 'https://lumberjack.razorpay.com'],
+          imgSrc: ["'self'", 'data:', 'https://*.googleusercontent.com', GOOGLE], // Google avatars
+          styleSrc: ["'self'", "'unsafe-inline'", 'https:'], // React inline style attrs
+        },
+      },
+      // Let the Google/Razorpay sign-in/payment popups communicate with the opener.
+      crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+    }),
+  );
   app.use(cors({ origin: env.CLIENT_ORIGIN, credentials: true }));
   app.use(
     express.json({
