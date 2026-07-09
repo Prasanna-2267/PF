@@ -5,8 +5,10 @@ import { HttpError } from '../../middleware/error.js';
 import { OrderModel } from '../commerce/order.model.js';
 import { PackageModel } from '../commerce/package.model.js';
 import { storage } from '../../services/storage.js';
-import { renderWatermarkedPage } from '../../services/pdf-render.js';
+import { renderBasePage, applyWatermark, basePageKey } from '../../services/pdf-render.js';
 import { getViewSession, issueViewSession } from '../../services/view-keys.js';
+import { createSemaphore } from '../../lib/semaphore.js';
+import { env } from '../../config/env.js';
 import { UserModel, type UserDoc } from '../auth/user.model.js';
 import { SubjectModel } from '../content/subject.model.js';
 import { getOwnedLessonIds, hasLessonAccess } from '../commerce/commerce.entitlement.js';
@@ -191,7 +193,16 @@ export async function deleteLesson(id: string): Promise<void> {
       'Students have already purchased this lesson. Unpublish it to remove it from the catalogue while keeping their access, or refund those orders first.',
     );
   }
-  if (lesson.type === 'pdf' && lesson.fileKey) await storage.delete(lesson.fileKey);
+  if (lesson.type === 'pdf' && lesson.fileKey) {
+    const { fileKey } = lesson;
+    await storage.delete(fileKey);
+    // Best-effort, parallel cleanup of cached page renders (orphans are harmless).
+    await Promise.all(
+      Array.from({ length: lesson.pageCount ?? 0 }, (_, i) =>
+        storage.delete(basePageKey(fileKey, i + 1)).catch(() => undefined),
+      ),
+    );
+  }
   await lesson.deleteOne();
   await ProgressModel.deleteMany({ lessonId: id });
 }
@@ -340,6 +351,49 @@ export async function getLessonForView(userId: string, lessonId: string, meta: R
   };
 }
 
+// Bound concurrent renders so a burst of page views can't exhaust memory.
+const renderSlot = createSemaphore(env.PDF_RENDER_CONCURRENCY ?? 2);
+
+async function tryGetCache(key: string): Promise<Buffer | null> {
+  try {
+    return await storage.get(key);
+  } catch {
+    return null; // cache miss (or unreadable) — caller re-renders
+  }
+}
+
+/**
+ * Produce a watermarked page PNG. The expensive BASE render (opening + decoding
+ * the whole PDF) is cached per file+page in storage; only the cheap per-user
+ * watermark is re-applied on each view. All heavy work runs inside a concurrency
+ * slot. Any cache miss/failure transparently falls back to a full render, so
+ * behaviour is identical to before — just faster and lighter on memory.
+ */
+async function renderPageImage(fileKey: string, pageNumber: number, lines: string[]): Promise<Buffer> {
+  const cacheKey = basePageKey(fileKey, pageNumber);
+
+  // Everything heavy — the cache read, the MuPDF render, and the watermark — runs
+  // inside a single concurrency slot, so total in-flight memory (base-page buffers
+  // + the native render peak) is bounded by PDF_RENDER_CONCURRENCY no matter how
+  // large the burst of viewers. Queued requests hold nothing until admitted, and
+  // the first request through a cold page fills the cache for those behind it.
+  return renderSlot(async () => {
+    const cachedBase = await tryGetCache(cacheKey);
+    if (cachedBase) {
+      try {
+        return await applyWatermark(cachedBase, lines);
+      } catch {
+        // Cached base was unusable (e.g. a partial write) — drop it and re-render.
+        void storage.delete(cacheKey).catch(() => undefined);
+      }
+    }
+    const pdf = await storage.get(fileKey);
+    const base = renderBasePage(pdf, pageNumber);
+    void storage.put(cacheKey, base, 'image/png').catch(() => undefined); // best-effort cache
+    return applyWatermark(base, lines);
+  });
+}
+
 export async function renderLessonPage(userId: string, lessonId: string, pageNumber: number): Promise<Buffer> {
   const lesson = await LessonModel.findById(lessonId);
   if (!lesson) throw new HttpError(404, 'Lesson not found');
@@ -354,8 +408,11 @@ export async function renderLessonPage(userId: string, lessonId: string, pageNum
   const session = getViewSession(userId, lessonId);
   if (!session) throw new HttpError(403, 'Open the lesson again', { code: 'VIEW_EXPIRED' });
 
-  const pdf = await storage.get(lesson.fileKey as string);
-  const png = await renderWatermarkedPage(pdf, pageNumber, watermarkLines(user, session.code));
+  const png = await renderPageImage(
+    lesson.fileKey as string,
+    pageNumber,
+    watermarkLines(user, session.code),
+  );
 
   // Encrypt the page (AES-256-GCM) so the Network tab only sees ciphertext.
   const iv = randomBytes(12);

@@ -25,6 +25,8 @@ const schema = z.object({
   DNS_SERVERS: z.string().optional(),
   // Local-disk storage directory (used until Cloudflare R2 is configured).
   STORAGE_DIR: z.string().optional(),
+  // Max concurrent PDF page renders (bounds memory on small instances). Default 2.
+  PDF_RENDER_CONCURRENCY: z.coerce.number().int().min(1).max(16).optional(),
   // Override for the built client directory to serve (default: ../client/dist).
   // Leave unset unless the SPA build lives somewhere non-standard.
   CLIENT_DIST_DIR: z.string().optional(),

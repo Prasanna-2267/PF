@@ -3,26 +3,55 @@ import { createCanvas, loadImage, type SKRSContext2D } from '@napi-rs/canvas';
 
 const SCALE = 2; // render at 2x for readable, screenshot-resistant resolution
 
-/**
- * Render a single PDF page to a PNG with a per-user watermark baked into the
- * pixels (not a removable overlay). The raw PDF never leaves the server.
- */
-export async function renderWatermarkedPage(
-  pdf: Buffer,
-  pageNumber: number, // 1-based
-  watermarkLines: string[],
-): Promise<Buffer> {
-  const doc = mupdf.Document.openDocument(new Uint8Array(pdf), 'application/pdf');
-  const page = doc.loadPage(pageNumber - 1);
-  const pixmap = page.toPixmap(mupdf.Matrix.scale(SCALE, SCALE), mupdf.ColorSpace.DeviceRGB, false);
-  const basePng = Buffer.from(pixmap.asPNG());
+/** Best-effort free of a native MuPDF handle — releases WASM memory promptly. */
+function free(obj: { destroy?: () => void } | null | undefined): void {
+  try {
+    obj?.destroy?.();
+  } catch {
+    // freeing is best-effort; never let cleanup throw
+  }
+}
 
+/** Storage key for a page's cached BASE render (no watermark). Namespaced by the
+ *  immutable per-upload fileKey + scale, so it can never serve a stale page. */
+export function basePageKey(fileKey: string, pageNumber: number): string {
+  return `rendered/${fileKey}.p${pageNumber}@${SCALE}x.png`;
+}
+
+/**
+ * Render a single PDF page to a PNG at 2x — NO watermark. This is the expensive
+ * step (opens + decodes the whole PDF), so callers cache the result per file+page.
+ * MuPDF handles are freed in reverse order so native memory doesn't accumulate.
+ */
+export function renderBasePage(pdf: Buffer, pageNumber: number): Buffer {
+  const doc = mupdf.Document.openDocument(new Uint8Array(pdf), 'application/pdf');
+  try {
+    const page = doc.loadPage(pageNumber - 1);
+    try {
+      const pixmap = page.toPixmap(mupdf.Matrix.scale(SCALE, SCALE), mupdf.ColorSpace.DeviceRGB, false);
+      try {
+        return Buffer.from(pixmap.asPNG());
+      } finally {
+        free(pixmap);
+      }
+    } finally {
+      free(page);
+    }
+  } finally {
+    free(doc);
+  }
+}
+
+/**
+ * Bake a per-user watermark into a base page PNG. Cheap relative to rendering,
+ * and safe to run on a shared cached base since the watermark is applied here.
+ */
+export async function applyWatermark(basePng: Buffer, watermarkLines: string[]): Promise<Buffer> {
   const img = await loadImage(basePng);
   const canvas = createCanvas(img.width, img.height);
   const ctx = canvas.getContext('2d');
   ctx.drawImage(img, 0, 0);
   drawWatermark(ctx, img.width, img.height, watermarkLines);
-
   return canvas.toBuffer('image/png');
 }
 
