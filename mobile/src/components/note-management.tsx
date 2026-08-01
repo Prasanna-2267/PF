@@ -42,7 +42,7 @@ export function NoteActionSheet({ lesson, visible, onClose }: { lesson: Lesson; 
   const toggleRead = useLessonReaderStore((state) => state.toggleRead);
   const toggleFavourite = useLessonReaderStore((state) => state.toggleFavourite);
   const revise = useLessonReaderStore((state) => state.revise);
-  return <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
+  return <Modal transparent visible={visible} animationType="none" onRequestClose={onClose}>
     <View style={styles.modalRoot}><Pressable style={styles.scrim} onPress={onClose} /><View style={[styles.sheet, { backgroundColor: theme.surface }]}>
       <View style={[styles.handle, { backgroundColor: theme.line }]} />
       <View style={styles.sheetHeader}><View style={styles.sheetHeading}><Text numberOfLines={1} style={[styles.sheetTitle, { color: theme.fg }]}>{lesson.title}</Text><Text style={[styles.sheetSubtitle, { color: theme.muted }]}>Study actions for this note</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close note actions" onPress={onClose} style={[styles.close, { backgroundColor: theme.sunken }]}><X color={theme.muted} size={18} /></Pressable></View>

@@ -9,7 +9,7 @@ export const themes = {
     canvas: '#F7F8FB', surface: '#FFFFFF', elevated: '#FFFFFF', sunken: '#EEF0F5', rail: '#FFFFFF', line: '#E4E7EE', lineStrong: '#D4D9E4', fg: '#11131A', muted: '#5F6677', faint: '#8B93A3', primary: brand.indigo600, primaryStrong: brand.indigo700, primaryFg: '#FFFFFF', primarySoft: '#E9ECF8', gold: brand.gold500, goldStrong: brand.gold700, goldSoft: '#F4EAD8', success: '#238A5A', successSoft: '#EAF7F0', danger: '#C2414B', dangerSoft: '#FDEDEF', warn: '#B7791F', warnSoft: '#FFF7E5',
   },
   dark: {
-    canvas: '#0D1226', surface: '#1B2342', elevated: '#232C52', sunken: '#141B30', rail: '#151C36', line: '#303958', lineStrong: '#414C70', fg: '#F5F6FA', muted: '#B9C0D2', faint: '#8891A8', primary: '#7C88DA', primaryStrong: '#929CE4', primaryFg: '#0B1226', primarySoft: '#232C52', gold: brand.gold400, goldStrong: '#D8BC86', goldSoft: '#2A2413', success: '#34D399', successSoft: '#0E2A20', danger: '#F26B75', dangerSoft: '#2C1417', warn: '#FBBF24', warnSoft: '#2A2109',
+    canvas: '#090B0D', surface: '#14171B', elevated: '#1A1E23', sunken: '#0E1013', rail: '#0C0E11', line: '#282E35', lineStrong: '#39414A', fg: '#F5F7F8', muted: '#A2A9B2', faint: '#69717C', primary: '#7C9CFF', primaryStrong: '#B9C7FF', primaryFg: '#080C18', primarySoft: '#18213D', gold: '#D9AA57', goldStrong: '#F0C878', goldSoft: '#302618', success: '#67D6A7', successSoft: '#153429', danger: '#F07B85', dangerSoft: '#35191D', warn: '#E9B85D', warnSoft: '#342A17',
   },
 } as const;
 

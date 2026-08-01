@@ -47,7 +47,7 @@ export function ProtectedPdfReader({ onLoadComplete, onError }: ProtectedPdfRead
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  viewer: { flex: 1, width: '100%', overflowY: 'auto', overflowX: 'hidden', padding: '14px 0 28px', background: '#0A0F20', touchAction: 'pan-y pinch-zoom', WebkitOverflowScrolling: 'touch' },
+  viewer: { flex: 1, width: '100%', overflowY: 'auto', overflowX: 'hidden', padding: '14px 0 28px', background: '#090B0D', touchAction: 'pan-y pinch-zoom', WebkitOverflowScrolling: 'touch' },
   page: { display: 'flex', justifyContent: 'center', marginBottom: 12, userSelect: 'none' },
-  status: { minHeight: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#C7D0EE', fontFamily: 'Manrope, sans-serif', fontSize: 12 },
+  status: { minHeight: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#A2A9B2', fontFamily: 'Manrope, sans-serif', fontSize: 12 },
 };

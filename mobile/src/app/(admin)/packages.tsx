@@ -1,8 +1,5 @@
-import { StyleSheet, Text, View, Pressable } from 'react-native';
-import { Plus, PackageCheck } from 'lucide-react-native';
-import { AdminShell } from '@/components/admin-shell';
-import { Card } from '@/components/ui';
-import { font } from '@/constants/theme';
-import { useAppTheme } from '@/providers/app-providers';
-export default function AdminPackages() { const { theme } = useAppTheme(); return <AdminShell eyebrow="COMMERCE" title="Packages" action={<Pressable style={[styles.add, { backgroundColor: theme.primary }]}><Plus color="#FFF" size={17} /><Text style={styles.addText}>New</Text></Pressable>}><Card>{['Polity Essentials · 8 lessons · ₹499', 'Prelims Foundation · 22 lessons · ₹1,299'].map((item) => <View key={item} style={[styles.item, { borderBottomColor: theme.line }]}><View style={[styles.icon, { backgroundColor: theme.goldSoft }]}><PackageCheck color={theme.goldStrong} size={20} /></View><View style={{ flex: 1 }}><Text style={[styles.itemTitle, { color: theme.fg }]}>{item}</Text><Text style={[styles.detail, { color: theme.success }]}>Published</Text></View></View>)}</Card></AdminShell>; }
-const styles = StyleSheet.create({ add: { minHeight: 36, paddingHorizontal: 10, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 4 }, addText: { color: '#FFF', fontFamily: font.bold, fontSize: 11 }, item: { minHeight: 70, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1 }, icon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }, itemTitle: { fontFamily: font.bold, fontSize: 13 }, detail: { fontFamily: font.bold, fontSize: 10, marginTop: 4 } });
+import { Redirect } from 'expo-router';
+
+export default function AdminPackagesRedirect() {
+  return <Redirect href="/admin/content?view=paid&kind=packages" />;
+}

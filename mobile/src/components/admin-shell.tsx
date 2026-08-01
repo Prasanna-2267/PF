@@ -1,18 +1,96 @@
 import type { ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { usePathname, useRouter } from 'expo-router';
-import { BarChart3, BookOpen, ClipboardList, Package, ShieldCheck, Tag } from 'lucide-react-native';
+import { GlassView } from 'expo-glass-effect';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Layers3, LayoutDashboard, ReceiptText, ShieldCheck, Tag, UsersRound } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { font, spacing } from '@/constants/theme';
+
+import { font, radius, spacing, themes } from '@/constants/theme';
 import { useAppTheme } from '@/providers/app-providers';
 
 const navigation = [
-  { label: 'Overview', path: '/admin', icon: BarChart3 }, { label: 'Content', path: '/admin/content', icon: BookOpen }, { label: 'Packages', path: '/admin/packages', icon: Package }, { label: 'Coupons', path: '/admin/coupons', icon: Tag }, { label: 'Questions', path: '/admin/questions', icon: ClipboardList }, { label: 'Audit', path: '/admin/audit', icon: ShieldCheck },
+  { label: 'Overview', path: '/admin', icon: LayoutDashboard },
+  { label: 'Students', path: '/admin/students', icon: UsersRound },
+  { label: 'Orders', path: '/admin/orders', icon: ReceiptText },
+  { label: 'Courses', path: '/admin/content', icon: Layers3 },
+  { label: 'Coupons', path: '/admin/coupons', icon: Tag },
 ] as const;
 
-export function AdminShell({ eyebrow, title, children, action }: { eyebrow: string; title: string; children: ReactNode; action?: ReactNode }) {
-  const { theme } = useAppTheme(); const router = useRouter(); const pathname = usePathname();
-  return <SafeAreaView style={[styles.safe, { backgroundColor: theme.canvas }]}><View style={[styles.topbar, { backgroundColor: theme.primary }]}><View><Text style={styles.brand}>Parallax Flow</Text><Text style={styles.adminLabel}>ADMIN WORKSPACE · UI DEMO</Text></View><Pressable onPress={() => router.replace('/account')} style={styles.avatar}><Text style={styles.avatarText}>PA</Text></Pressable></View><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.nav, { borderBottomColor: theme.line, backgroundColor: theme.surface }]}>{navigation.map((item) => { const active = pathname === item.path; const Icon = item.icon; return <Pressable key={item.path} onPress={() => router.replace(item.path as never)} style={[styles.navItem, active && { backgroundColor: theme.primarySoft }]}><Icon size={16} color={active ? theme.primary : theme.muted} /><Text style={[styles.navText, { color: active ? theme.primary : theme.muted }]}>{item.label}</Text></Pressable>; })}</ScrollView><ScrollView contentContainerStyle={styles.content}><Text style={[styles.eyebrow, { color: theme.goldStrong }]}>{eyebrow}</Text><View style={styles.headingRow}><Text style={[styles.title, { color: theme.fg }]}>{title}</Text>{action}</View>{children}</ScrollView></SafeAreaView>;
+const webBlur = Platform.OS === 'web' ? ({ backdropFilter: 'blur(28px) saturate(180%)' } as ViewStyle) : undefined;
+
+export function AdminShell({ eyebrow, title, description, children, action }: { eyebrow: string; title: string; description?: string; children: ReactNode; action?: ReactNode }) {
+  const { theme } = useAppTheme();
+  const dark = theme.canvas === themes.dark.canvas;
+  const router = useRouter();
+  const pathname = usePathname();
+
+  return <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={[styles.safe, { backgroundColor: theme.canvas }]}>
+    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <View style={styles.identityRow}>
+        <View style={[styles.adminMark, { backgroundColor: theme.primarySoft, borderColor: dark ? 'rgba(124,156,255,0.34)' : theme.line }]}><ShieldCheck size={19} color={theme.primaryStrong} /></View>
+        <View style={styles.identityCopy}><Text style={[styles.brand, { color: theme.fg }]}>Parallax Flow</Text><Text style={[styles.adminLabel, { color: theme.muted }]}>MOBILE ADMIN</Text></View>
+        <View style={[styles.statusPill, { backgroundColor: theme.successSoft }]}><View style={[styles.statusDot, { backgroundColor: theme.success }]} /><Text style={[styles.statusText, { color: theme.success }]}>ONLINE</Text></View>
+      </View>
+
+      <View style={styles.pageHeading}>
+        <View style={styles.headingCopy}><Text style={[styles.eyebrow, { color: theme.primary }]}>{eyebrow}</Text><Text style={[styles.title, { color: theme.fg }]}>{title}</Text>{description ? <Text style={[styles.description, { color: theme.muted }]}>{description}</Text> : null}</View>
+        {action}
+      </View>
+      {children}
+    </ScrollView>
+
+    <View pointerEvents="box-none" style={styles.navPositioner}>
+      <View style={[styles.navShell, { borderColor: dark ? 'rgba(185,199,255,0.28)' : 'rgba(255,255,255,0.92)' }, webBlur]}>
+        <GlassView glassEffectStyle="regular" tintColor={dark ? 'rgba(12,15,21,0.72)' : 'rgba(246,249,255,0.68)'} colorScheme={dark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+        <LinearGradient pointerEvents="none" colors={dark ? ['rgba(255,255,255,0.10)', 'rgba(19,23,31,0.76)', 'rgba(8,10,14,0.94)'] : ['rgba(255,255,255,0.94)', 'rgba(235,240,252,0.74)']} style={StyleSheet.absoluteFill} />
+        <View pointerEvents="none" style={[styles.navSheen, { backgroundColor: dark ? 'rgba(207,216,255,0.42)' : '#FFFFFF' }]} />
+        <View style={styles.navItems}>{navigation.map((item) => {
+          const active = item.path === '/admin' ? pathname === item.path : pathname.startsWith(item.path);
+          const Icon = item.icon;
+          return <Pressable key={item.path} accessibilityRole="button" accessibilityState={active ? { selected: true } : {}} accessibilityLabel={item.label} onPress={() => router.replace(item.path as never)} style={({ pressed }) => [styles.navItem, pressed && styles.pressed]}>
+            <View style={[styles.iconWell, active && { backgroundColor: theme.primarySoft, borderColor: dark ? 'rgba(124,156,255,0.62)' : theme.lineStrong }]}><Icon size={19} color={active ? theme.primaryStrong : theme.muted} strokeWidth={active ? 2.5 : 2} /></View>
+            <Text numberOfLines={1} style={[styles.navText, { color: active ? theme.primaryStrong : theme.muted }]}>{item.label}</Text>
+          </Pressable>;
+        })}</View>
+      </View>
+    </View>
+  </SafeAreaView>;
 }
-export function AdminStat({ label, value, detail }: { label: string; value: string; detail: string }) { const { theme } = useAppTheme(); return <View style={[styles.stat, { backgroundColor: theme.surface, borderColor: theme.line }]}><Text style={[styles.statLabel, { color: theme.muted }]}>{label}</Text><Text style={[styles.statValue, { color: theme.fg }]}>{value}</Text><Text style={[styles.statDetail, { color: theme.muted }]}>{detail}</Text></View>; }
-const styles = StyleSheet.create({ safe: { flex: 1 }, topbar: { height: 70, paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, brand: { color: '#FFFFFF', fontFamily: font.extraBold, fontSize: 19 }, adminLabel: { color: '#CDD6FF', fontFamily: font.bold, fontSize: 9, letterSpacing: 1.1, marginTop: 2 }, avatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.14)', alignItems: 'center', justifyContent: 'center' }, avatarText: { color: '#FFFFFF', fontFamily: font.bold, fontSize: 14 }, nav: { paddingHorizontal: 12, paddingVertical: 8, gap: 7, borderBottomWidth: 1 }, navItem: { minHeight: 34, paddingHorizontal: 10, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 5 }, navText: { fontFamily: font.semibold, fontSize: 11 }, content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: 40, maxWidth: 850, width: '100%', alignSelf: 'center' }, eyebrow: { fontFamily: font.bold, fontSize: 10, letterSpacing: 1.3 }, headingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, title: { fontFamily: font.extraBold, fontSize: 28, letterSpacing: -0.7 }, stat: { flex: 1, minWidth: 100, borderWidth: 1, borderRadius: 14, padding: 12 }, statLabel: { fontFamily: font.bold, fontSize: 9, letterSpacing: 1 }, statValue: { fontFamily: font.extraBold, fontSize: 24, marginTop: 4 }, statDetail: { fontFamily: font.regular, fontSize: 10, marginTop: 3 } });
+
+export function AdminStat({ label, value, detail, tone = 'primary' }: { label: string; value: string; detail: string; tone?: 'primary' | 'gold' | 'success' }) {
+  const { theme } = useAppTheme();
+  const accent = tone === 'gold' ? theme.goldStrong : tone === 'success' ? theme.success : theme.primary;
+  return <View style={[styles.stat, { backgroundColor: theme.surface, borderColor: theme.line }]}><View style={[styles.statAccent, { backgroundColor: accent }]} /><Text style={[styles.statLabel, { color: accent }]}>{label}</Text><Text style={[styles.statValue, { color: theme.fg }]}>{value}</Text><Text numberOfLines={1} style={[styles.statDetail, { color: theme.muted }]}>{detail}</Text></View>;
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1 },
+  content: { width: '100%', maxWidth: 850, alignSelf: 'center', paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 112, gap: spacing.lg },
+  identityRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  adminMark: { width: 38, height: 38, borderRadius: 13, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  identityCopy: { flex: 1 },
+  brand: { fontFamily: font.extraBold, fontSize: 15, letterSpacing: -0.3 },
+  adminLabel: { marginTop: 1, fontFamily: font.bold, fontSize: 8, letterSpacing: 1.2 },
+  statusPill: { minHeight: 28, borderRadius: radius.pill, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  statusDot: { width: 5, height: 5, borderRadius: 3 },
+  statusText: { fontFamily: font.bold, fontSize: 8, letterSpacing: 0.8 },
+  pageHeading: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.md },
+  headingCopy: { flex: 1, minWidth: 0 },
+  eyebrow: { fontFamily: font.bold, fontSize: 9, letterSpacing: 1.4 },
+  title: { marginTop: 3, fontFamily: font.extraBold, fontSize: 28, letterSpacing: -0.8 },
+  description: { marginTop: 4, maxWidth: 430, fontFamily: font.regular, fontSize: 12, lineHeight: 18 },
+  navPositioner: { position: 'absolute', left: 12, right: 12, bottom: 9, height: 74 },
+  navShell: { flex: 1, overflow: 'hidden', borderWidth: 1, borderRadius: 27, backgroundColor: 'rgba(12,15,20,0.72)' },
+  navSheen: { position: 'absolute', top: 0, left: 18, right: 18, height: 1 },
+  navItems: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 7, paddingTop: 5, paddingBottom: 4 },
+  navItem: { flex: 1, height: 61, alignItems: 'center', justifyContent: 'center' },
+  iconWell: { width: 43, height: 31, borderRadius: 16, borderWidth: 1, borderColor: 'transparent', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  navText: { marginTop: 3, fontFamily: font.semibold, fontSize: 9, lineHeight: 12, textAlign: 'center' },
+  pressed: { opacity: 0.7, transform: [{ scale: 0.97 }] },
+  stat: { position: 'relative', flex: 1, minWidth: 96, minHeight: 112, overflow: 'hidden', borderWidth: 1, borderRadius: 17, padding: 13 },
+  statAccent: { position: 'absolute', left: 0, top: 16, bottom: 16, width: 3, borderTopRightRadius: 3, borderBottomRightRadius: 3 },
+  statLabel: { fontFamily: font.bold, fontSize: 8, letterSpacing: 1 },
+  statValue: { marginTop: 7, fontFamily: font.extraBold, fontSize: 23, letterSpacing: -0.5 },
+  statDetail: { marginTop: 3, fontFamily: font.regular, fontSize: 9 },
+});
