@@ -5,14 +5,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { NotesBrowserHeader } from '@/components/notes-browser-header';
 import { NoteRow } from '@/components/note-management';
 import { font, spacing } from '@/constants/theme';
+import { canOpenNote, useAdminAccessStore } from '@/lib/admin-access-store';
+import { useAuthStore } from '@/lib/auth-store';
 import { findTopic, type Lesson } from '@/lib/demo-catalog';
 import { useAppTheme } from '@/providers/app-providers';
 import { useLessonReaderStore } from '@/lib/lesson-reader-store';
 
 export default function TopicScreen() {
-  const { id, unit: unitId, topic: topicId } = useLocalSearchParams(); const { subject, unit, topic } = findTopic(id, unitId, topicId); const router = useRouter(); const { theme } = useAppTheme(); const recordOpen = useLessonReaderStore((state) => state.recordOpen); const [query, setQuery] = useState('');
+  const { id, unit: unitId, topic: topicId } = useLocalSearchParams(); const { subject, unit, topic } = findTopic(id, unitId, topicId); const router = useRouter(); const { theme } = useAppTheme(); const recordOpen = useLessonReaderStore((state) => state.recordOpen); const userEmail = useAuthStore((state) => state.user?.email); const grants = useAdminAccessStore((state) => state.grants); const [query, setQuery] = useState('');
   const lessons = (topic?.lessons ?? []).filter((lesson) => lesson.title.toLowerCase().includes(query.trim().toLowerCase()));
-  const open = (lesson: Lesson) => { if (lesson.access === 'free' || lesson.access === 'owned') { recordOpen(lesson.id); router.push({ pathname: '/lesson/[id]', params: { id: lesson.id } }); } else router.push({ pathname: '/purchase/[id]', params: { id: lesson.id } }); };
+  const open = (lesson: Lesson) => { if (canOpenNote(lesson, userEmail, grants)) { recordOpen(lesson.id); router.push({ pathname: '/lesson/[id]', params: { id: lesson.id } }); } else router.push({ pathname: '/purchase/[id]', params: { id: lesson.id } }); };
   if (!topic) return null;
   return <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safe, { backgroundColor: theme.canvas }]}>
     <NotesBrowserHeader query={query} onChangeQuery={setQuery} onBack={() => router.back()} placeholder="Search notes" />

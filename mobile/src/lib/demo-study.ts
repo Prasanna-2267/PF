@@ -38,16 +38,17 @@ export function useDemoStudyClock() {
   }, [state.checkedIn]);
   return useMemo(() => {
     const currentNow = now ?? state.startedAt ?? 0;
-    const sessionSeconds = state.checkedIn && state.startedAt ? Math.floor((currentNow - state.startedAt) / 1000) : 0;
+    const sessionSeconds = state.checkedIn && state.startedAt ? Math.max(0, Math.floor((currentNow - state.startedAt) / 1000)) : 0;
     const todayMinutes = state.todayBaseMinutes + Math.floor(sessionSeconds / 60);
     return { ...state, sessionSeconds, todayMinutes, targetPercent: Math.min(100, Math.round((todayMinutes / demoStudy.targetMinutes) * 100)) };
   }, [now, state]);
 }
 
 export function formatDuration(totalSeconds: number) {
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const seconds = safeSeconds % 60;
   return hours > 0 ? `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}` : `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 

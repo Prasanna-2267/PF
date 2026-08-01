@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import * as ScreenCapture from 'expo-screen-capture';
 import { ArrowLeft, LockKeyhole } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,6 +9,9 @@ import { findLesson } from '@/lib/demo-catalog';
 import { useAuthStore } from '@/lib/auth-store';
 import { ProtectedPdfReader } from '@/components/protected-pdf-reader';
 import { useAppTheme } from '@/providers/app-providers';
+
+const captureProtectionKey = 'protected-lesson';
+const allowDemoScreenShare = process.env.EXPO_PUBLIC_ALLOW_SCREEN_CAPTURE === 'true';
 
 function PdfWatermarks({ email }: { email: string }) {
   const { theme } = useAppTheme();
@@ -28,15 +31,24 @@ export default function LessonScreen() {
   const handleLoadComplete = useCallback((numberOfPages: number) => { setPages(numberOfPages); setError(null); }, []);
   const handleReaderError = useCallback((message: string) => setError(message), []);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (Platform.OS === 'web') return;
-    void ScreenCapture.preventScreenCaptureAsync('protected-lesson');
-    if (Platform.OS === 'ios') void ScreenCapture.enableAppSwitcherProtectionAsync(1);
-    return () => {
-      void ScreenCapture.allowScreenCaptureAsync('protected-lesson');
+
+    const releaseProtection = () => {
+      void ScreenCapture.allowScreenCaptureAsync(captureProtectionKey);
       if (Platform.OS === 'ios') void ScreenCapture.disableAppSwitcherProtectionAsync();
     };
-  }, []);
+
+    if (allowDemoScreenShare) {
+      // Also clears a secure flag left behind by Fast Refresh or a previous route instance.
+      releaseProtection();
+      return releaseProtection;
+    }
+
+    void ScreenCapture.preventScreenCaptureAsync(captureProtectionKey);
+    if (Platform.OS === 'ios') void ScreenCapture.enableAppSwitcherProtectionAsync(1);
+    return releaseProtection;
+  }, []));
 
   return <SafeAreaView style={[styles.safe, { backgroundColor: theme.canvas }]} edges={['top', 'left', 'right']}>
     <View style={[styles.top, { backgroundColor: dark ? 'rgba(18,22,24,0.96)' : theme.surface, borderBottomColor: theme.line }]}>
