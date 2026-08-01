@@ -1,0 +1,6 @@
+import { create } from 'zustand';
+
+export type AuthUser = { id: string; name: string; email: string; phone: string | null; role: 'student' | 'admin' | 'superadmin'; emailVerified: boolean; activeStageId: string | null; avatarUrl: string | null };
+type AuthState = { user: AuthUser | null; accessToken: string | null; status: 'loading' | 'authenticated' | 'unauthenticated'; setAuth: (user: AuthUser, accessToken: string) => void; beginDemoSession: () => void; setAccessToken: (accessToken: string) => void; setUser: (user: AuthUser) => void; clear: () => void };
+const demoUser: AuthUser = { id: 'demo-student', name: 'Aditi Sharma', email: 'aditi@example.com', phone: '+91 98765 43210', role: 'student', emailVerified: true, activeStageId: 'upsc-prelims', avatarUrl: null };
+export const useAuthStore = create<AuthState>((set) => ({ user: null, accessToken: null, status: 'unauthenticated', setAuth: (user, accessToken) => set({ user, accessToken, status: 'authenticated' }), beginDemoSession: () => set({ user: demoUser, accessToken: 'ui-only-demo-token', status: 'authenticated' }), setAccessToken: (accessToken) => set({ accessToken }), setUser: (user) => set({ user }), clear: () => set({ user: null, accessToken: null, status: 'unauthenticated' }) }));

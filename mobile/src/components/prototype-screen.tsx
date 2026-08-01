@@ -1,0 +1,8 @@
+import { StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Card } from '@/components/ui';
+import { font, spacing } from '@/constants/theme';
+import { useAppTheme } from '@/providers/app-providers';
+
+export function PrototypeScreen({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) { const { theme } = useAppTheme(); return <SafeAreaView edges={['left', 'right']} style={[styles.safe, { backgroundColor: theme.canvas }]}><View style={styles.content}><Text style={[styles.eyebrow, { color: theme.goldStrong }]}>{eyebrow}</Text><Text style={[styles.title, { color: theme.fg }]}>{title}</Text><Text style={[styles.description, { color: theme.muted }]}>{description}</Text><Card style={{ marginTop: spacing.xxl }}><Text style={[styles.cardTitle, { color: theme.fg }]}>UI review in progress</Text><Text style={[styles.cardCopy, { color: theme.muted }]}>This tab is part of the working mobile shell. Its full data-rich experience is being recreated in the next focused implementation phases.</Text></Card></View></SafeAreaView>; }
+const styles = StyleSheet.create({ safe: { flex: 1 }, content: { padding: spacing.xl, gap: spacing.sm, maxWidth: 720, width: '100%', alignSelf: 'center' }, eyebrow: { fontFamily: font.bold, fontSize: 11, letterSpacing: 1.4 }, title: { fontFamily: font.extraBold, fontSize: 30, letterSpacing: -0.8 }, description: { fontFamily: font.regular, fontSize: 14, lineHeight: 21 }, cardTitle: { fontFamily: font.bold, fontSize: 16 }, cardCopy: { fontFamily: font.regular, fontSize: 14, lineHeight: 21 } });
