@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 import { useColorScheme } from 'react-native';
 import { themes, type AppTheme, type ThemePreference } from '@/constants/theme';
+import { RocketLaunchProvider } from '@/providers/rocket-launch-provider';
 
 const THEME_KEY = 'pf-theme';
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 30_000 } } });
@@ -15,6 +16,6 @@ export function AppProviders({ children }: PropsWithChildren) {
   useEffect(() => { void AsyncStorage.getItem(THEME_KEY).then((saved) => { if (saved === 'light' || saved === 'dark' || saved === 'system') setStoredPreference(saved); }); }, []);
   const mode = preference === 'system' ? (systemScheme === 'dark' ? 'dark' : 'light') : preference;
   const value = useMemo<ThemeContextValue>(() => ({ theme: themes[mode], preference, setPreference: (next) => { setStoredPreference(next); void AsyncStorage.setItem(THEME_KEY, next); } }), [mode, preference]);
-  return <QueryClientProvider client={queryClient}><ThemeContext.Provider value={value}>{children}</ThemeContext.Provider></QueryClientProvider>;
+  return <QueryClientProvider client={queryClient}><ThemeContext.Provider value={value}><RocketLaunchProvider>{children}</RocketLaunchProvider></ThemeContext.Provider></QueryClientProvider>;
 }
 export function useAppTheme() { const value = useContext(ThemeContext); if (!value) throw new Error('useAppTheme must be used inside AppProviders'); return value; }

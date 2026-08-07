@@ -8,6 +8,12 @@ export type AdminStudent = {
   hoursStudied: number;
   joinedOn: string;
   lastActive: string;
+  examDate: string;
+  academyId: string | null;
+  dailyTarget: string;
+  streakDays: number;
+  syllabusCompletion: number;
+  practiceAccuracy: number;
 };
 
 export type AdminOrder = {
@@ -46,12 +52,12 @@ export type PaidPackage = {
 };
 
 export const adminStudents: AdminStudent[] = [
-  { id: 'ST-1001', name: 'Aditi Sharma', email: 'aditi@example.com', phone: '+91 98765 43210', course: 'JEE', category: 'Mains', hoursStudied: 84.5, joinedOn: '02 Jun 2026', lastActive: 'Today, 9:42 AM' },
-  { id: 'ST-1002', name: 'Rahul Menon', email: 'rahul@example.com', phone: '+91 98470 11223', course: 'CA', category: 'Intermediate', hoursStudied: 61.2, joinedOn: '14 Jun 2026', lastActive: 'Today, 8:18 AM' },
-  { id: 'ST-1003', name: 'Meera Nair', email: 'meera@example.com', phone: '+91 99001 24567', course: 'NEET', category: 'UG', hoursStudied: 102.8, joinedOn: '20 May 2026', lastActive: 'Yesterday' },
-  { id: 'ST-1004', name: 'Arjun Patel', email: 'arjun@example.com', phone: '+91 98250 31840', course: 'JEE', category: 'Advanced', hoursStudied: 48.6, joinedOn: '28 Jun 2026', lastActive: 'Yesterday' },
-  { id: 'ST-1005', name: 'Nisha Gupta', email: 'nisha@example.com', phone: '+91 98111 42780', course: 'CA', category: 'Foundation', hoursStudied: 39.4, joinedOn: '05 Jul 2026', lastActive: '30 Jul 2026' },
-  { id: 'ST-1006', name: 'Vikram Rao', email: 'vikram@example.com', phone: '+91 98860 50431', course: 'NEET', category: 'UG', hoursStudied: 73.1, joinedOn: '11 Jun 2026', lastActive: '29 Jul 2026' },
+  { id: 'ST-1001', name: 'Aditi Sharma', email: 'aditi@example.com', phone: '+91 98765 43210', course: 'JEE', category: 'Mains', hoursStudied: 84.5, joinedOn: '02 Jun 2026', lastActive: 'Today, 9:42 AM', examDate: '14 Sep 2026', academyId: 'PF-JEE-041', dailyTarget: '2 hours', streakDays: 6, syllabusCompletion: 68, practiceAccuracy: 82 },
+  { id: 'ST-1002', name: 'Rahul Menon', email: 'rahul@example.com', phone: '+91 98470 11223', course: 'CA', category: 'Intermediate', hoursStudied: 61.2, joinedOn: '14 Jun 2026', lastActive: 'Today, 8:18 AM', examDate: '01 Nov 2026', academyId: 'ACA-2381', dailyTarget: '1h 30m', streakDays: 4, syllabusCompletion: 51, practiceAccuracy: 76 },
+  { id: 'ST-1003', name: 'Meera Nair', email: 'meera@example.com', phone: '+91 99001 24567', course: 'NEET', category: 'UG', hoursStudied: 102.8, joinedOn: '20 May 2026', lastActive: 'Yesterday', examDate: '03 May 2027', academyId: null, dailyTarget: '3 hours', streakDays: 11, syllabusCompletion: 74, practiceAccuracy: 88 },
+  { id: 'ST-1004', name: 'Arjun Patel', email: 'arjun@example.com', phone: '+91 98250 31840', course: 'JEE', category: 'Advanced', hoursStudied: 48.6, joinedOn: '28 Jun 2026', lastActive: 'Yesterday', examDate: '24 May 2027', academyId: 'SPARK-092', dailyTarget: '2h 30m', streakDays: 2, syllabusCompletion: 39, practiceAccuracy: 69 },
+  { id: 'ST-1005', name: 'Nisha Gupta', email: 'nisha@example.com', phone: '+91 98111 42780', course: 'CA', category: 'Foundation', hoursStudied: 39.4, joinedOn: '05 Jul 2026', lastActive: '30 Jul 2026', examDate: '12 Jan 2027', academyId: null, dailyTarget: '90 minutes', streakDays: 0, syllabusCompletion: 32, practiceAccuracy: 71 },
+  { id: 'ST-1006', name: 'Vikram Rao', email: 'vikram@example.com', phone: '+91 98860 50431', course: 'NEET', category: 'UG', hoursStudied: 73.1, joinedOn: '11 Jun 2026', lastActive: '29 Jul 2026', examDate: '03 May 2027', academyId: 'MED-771', dailyTarget: '2 hours', streakDays: 7, syllabusCompletion: 57, practiceAccuracy: 79 },
 ];
 
 export const adminOrders: AdminOrder[] = [

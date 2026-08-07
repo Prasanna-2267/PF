@@ -1,1 +1,5 @@
-export { default } from '../(admin)/login';
+import { Redirect } from 'expo-router';
+
+export default function LegacyAdminLoginRedirect() {
+  return <Redirect href="/login" />;
+}

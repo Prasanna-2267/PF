@@ -1,17 +1,16 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Animated, Easing, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Animated, Easing, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View, type ViewStyle } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowUpRight, Award, BookOpen, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Coins, Eye, Flame, Gift, Heart, Rocket, Share2, ShieldCheck, Sparkles, Target, X } from 'lucide-react-native';
+import { ArrowUpRight, Award, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Coins, Eye, Flame, Gift, Heart, ListTodo, Plus, Share2, ShieldCheck, Sparkles, Target, Trash2, X } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GrandSessionControl, ProgressBar } from '@/components/study-ui';
 import { font, radius, spacing, themes } from '@/constants/theme';
 import { useAuthStore } from '@/lib/auth-store';
-import { allLessonEntries } from '@/lib/demo-catalog';
 import { demoStudy, formatDuration, formatMinutes, useDemoStudyClock } from '@/lib/demo-study';
+import { homeTodoDateKey, useHomeTodoStore } from '@/lib/home-todo-store';
 import { useLearnerProfileStore } from '@/lib/learner-profile-store';
-import { useLessonReaderStore } from '@/lib/lesson-reader-store';
 import { canRecoverStreak, monthlyHeartLimit, useRewardStore } from '@/lib/reward-store';
 import { useAppTheme } from '@/providers/app-providers';
 
@@ -36,8 +35,13 @@ export default function HomeScreen() {
   const study = useDemoStudyClock();
   const profile = useLearnerProfileStore((state) => state.profile);
   const userName = useAuthStore((state) => state.user?.name?.split(' ')[0] ?? 'Learner');
-  const recentIds = useLessonReaderStore((state) => state.recentlyOpened);
-  const entries = useMemo(() => allLessonEntries(), []);
+  const todos = useHomeTodoStore((state) => state.todos);
+  const syncTodos = useHomeTodoStore((state) => state.syncToday);
+  const addTodo = useHomeTodoStore((state) => state.addTodo);
+  const toggleTodo = useHomeTodoStore((state) => state.toggleTodo);
+  const removeTodo = useHomeTodoStore((state) => state.removeTodo);
+  const clearCompleted = useHomeTodoStore((state) => state.clearCompleted);
+  const [todoText, setTodoText] = useState('');
   const [currentDate] = useState(() => new Date());
   const [showCelebration, setShowCelebration] = useState(false);
   const [showRewards, setShowRewards] = useState(false);
@@ -50,7 +54,8 @@ export default function HomeScreen() {
   const syncRewardMonth = useRewardStore((state) => state.syncMonth);
   const awardDailyStreak = useRewardStore((state) => state.awardDailyStreak);
   const recoverStreak = useRewardStore((state) => state.recoverStreak);
-  const recent = recentIds.map((id) => entries.find((entry) => entry.lesson.id === id)).filter((entry): entry is (typeof entries)[number] => Boolean(entry)).slice(0, 3);
+  const completedTodos = todos.filter((todo) => todo.completed).length;
+  const todoPercent = todos.length ? Math.round((completedTodos / todos.length) * 100) : 0;
   const dailyTargetMinutes = targetMinutesFrom(profile.dailyTarget);
   const remaining = Math.max(0, dailyTargetMinutes - study.todayMinutes);
   const planPercent = Math.min(100, Math.round((study.todayMinutes / dailyTargetMinutes) * 100));
@@ -60,7 +65,7 @@ export default function HomeScreen() {
   const examDays = Number.isNaN(examTime) ? demoStudy.exam.daysLeft : Math.max(0, Math.ceil((examTime - currentDate.getTime()) / dayMs));
   const recoveryAvailable = canRecoverStreak(lastCompletedDate);
   const today = new Intl.DateTimeFormat('en-IN', { weekday: 'long', day: 'numeric', month: 'long' }).format(currentDate).toUpperCase();
-  const openLesson = (lessonId: string) => router.push({ pathname: '/lesson/[id]', params: { id: lessonId } });
+  const submitTodo = () => { if (!todoText.trim()) return; addTodo(todoText); setTodoText(''); };
   const handleSession = () => {
     if (study.checkedIn) {
       setCompletedSeconds(study.sessionSeconds);
@@ -70,7 +75,7 @@ export default function HomeScreen() {
     study.toggleSession();
   };
 
-  useFocusEffect(useCallback(() => { syncRewardMonth(); }, [syncRewardMonth]));
+  useFocusEffect(useCallback(() => { syncRewardMonth(); syncTodos(homeTodoDateKey(currentDate)); }, [currentDate, syncRewardMonth, syncTodos]));
 
   return <><SafeAreaView edges={['top', 'left', 'right']} style={[styles.safe, { backgroundColor: theme.canvas }]}><ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
     <RewardHeader points={points} hearts={hearts} streak={streak} onPress={() => setShowRewards(true)} />
@@ -96,12 +101,12 @@ export default function HomeScreen() {
 
     <Surface style={styles.syllabusCard}><View style={[styles.snapshotIcon, { backgroundColor: theme.primarySoft }]}><Target color={theme.primaryStrong} size={20} /></View><View style={styles.syllabusCopy}><Text style={[styles.cardEyebrow, { color: theme.primary }]}>LEARNING PROGRESS</Text><Text style={[styles.syllabusTitle, { color: theme.fg }]}>Syllabus completion</Text><Text style={[styles.snapshotLabel, { color: theme.muted }]}>Keep completing lessons to move this forward.</Text></View><Text style={[styles.syllabusValue, { color: theme.fg }]}>{demoStudy.syllabusPercent}%</Text><View style={styles.syllabusProgress}><ProgressBar value={demoStudy.syllabusPercent} /></View></Surface>
 
-    <Surface style={styles.recentSurface}>
-      <View style={styles.recentHeader}>
-        <View style={styles.recentHeaderCopy}><Text style={[styles.cardEyebrow, { color: theme.primary }]}>CONTINUE LEARNING</Text><Text style={[styles.cardTitle, { color: theme.fg }]}>Recently opened</Text><Text style={[styles.recentIntro, { color: theme.muted }]}>Pick up from your latest study note.</Text><Pressable accessibilityRole="button" onPress={() => router.push('/notes')} style={({ pressed }) => [styles.recentLink, pressed && styles.pressed]}><Text style={[styles.textLink, { color: theme.primaryStrong }]}>View all notes</Text><ArrowUpRight color={theme.primaryStrong} size={14} /></Pressable></View>
-        <RecentRocketAnimation />
-      </View>
-      <View style={styles.recentList}>{recent.map((entry) => <Pressable key={entry.lesson.id} onPress={() => openLesson(entry.lesson.id)} style={({ pressed }) => [styles.recentRow, { borderTopColor: theme.line }, pressed && styles.pressed]}><View style={[styles.noteIcon, { backgroundColor: `${entry.subject.accent}24` }]}><BookOpen color={entry.subject.accent} size={18} /></View><View style={styles.recentCopy}><Text numberOfLines={1} style={[styles.recentTitle, { color: theme.fg }]}>{entry.lesson.title}</Text><Text numberOfLines={1} style={[styles.recentMeta, { color: theme.muted }]}>{entry.subject.title} · {entry.lesson.pages} pages</Text></View><ArrowUpRight color={theme.faint} size={17} /></Pressable>)}</View>
+    <Surface style={styles.todoSurface}>
+      <View style={styles.todoHeader}><View style={[styles.todoIcon, { backgroundColor: theme.primarySoft }]}><ListTodo color={theme.primaryStrong} size={21} /></View><View style={styles.todoHeadingCopy}><Text style={[styles.cardEyebrow, { color: theme.primary }]}>TODAY’S ACTIONS</Text><Text style={[styles.cardTitle, { color: theme.fg }]}>Study to-do list</Text><Text style={[styles.todoIntro, { color: theme.muted }]}>{completedTodos === todos.length && todos.length ? 'Everything planned is complete.' : 'Keep today clear, small and achievable.'}</Text></View><View style={[styles.todoScore, { backgroundColor: todoPercent === 100 && todos.length ? theme.successSoft : theme.sunken, borderColor: todoPercent === 100 && todos.length ? theme.success : theme.line }]}><Text style={[styles.todoScoreValue, { color: todoPercent === 100 && todos.length ? theme.success : theme.fg }]}>{completedTodos}/{todos.length}</Text><Text style={[styles.todoScoreLabel, { color: theme.muted }]}>DONE</Text></View></View>
+      <View style={[styles.todoProgressTrack, { backgroundColor: theme.sunken }]}><View style={[styles.todoProgressFill, { width: `${todoPercent}%`, backgroundColor: todoPercent === 100 && todos.length ? theme.success : theme.primary }]} /></View>
+      <View style={[styles.todoComposer, { backgroundColor: theme.sunken, borderColor: theme.line }]}><TextInput value={todoText} onChangeText={setTodoText} onSubmitEditing={submitTodo} placeholder="Add a study task…" placeholderTextColor={theme.faint} returnKeyType="done" style={[styles.todoInput, { color: theme.fg }]} /><Pressable disabled={!todoText.trim()} accessibilityRole="button" accessibilityLabel="Add to-do" onPress={submitTodo} style={({ pressed }) => [styles.todoAdd, { backgroundColor: todoText.trim() ? theme.primary : theme.line }, !todoText.trim() && styles.todoDisabled, pressed && styles.pressed]}><Plus color={todoText.trim() ? theme.primaryFg : theme.faint} size={18} strokeWidth={2.8} /></Pressable></View>
+      <View style={styles.todoList}>{todos.map((todo) => <View key={todo.id} style={[styles.todoRow, { borderTopColor: theme.line }]}><Pressable accessibilityRole="checkbox" accessibilityState={{ checked: todo.completed }} accessibilityLabel={`${todo.completed ? 'Mark incomplete' : 'Complete'} ${todo.title}`} onPress={() => toggleTodo(todo.id)} style={[styles.todoCheck, { backgroundColor: todo.completed ? theme.success : theme.sunken, borderColor: todo.completed ? theme.success : theme.lineStrong }]}>{todo.completed ? <CheckCircle2 color={theme.primaryFg} size={17} strokeWidth={2.8} /> : null}</Pressable><Text numberOfLines={2} style={[styles.todoTitle, { color: todo.completed ? theme.faint : theme.fg }, todo.completed && styles.todoTitleDone]}>{todo.title}</Text><Pressable accessibilityRole="button" accessibilityLabel={`Delete ${todo.title}`} onPress={() => removeTodo(todo.id)} hitSlop={7} style={({ pressed }) => [styles.todoDelete, pressed && styles.pressed]}><Trash2 color={theme.faint} size={16} /></Pressable></View>)}</View>
+      {todos.length === 0 ? <View style={[styles.todoEmpty, { backgroundColor: theme.sunken }]}><Sparkles color={theme.primaryStrong} size={18} /><Text style={[styles.todoEmptyText, { color: theme.muted }]}>Your list is clear. Add one meaningful task for today.</Text></View> : completedTodos > 0 ? <Pressable accessibilityRole="button" onPress={clearCompleted} style={styles.clearTodos}><Text style={[styles.clearTodosText, { color: theme.muted }]}>Clear completed</Text></Pressable> : null}
     </Surface>
   </ScrollView></SafeAreaView><CheckoutCelebration visible={showCelebration} streak={streak} seconds={completedSeconds} pointsEarned={earnedPoints} onClose={() => setShowCelebration(false)} /><RewardWallet visible={showRewards} points={points} hearts={hearts} streak={streak} canRecover={recoveryAvailable} onRecover={() => recoverStreak()} onClose={() => setShowRewards(false)} /></>;
 }
@@ -243,51 +248,6 @@ function StreakCalendar({ currentDate, streak }: { currentDate: Date; streak: nu
 
     <View style={[styles.streakFooter, { backgroundColor: theme.goldSoft }]}><Flame size={17} fill={theme.goldStrong} color={theme.goldStrong} /><Text style={[styles.streakFooterText, { color: theme.goldStrong }]}>{streak} active days</Text><View style={[styles.streakFooterDivider, { backgroundColor: theme.goldStrong }]} /><View style={[styles.missedLegendDot, { backgroundColor: theme.danger }]} /><Text style={[styles.streakFooterMuted, { color: theme.muted }]}>{missedCount} missed · Best 12 days</Text></View>
   </Surface>;
-}
-
-function RecentRocketAnimation() {
-  const [lift] = useState(() => new Animated.Value(0));
-  const [thrust] = useState(() => new Animated.Value(0));
-  const [twinkle] = useState(() => new Animated.Value(0));
-
-  useEffect(() => {
-    const flightLoop = Animated.loop(Animated.sequence([
-      Animated.timing(lift, { toValue: 1, duration: 720, easing: Easing.inOut(Easing.sin), useNativeDriver: nativeDriver }),
-      Animated.timing(lift, { toValue: 0, duration: 720, easing: Easing.inOut(Easing.sin), useNativeDriver: nativeDriver }),
-    ]));
-    const thrustLoop = Animated.loop(Animated.sequence([
-      Animated.timing(thrust, { toValue: 1, duration: 210, easing: Easing.out(Easing.quad), useNativeDriver: nativeDriver }),
-      Animated.timing(thrust, { toValue: 0, duration: 180, easing: Easing.in(Easing.quad), useNativeDriver: nativeDriver }),
-    ]));
-    const twinkleLoop = Animated.loop(Animated.sequence([
-      Animated.timing(twinkle, { toValue: 1, duration: 620, easing: Easing.inOut(Easing.sin), useNativeDriver: nativeDriver }),
-      Animated.timing(twinkle, { toValue: 0, duration: 620, easing: Easing.inOut(Easing.sin), useNativeDriver: nativeDriver }),
-    ]));
-    flightLoop.start();
-    thrustLoop.start();
-    twinkleLoop.start();
-    return () => { flightLoop.stop(); thrustLoop.stop(); twinkleLoop.stop(); };
-  }, [lift, thrust, twinkle]);
-
-  const rocketLift = lift.interpolate({ inputRange: [0, 1], outputRange: [4, -5] });
-  const rocketTilt = lift.interpolate({ inputRange: [0, 1], outputRange: ['-47deg', '-43deg'] });
-  const exhaustScale = thrust.interpolate({ inputRange: [0, 1], outputRange: [.72, 1.25] });
-  const exhaustOpacity = thrust.interpolate({ inputRange: [0, 1], outputRange: [.62, 1] });
-  const trailLift = lift.interpolate({ inputRange: [0, 1], outputRange: [-2, 5] });
-  const starScale = twinkle.interpolate({ inputRange: [0, 1], outputRange: [.55, 1.18] });
-  const starOpacity = twinkle.interpolate({ inputRange: [0, 1], outputRange: [.25, 1] });
-
-  return <View pointerEvents="none" accessibilityElementsHidden style={styles.rocketScene}>
-    <View style={[styles.rocketOrbit, styles.rocketOrbitOuter]} />
-    <Animated.View style={[styles.rocketStar, styles.rocketStarOne, { opacity: starOpacity, transform: [{ scale: starScale }, { rotate: '45deg' }] }]} />
-    <Animated.View style={[styles.rocketStar, styles.rocketStarTwo, { opacity: twinkle }]} />
-    <Animated.View style={[styles.rocketTrailGroup, { opacity: exhaustOpacity, transform: [{ translateY: trailLift }] }]}><View style={[styles.rocketTrail, styles.rocketTrailLeft]} /><View style={[styles.rocketTrail, styles.rocketTrailCentre]} /><View style={[styles.rocketTrail, styles.rocketTrailRight]} /></Animated.View>
-    <Animated.View style={[styles.rocketBody, { transform: [{ translateY: rocketLift }, { rotate: rocketTilt }] }]}>
-      <Rocket size={39} color="#B9C7FF" fill="#24376F" strokeWidth={1.8} />
-      <View style={styles.rocketWindow} />
-      <Animated.View style={[styles.rocketExhaust, { opacity: exhaustOpacity, transform: [{ scaleY: exhaustScale }] }]} />
-    </Animated.View>
-  </View>;
 }
 
 function CheckoutCelebration({ visible, streak, seconds, pointsEarned, onClose }: { visible: boolean; streak: number; seconds: number; pointsEarned: number; onClose: () => void }) {
@@ -447,25 +407,20 @@ const styles = StyleSheet.create({
   momentumChip: { minHeight: 27, borderRadius: radius.pill, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', gap: 5 },
   momentumText: { fontFamily: font.bold, fontSize: 8 },
   trackerLink: { minHeight: 32, paddingLeft: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 3 },
-  recentSurface: { overflow: 'hidden' },
-  recentHeader: { minHeight: 88, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  recentHeaderCopy: { flex: 1, minWidth: 0 },
-  recentIntro: { marginTop: 3, fontFamily: font.regular, fontSize: 9, lineHeight: 13 },
-  recentLink: { alignSelf: 'flex-start', marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 3 },
-  rocketScene: { width: 88, height: 82, alignItems: 'center', justifyContent: 'center' },
-  rocketOrbit: { position: 'absolute', borderWidth: 1, borderColor: 'rgba(185,199,255,.1)', borderRadius: 80 },
-  rocketOrbitOuter: { width: 112, height: 112, right: -51, top: -53 },
-  rocketStar: { position: 'absolute', width: 5, height: 5, backgroundColor: '#E5B84E', borderRadius: 1 },
-  rocketStarOne: { left: 14, top: 17 },
-  rocketStarTwo: { width: 3, height: 3, right: 15, top: 25, borderRadius: 2, backgroundColor: '#B9C7FF' },
-  rocketBody: { width: 45, height: 48, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
-  rocketWindow: { position: 'absolute', width: 8, height: 8, borderRadius: 4, top: 9, right: 8, backgroundColor: '#17213D', borderWidth: 2, borderColor: '#E5B84E' },
-  rocketExhaust: { position: 'absolute', width: 8, height: 15, borderRadius: 5, left: 18, bottom: -5, backgroundColor: '#E5B84E', transformOrigin: 'top' },
-  rocketTrailGroup: { position: 'absolute', width: 39, height: 24, left: 24, bottom: 3 },
-  rocketTrail: { position: 'absolute', width: 2, borderRadius: 1, backgroundColor: 'rgba(185,199,255,.38)' },
-  rocketTrailLeft: { height: 8, left: 5, top: 5, transform: [{ rotate: '15deg' }] },
-  rocketTrailCentre: { height: 13, left: 19, top: 7 },
-  rocketTrailRight: { height: 7, right: 4, top: 3, transform: [{ rotate: '-14deg' }] },
+  todoSurface: { overflow: 'hidden' },
+  todoHeader: { minHeight: 67, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  todoIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  todoHeadingCopy: { flex: 1, minWidth: 0 },
+  todoIntro: { marginTop: 3, fontFamily: font.regular, fontSize: 9, lineHeight: 13 },
+  todoScore: { minWidth: 49, height: 45, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  todoScoreValue: { fontFamily: font.extraBold, fontSize: 13, lineHeight: 16 }, todoScoreLabel: { fontFamily: font.bold, fontSize: 6, letterSpacing: .7 },
+  todoProgressTrack: { height: 5, marginTop: 10, borderRadius: 3, overflow: 'hidden' }, todoProgressFill: { height: '100%', borderRadius: 3 },
+  todoComposer: { minHeight: 48, marginTop: 12, borderWidth: 1, borderRadius: 14, paddingLeft: 12, paddingRight: 5, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  todoInput: { flex: 1, minWidth: 0, minHeight: 44, paddingVertical: 0, fontFamily: font.semibold, fontSize: 11 }, todoAdd: { width: 37, height: 37, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }, todoDisabled: { opacity: .62 },
+  todoList: { marginTop: 7 }, todoRow: { minHeight: 52, borderTopWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 9 },
+  todoCheck: { width: 26, height: 26, borderWidth: 1, borderRadius: 9, alignItems: 'center', justifyContent: 'center' }, todoTitle: { flex: 1, minWidth: 0, fontFamily: font.semibold, fontSize: 11, lineHeight: 16 }, todoTitleDone: { textDecorationLine: 'line-through' }, todoDelete: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  todoEmpty: { minHeight: 61, marginTop: 9, borderRadius: 14, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }, todoEmptyText: { flex: 1, fontFamily: font.regular, fontSize: 9, lineHeight: 14 },
+  clearTodos: { minHeight: 31, alignSelf: 'flex-end', justifyContent: 'center', paddingLeft: 10 }, clearTodosText: { fontFamily: font.bold, fontSize: 8 },
   celebrationScroll: { flex: 1, width: '100%' },
   celebrationScrollContent: { flexGrow: 1, width: '100%', maxWidth: 540, alignSelf: 'center', alignItems: 'center', paddingTop: 2, paddingBottom: 14 },
   celebrationFlameEntrance: { alignItems: 'center', justifyContent: 'center' },
@@ -479,5 +434,5 @@ const styles = StyleSheet.create({
   streakCard: { padding: 15 }, streakHero: { minHeight: 94, flexDirection: 'row', alignItems: 'center', gap: 13 }, streakButtonWrap: { width: 76, height: 76, alignItems: 'center', justifyContent: 'center' }, streakFlameGlow: { position: 'absolute', width: 60, height: 64, alignItems: 'center', justifyContent: 'flex-end' }, streakButton: { width: 60, height: 66, alignItems: 'center', justifyContent: 'flex-end' }, flameOuter: { height: 49, alignItems: 'center', justifyContent: 'flex-end' }, flameInner: { position: 'absolute', bottom: 10 }, emberOne: { position: 'absolute', width: 4, height: 4, borderRadius: 2, top: 3, right: 10 }, emberTwo: { position: 'absolute', width: 3, height: 3, borderRadius: 2, top: 10, left: 11 }, streakCopy: { flex: 1, minWidth: 0 }, streakEyebrow: { fontFamily: font.bold, fontSize: 8, letterSpacing: 1.15 }, streakTitle: { marginTop: 3, fontFamily: font.extraBold, fontSize: 22, letterSpacing: -.55 }, streakDescription: { marginTop: 3, fontFamily: font.regular, fontSize: 9, lineHeight: 14 }, calendarPanel: { marginTop: 13, borderWidth: 1, borderRadius: 19, padding: 13 }, calendarHeader: { minHeight: 51, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, calendarMonth: { fontFamily: font.extraBold, fontSize: 17, letterSpacing: -.25 }, calendarHint: { marginTop: 3, fontFamily: font.regular, fontSize: 8 }, monthActions: { flexDirection: 'row', gap: 6 }, monthButton: { width: 32, height: 32, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }, weekRow: { flexDirection: 'row', marginTop: 14, marginBottom: 7 }, weekDay: { width: '14.285%', fontFamily: font.bold, fontSize: 7, letterSpacing: .35, textAlign: 'center' }, calendarGrid: { flexDirection: 'row', flexWrap: 'wrap' }, dayCell: { width: '14.285%', height: 46, alignItems: 'center', justifyContent: 'center' }, dayBadge: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' }, dayFlame: { position: 'absolute', top: -1 }, calendarNumberLayer: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center' }, dayText: { fontFamily: font.bold, fontSize: 10, lineHeight: 12, textAlign: 'center' }, fireDayText: { color: '#160C04', fontFamily: font.extraBold, fontSize: 10, lineHeight: 11 }, fireDayTextDouble: { fontSize: 8, letterSpacing: -.4 }, todayFireText: { fontSize: 10 }, missedDot: { position: 'absolute', bottom: 5, width: 4, height: 4, borderRadius: 2 }, streakFooter: { minHeight: 44, marginTop: 11, borderRadius: 13, paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center', gap: 7 }, streakFooterText: { fontFamily: font.bold, fontSize: 9 }, streakFooterDivider: { width: 1, height: 15, opacity: .28 }, missedLegendDot: { width: 5, height: 5, borderRadius: 3 }, streakFooterMuted: { flex: 1, fontFamily: font.medium, fontSize: 8 },
   celebrationBackground: { flex: 1 }, celebrationSafe: { flex: 1, paddingHorizontal: spacing.lg }, stars: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }, star: { position: 'absolute', width: 3, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,.72)' }, starOne: { top: '8%', left: '18%' }, starTwo: { top: '14%', right: '22%' }, starThree: { top: '23%', left: '35%' }, starFour: { top: '18%', right: '42%', width: 2, height: 2 }, spark: { position: 'absolute', width: 7, height: 7, borderRadius: 2, backgroundColor: '#FF8A1F', transform: [{ rotate: '20deg' }] }, sparkOne: { top: '25%', left: '26%' }, sparkTwo: { top: '21%', right: '27%', width: 5, height: 5 }, celebrationHeader: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, celebrationClose: { width: 45, height: 45, alignItems: 'center', justifyContent: 'center' }, savedPill: { minHeight: 31, borderRadius: radius.pill, paddingHorizontal: 10, backgroundColor: 'rgba(103,214,167,.12)', borderWidth: 1, borderColor: 'rgba(103,214,167,.3)', flexDirection: 'row', alignItems: 'center', gap: 5 }, savedPillText: { color: '#78DDB4', fontFamily: font.bold, fontSize: 8, letterSpacing: .7 }, celebrationBody: { flex: 1, width: '100%', maxWidth: 540, alignSelf: 'center', alignItems: 'center', paddingTop: 2 }, celebrationFlameWrap: { width: 220, height: 215, alignItems: 'center', justifyContent: 'center' }, flameAura: { position: 'absolute', width: 184, height: 184, borderRadius: 92, backgroundColor: 'rgba(255,134,20,.11)', shadowColor: '#FF8614', shadowOpacity: .48, shadowRadius: 34, shadowOffset: { width: 0, height: 0 }, elevation: 7 }, celebrationNumberLayer: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center', paddingTop: 34 }, celebrationNumber: { color: '#050505', fontFamily: font.extraBold, fontSize: 54, lineHeight: 62, letterSpacing: -2, textAlign: 'center' }, floatingEmber: { position: 'absolute', borderRadius: 4, backgroundColor: '#FF8614' }, floatingEmberOne: { width: 14, height: 14, top: 38, right: 23, transform: [{ rotate: '32deg' }] }, floatingEmberTwo: { width: 9, height: 9, top: 64, left: 29, backgroundColor: '#D99B41', transform: [{ rotate: '14deg' }] }, celebrationTitle: { color: '#FFFFFF', marginTop: -4, fontFamily: font.extraBold, fontSize: 28, lineHeight: 36, letterSpacing: -.7, textAlign: 'center' }, celebrationSubtitle: { color: '#9DA4AA', marginTop: 6, fontFamily: font.bold, fontSize: 12, textAlign: 'center' }, celebrationDivider: { width: 142, height: 29, marginTop: 6, flexDirection: 'row', alignItems: 'center', gap: 8 }, dividerLine: { flex: 1, height: 2, borderRadius: 1, backgroundColor: '#343A40' }, rewardCard: { width: '100%', minHeight: 130, marginTop: 5, borderWidth: 2, borderColor: '#FF8614', borderRadius: 20, backgroundColor: 'rgba(9,11,13,.9)', padding: 15, flexDirection: 'row', alignItems: 'center', gap: 11, overflow: 'hidden' }, rewardCopy: { flex: 1, minWidth: 0 }, rewardEyebrow: { color: '#FF9A3D', fontFamily: font.bold, fontSize: 8, letterSpacing: 1.1 }, rewardTitle: { color: '#FFFFFF', marginTop: 4, fontFamily: font.extraBold, fontSize: 18 }, rewardDescription: { color: '#AEB3B8', marginTop: 5, fontFamily: font.regular, fontSize: 9, lineHeight: 14 }, rewardBadge: { alignSelf: 'flex-start', minHeight: 28, marginTop: 9, borderRadius: radius.pill, paddingHorizontal: 9, backgroundColor: 'rgba(255,134,20,.13)', flexDirection: 'row', alignItems: 'center', gap: 5 }, rewardBadgeText: { color: '#FF9A3D', fontFamily: font.bold, fontSize: 9 }, rewardIcon: { width: 68, height: 68, marginRight: -4, borderRadius: 22, backgroundColor: '#FF9A3D', alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-6deg' }] }, celebrationActions: { width: '100%', maxWidth: 540, minHeight: 78, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 10 }, shareButton: { flex: 1, minHeight: 54, borderRadius: 16, backgroundColor: '#29AFF3', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }, shareText: { color: '#06111A', fontFamily: font.extraBold, fontSize: 17 }, claimButton: { flex: 1, minHeight: 54, borderRadius: 16, borderWidth: 2, borderColor: '#29AFF3', alignItems: 'center', justifyContent: 'center' }, claimText: { color: '#29AFF3', fontFamily: font.bold, fontSize: 15 }, celebrationPressed: { opacity: .74, transform: [{ scale: .98 }] },
   examCard: { minHeight: 238, borderWidth: 1, borderRadius: 21, padding: 15, overflow: 'hidden' }, examAccent: { position: 'absolute', width: 160, height: 160, borderRadius: 80, right: -74, bottom: -70, backgroundColor: 'rgba(217,170,87,.08)' }, examTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, examIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }, pressurePill: { minHeight: 29, borderRadius: 15, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' }, pressureText: { fontFamily: font.bold, fontSize: 8, letterSpacing: .45 }, examEyebrow: { fontFamily: font.bold, fontSize: 8, letterSpacing: 1.05, marginTop: 14 }, examCountRow: { marginTop: 2, flexDirection: 'row', alignItems: 'flex-end', gap: 8 }, examDays: { fontFamily: font.extraBold, fontSize: 48, lineHeight: 57, letterSpacing: -1.7 }, examDaysLabel: { fontFamily: font.bold, fontSize: 14, marginBottom: 15 }, examDaysSubLabel: { fontFamily: font.regular, fontSize: 8, marginBottom: 3, marginTop: -13 }, examFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }, examDate: { fontFamily: font.regular, fontSize: 9 }, examMotionLabel: { fontFamily: font.bold, fontSize: 8 },
-  syllabusCard: { minHeight: 105, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10 }, snapshotIcon: { width: 39, height: 39, borderRadius: 13, alignItems: 'center', justifyContent: 'center' }, syllabusCopy: { flex: 1, minWidth: 0 }, syllabusTitle: { marginTop: 3, fontFamily: font.bold, fontSize: 13 }, snapshotLabel: { fontFamily: font.regular, fontSize: 9, marginTop: 2 }, syllabusValue: { fontFamily: font.extraBold, fontSize: 23, letterSpacing: -.5 }, syllabusProgress: { width: '100%', marginTop: 2 }, cardHeading: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }, cardTitle: { fontFamily: font.extraBold, fontSize: 18, letterSpacing: -.35, marginTop: 3 }, recentList: { marginTop: 9 }, recentRow: { minHeight: 62, borderTopWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 9 }, noteIcon: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }, recentCopy: { flex: 1, minWidth: 0 }, recentTitle: { fontFamily: font.bold, fontSize: 12 }, recentMeta: { fontFamily: font.regular, fontSize: 9, marginTop: 3 }, pressed: { opacity: .75 },
+  syllabusCard: { minHeight: 105, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10 }, snapshotIcon: { width: 39, height: 39, borderRadius: 13, alignItems: 'center', justifyContent: 'center' }, syllabusCopy: { flex: 1, minWidth: 0 }, syllabusTitle: { marginTop: 3, fontFamily: font.bold, fontSize: 13 }, snapshotLabel: { fontFamily: font.regular, fontSize: 9, marginTop: 2 }, syllabusValue: { fontFamily: font.extraBold, fontSize: 23, letterSpacing: -.5 }, syllabusProgress: { width: '100%', marginTop: 2 }, cardTitle: { fontFamily: font.extraBold, fontSize: 18, letterSpacing: -.35, marginTop: 3 }, pressed: { opacity: .75 },
 });

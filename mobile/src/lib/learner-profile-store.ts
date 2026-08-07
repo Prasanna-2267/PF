@@ -4,6 +4,7 @@ export type LearnerProfile = {
   examName: string;
   category: string;
   examDate: string;
+  academyId: string;
   dailyTarget: string;
   language: string;
   timezone: string;
@@ -14,6 +15,7 @@ const defaultProfile: LearnerProfile = {
   examName: 'JEE',
   category: 'Mains',
   examDate: '14 Sep 2026',
+  academyId: '',
   dailyTarget: '2 hours',
   language: 'English',
   timezone: 'Asia/Kolkata',
