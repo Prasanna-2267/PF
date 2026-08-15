@@ -18,3 +18,4 @@ export type ThemePreference = 'light' | 'dark' | 'system';
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 32 } as const;
 export const radius = { field: 12, card: 16, pill: 999 } as const;
 export const font = { regular: 'Manrope_400Regular', medium: 'Manrope_500Medium', semibold: 'Manrope_600SemiBold', bold: 'Manrope_700Bold', extraBold: 'Manrope_800ExtraBold' } as const;
+export const layout = { studentAppMaxWidth: 1100, studentContentMaxWidth: 1040, studentNavMaxWidth: 720, tabletBreakpoint: 720 } as const;

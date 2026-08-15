@@ -3,9 +3,9 @@ import { GlassView } from 'expo-glass-effect';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { BookOpen, ChartLine, CircleDot, House, Library } from 'lucide-react-native';
-import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View, type GestureResponderEvent, type LayoutChangeEvent, type ViewStyle } from 'react-native';
+import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions, type GestureResponderEvent, type LayoutChangeEvent, type ViewStyle } from 'react-native';
 
-import { font, themes } from '@/constants/theme';
+import { font, layout, themes } from '@/constants/theme';
 import { useAuthStore } from '@/lib/auth-store';
 import { useAppTheme } from '@/providers/app-providers';
 
@@ -35,6 +35,7 @@ type LiquidTabBarProps = {
 
 export function LiquidTabBar({ state, navigation }: LiquidTabBarProps) {
   const { theme } = useAppTheme();
+  const { width: viewportWidth } = useWindowDimensions();
   const dark = theme.canvas === themes.dark.canvas;
   const router = useRouter();
   const name = useAuthStore((store) => store.user?.name ?? 'Parallax User');
@@ -58,6 +59,9 @@ export function LiquidTabBar({ state, navigation }: LiquidTabBarProps) {
   const dragStartX = useRef(0);
   const totalItems = visibleRoutes.length + 1;
   const cellWidth = railWidth > railPadding * 2 ? (railWidth - railPadding * 2) / totalItems : 0;
+  const appWidth = Math.min(viewportWidth, layout.studentAppMaxWidth);
+  const responsiveRailWidth = Math.max(0, Math.min(appWidth - 28, layout.studentNavMaxWidth));
+  const responsiveRailLeft = Math.max(0, (appWidth - responsiveRailWidth) / 2);
 
   useEffect(() => {
     previewIndexRef.current = activeIndex;
@@ -137,7 +141,7 @@ export function LiquidTabBar({ state, navigation }: LiquidTabBarProps) {
 
   const finishBeadDrag = () => settleOnTab(Math.round(livePosition.current));
 
-  return <View pointerEvents="box-none" style={styles.positioner}>
+  return <View pointerEvents="box-none" style={[styles.positioner, { left: responsiveRailLeft, width: responsiveRailWidth }]}>
     <Animated.View pointerEvents="none" style={[styles.activeGlow, { left: railPadding + Math.max(0, (cellWidth - glowWidth) / 2), backgroundColor: accent.strong, opacity: glowOpacity, transform: [{ translateX }, { scale: glowScale }] }]} />
     <Animated.View pointerEvents="none" style={[styles.motionTrail, { left: orbLeft - 8, backgroundColor: accent.strong, opacity: trailOpacity, transform: [{ translateX }, { scaleX: trailScaleX }] }]} />
 
@@ -168,7 +172,7 @@ export function LiquidTabBar({ state, navigation }: LiquidTabBarProps) {
 }
 
 const styles = StyleSheet.create({
-  positioner: { position: 'absolute', left: 14, right: 14, bottom: 8, height: 80 },
+  positioner: { position: 'absolute', bottom: 8, height: 80 },
   glassShell: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 60, zIndex: 1, borderRadius: 19, borderWidth: 1, overflow: 'hidden', backgroundColor: 'rgba(12,15,20,.78)' },
   topSheen: { position: 'absolute', top: 0, left: 17, right: 17, height: 1 },
   items: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: railPadding, paddingTop: 7, paddingBottom: 3 },

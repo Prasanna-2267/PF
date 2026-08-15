@@ -10,6 +10,96 @@ This file records server-side work intentionally deferred while the React Native
 - Define upgrade, expiry, refund, cancellation and grace-period behavior.
 - Add entitlement checks to protected notes, infographics, question banks, explanations, retries, weak-area analytics and monthly reports.
 
+## Permanent single-device account binding
+
+This policy is different from limiting concurrent sessions. After the first successful login, a learner account is permanently bound to that approved device until an authorized recovery/reset explicitly replaces the binding. Logging out, token expiry, app closure or having zero active sessions must not release the device binding.
+
+### Required behavior
+
+- On the first successful login, atomically create the account's one approved-device binding.
+- Allow that same approved device to sign in, log out and sign in again any number of times.
+- Reject login from every other device even when the approved device is logged out and no active access token exists.
+- Apply the same binding policy to password login, OTP login, Google OAuth and any future authentication method.
+- Keep device binding separate from session records:
+  - logout revokes the current access/refresh tokens;
+  - session expiry removes or expires the session;
+  - neither action deletes or changes the approved-device binding.
+- Prevent two simultaneous first-login requests from binding two devices by using a database uniqueness constraint and transaction/lock.
+- Return an explicit safe error such as `ACCOUNT_BOUND_TO_ANOTHER_DEVICE`; do not reveal the approved device's sensitive identifiers.
+- Show the learner a clear blocked-device message and the approved device's safe display metadata, such as device model and binding date, only after identity verification.
+
+### Device identity and proof
+
+- Do not use IMEI, phone number, MAC address, advertising ID or raw hardware serial numbers. Modern mobile operating systems restrict them, they create privacy risk and some can be spoofed.
+- On first enrollment, generate a non-exportable asymmetric key pair in the Android Keystore or iOS Keychain/Secure Enclave where supported.
+- Send only the public key, a server-issued installation identifier and safe device metadata to the backend.
+- Require the device to sign a short-lived server challenge during later logins; verify the signature before issuing session tokens.
+- Use Android Play Integrity and Apple App Attest/DeviceCheck as additional risk signals when production requirements permit, but do not treat attestation alone as the account binding.
+- Store device fingerprint signals only as secondary fraud/risk evidence. They must not replace cryptographic device proof.
+- Encrypt sensitive binding records at rest and restrict access to authentication/support services.
+
+### Suggested binding record
+
+- `bindingId`
+- `userId` with a unique active-binding constraint
+- `devicePublicKey`
+- `deviceInstallationId`
+- `platform`
+- safe model/OS/app-version metadata
+- `boundAt`, `lastVerifiedAt` and `lastLoginAt`
+- `status`: `active`, `recovery_pending`, `revoked` or `replaced`
+- replacement/revocation actor, reason and audit reference
+- Never store access tokens or raw private keys in this record.
+
+### Login and logout flow
+
+1. Authenticate the user's password, OTP or OAuth identity.
+2. If no device is bound, start an atomic device-enrollment challenge and bind the successfully verified device.
+3. If a device is already bound, issue a short-lived challenge for the stored public key.
+4. Issue access and refresh tokens only after the approved device signs the challenge successfully.
+5. If the proof is missing or belongs to another device, reject the login regardless of active-session count.
+6. On logout, revoke session tokens but leave the binding unchanged.
+
+### Device replacement and recovery
+
+- A permanent one-device policy requires a recovery path for lost, stolen, damaged, factory-reset or replaced devices. Without one, legitimate customers can be locked out permanently.
+- Do not provide an automatic "use this new device" action after login failure.
+- Recommended recovery requires strong identity verification, such as verified email and mobile OTP together, followed by a cooldown or Admin/support approval according to business policy.
+- On approval, revoke the old binding, invalidate every old refresh token, create a replacement enrollment challenge and bind the new device.
+- Notify the learner through verified email/mobile whenever a reset is requested, approved, cancelled or completed.
+- Allow the learner/support team to immediately revoke a stolen approved device after identity verification.
+- Record requester, approver, reason, timestamps, old/new safe device metadata and IP/risk information in an immutable audit trail.
+- Apply rate limits and abuse detection to binding checks, recovery attempts and OTP requests.
+
+### Important platform limitation
+
+- No normal mobile app can identify the same physical device forever with absolute certainty. App reinstall, clearing application data, factory reset, OS security changes or lost Keystore/Keychain material can remove the device credential.
+- After credential loss, the original physical device may appear to the backend as a new device. It must use the same controlled recovery/reset flow; silently rebinding it would weaken the one-device rule.
+- Rooted/jailbroken devices and sophisticated emulators can reduce assurance. Define whether to block them or treat them as elevated risk.
+
+### Suggested endpoints and errors
+
+- `POST /auth/device/enroll/challenge`
+- `POST /auth/device/enroll/complete`
+- `POST /auth/device/verify/challenge`
+- `POST /auth/device/verify/complete`
+- `POST /auth/device-recovery/request`
+- `POST /auth/device-recovery/verify`
+- Admin/support-only device replacement approval and revocation endpoints.
+- Standardize responses such as `DEVICE_ENROLLMENT_REQUIRED`, `DEVICE_PROOF_REQUIRED`, `DEVICE_PROOF_INVALID`, `ACCOUNT_BOUND_TO_ANOTHER_DEVICE`, `DEVICE_RECOVERY_PENDING` and `DEVICE_BINDING_REVOKED`.
+
+### Acceptance and security tests
+
+- First successful login binds exactly one device even under simultaneous requests.
+- Repeated login/logout cycles on the approved device succeed.
+- Logout and token expiry never clear the device binding.
+- A second device is rejected when the first device is logged in, logged out or has no active session.
+- Password reset and Google OAuth do not bypass the binding.
+- Copied installation identifiers without the private key cannot authenticate.
+- Reinstall/credential loss enters recovery instead of silently creating a second binding.
+- Approved replacement revokes the old device and all old refresh tokens before the new device is enrolled.
+- All enrollments, rejected devices, recovery attempts and binding changes are rate-limited, monitored and audited.
+
 ## Resource validity and expiry
 
 - Add resource types for standard notes, infographic notes and question banks.
@@ -185,7 +275,7 @@ This feature must be generated and enforced by the backend. The mobile app shoul
 - Generated task minutes fit within the learner's configured daily availability, allowing only a small documented rounding tolerance.
 - Completed tasks remain completed after regeneration and never award points twice.
 - Free/Paid entitlements are applied consistently if adaptive analytics or reports differ by plan.
-- Plans remain stable across devices and app reinstalls.
+- Plans remain stable after an authorized device recovery/replacement and do not depend on local app storage.
 - Unit tests cover scoring, thresholds, decay, deduplication, prerequisite ordering, available-time packing and carry-over.
 - Integration tests cover practice submission through weak-area recalculation and next-plan generation.
 - Load tests cover daily generation for the expected learner population.
