@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Bookmark, Check, ChevronRight, Clock3, FileText, LockKeyhole, MoreHorizontal, RotateCw, X } from 'lucide-react-native';
+import { Bookmark, Check, Clock3, FileText, LockKeyhole, MoreHorizontal, RotateCw, X } from 'lucide-react-native';
+
 import { font } from '@/constants/theme';
 import { canOpenNote, useAdminAccessStore } from '@/lib/admin-access-store';
 import { useAuthStore } from '@/lib/auth-store';
@@ -15,8 +16,6 @@ export function initialReaderStatus(lesson: Lesson): ReaderStatus {
 export function NoteRow({ lesson, context, onOpen, compact = false }: { lesson: Lesson; context?: string; onOpen: () => void; compact?: boolean }) {
   const { theme } = useAppTheme();
   const [showActions, setShowActions] = useState(false);
-  // The selector must return the same reference until the store changes. Creating a
-  // fallback object inside it makes React's external-store snapshot loop forever on web.
   const storedStatus = useLessonReaderStore((state) => state.byLessonId[lesson.id]);
   const status = storedStatus ?? initialReaderStatus(lesson);
   const userEmail = useAuthStore((state) => state.user?.email);
@@ -26,14 +25,21 @@ export function NoteRow({ lesson, context, onOpen, compact = false }: { lesson: 
   return <>
     <View style={[styles.row, { backgroundColor: theme.surface, borderColor: theme.line }]}>
       <Pressable accessibilityRole="button" accessibilityLabel={`Open ${lesson.title}`} onPress={onOpen} style={({ pressed }) => [styles.main, pressed && styles.pressed]}>
-        <View style={styles.iconWrap}><View style={[styles.icon, { backgroundColor: accessible ? theme.primarySoft : theme.sunken }]}>{accessible ? <FileText color={theme.primary} size={19} /> : <LockKeyhole color={theme.muted} size={18} />}</View>{status.favourite ? <View accessibilityLabel="Saved to favourites" style={[styles.savedBadge, { backgroundColor: theme.goldSoft, borderColor: theme.surface }]}><Bookmark fill={theme.goldStrong} color={theme.goldStrong} size={9} strokeWidth={2.5} /></View> : null}</View>
+        <View style={styles.iconWrap}>
+          <View style={[styles.icon, { backgroundColor: accessible ? theme.primarySoft : theme.sunken }]}>{accessible ? <FileText color={theme.primary} size={19} /> : <LockKeyhole color={theme.muted} size={18} />}</View>
+          {status.favourite ? <View accessibilityLabel="Saved to favourites" style={[styles.savedBadge, { backgroundColor: theme.goldSoft, borderColor: theme.surface }]}><Bookmark fill={theme.goldStrong} color={theme.goldStrong} size={9} strokeWidth={2.5} /></View> : null}
+        </View>
         <View style={styles.copy}>
           <Text numberOfLines={compact ? 1 : 2} ellipsizeMode="tail" style={[styles.title, { color: theme.fg }]}>{lesson.title}</Text>
           <Text numberOfLines={1} style={[styles.detail, { color: theme.muted }]}>{context ? `${context} · ` : ''}{lesson.pages} pages</Text>
-          {accessible ? <View style={styles.status}><View>{status.read ? <Check color={theme.success} size={12} strokeWidth={3} /> : <Clock3 color={theme.primary} size={12} />}</View><Text numberOfLines={1} style={[styles.statusText, { color: status.read ? theme.success : theme.primary }]}>{status.read ? 'Completed' : 'In progress'}</Text>{status.revisions ? <Text numberOfLines={1} style={[styles.revision, { color: theme.goldStrong }]}>{status.revisions}× revised</Text> : null}</View> : <Text numberOfLines={1} style={[styles.locked, { color: theme.goldStrong }]}>{lesson.price ?? 'Locked'}</Text>}
+          {accessible || status.read ? <View style={styles.status}>
+            {status.read ? <Check color={theme.success} size={12} strokeWidth={3} /> : <Clock3 color={theme.primary} size={12} />}
+            <Text numberOfLines={1} style={[styles.statusText, { color: status.read ? theme.success : theme.primary }]}>{status.read ? 'Completed' : 'In progress'}</Text>
+            {!accessible ? <Text numberOfLines={1} style={[styles.premiumTracking, { color: theme.goldStrong }]}>Premium locked</Text> : status.revisions ? <Text numberOfLines={1} style={[styles.revision, { color: theme.goldStrong }]}>{status.revisions}× revised</Text> : null}
+          </View> : <Text numberOfLines={1} style={[styles.locked, { color: theme.goldStrong }]}>{lesson.price ?? 'Locked'}</Text>}
         </View>
       </Pressable>
-      {accessible ? <Pressable accessibilityRole="button" accessibilityLabel={`Manage ${lesson.title}`} onPress={() => setShowActions(true)} style={[styles.more, { backgroundColor: theme.sunken }]}><MoreHorizontal color={theme.muted} size={18} /></Pressable> : <ChevronRight color={theme.faint} size={19} />}
+      <Pressable accessibilityRole="button" accessibilityLabel={`Manage ${lesson.title}`} onPress={() => setShowActions(true)} style={[styles.more, { backgroundColor: theme.sunken }]}><MoreHorizontal color={theme.muted} size={18} /></Pressable>
     </View>
     <NoteActionSheet lesson={lesson} visible={showActions} onClose={() => setShowActions(false)} />
   </>;
@@ -46,13 +52,19 @@ export function NoteActionSheet({ lesson, visible, onClose }: { lesson: Lesson; 
   const toggleRead = useLessonReaderStore((state) => state.toggleRead);
   const toggleFavourite = useLessonReaderStore((state) => state.toggleFavourite);
   const revise = useLessonReaderStore((state) => state.revise);
+  const userEmail = useAuthStore((state) => state.user?.email);
+  const grants = useAdminAccessStore((state) => state.grants);
+  const accessible = canOpenNote(lesson, userEmail, grants);
+
   return <Modal transparent visible={visible} animationType="none" onRequestClose={onClose}>
     <View style={styles.modalRoot}><Pressable style={styles.scrim} onPress={onClose} /><View style={[styles.sheet, { backgroundColor: theme.surface }]}>
       <View style={[styles.handle, { backgroundColor: theme.line }]} />
       <View style={styles.sheetHeader}><View style={styles.sheetHeading}><Text numberOfLines={1} style={[styles.sheetTitle, { color: theme.fg }]}>{lesson.title}</Text><Text style={[styles.sheetSubtitle, { color: theme.muted }]}>Study actions for this note</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close note actions" onPress={onClose} style={[styles.close, { backgroundColor: theme.sunken }]}><X color={theme.muted} size={18} /></Pressable></View>
-      <Action icon={<Check color={status.read ? theme.success : theme.primary} size={19} />} iconBackground={status.read ? theme.successSoft : theme.primarySoft} title={status.read ? 'Marked as read' : 'Mark as read'} detail={status.read ? 'Tap to move it back to in progress.' : 'Add it to your completed study.'} border={theme.line} fg={theme.fg} muted={theme.muted} onPress={() => toggleRead(lesson.id, initialReaderStatus(lesson))} />
-      <Action icon={<Bookmark fill={status.favourite ? theme.goldStrong : 'transparent'} color={theme.goldStrong} size={18} />} iconBackground={theme.goldSoft} title={status.favourite ? 'Remove saved note' : 'Save to favourites'} detail="Keep this note in your quick-access list." border={theme.line} fg={theme.fg} muted={theme.muted} onPress={() => toggleFavourite(lesson.id, initialReaderStatus(lesson))} />
-      <Action icon={<RotateCw color={theme.primary} size={18} />} iconBackground={theme.primarySoft} title="Revise this note" detail={status.revisions ? `${status.revisions} revisions logged so far.` : 'Log your first revision.'} border={theme.line} fg={theme.fg} muted={theme.muted} onPress={() => revise(lesson.id, initialReaderStatus(lesson))} />
+      <Action icon={<Check color={status.read ? theme.success : theme.primary} size={19} />} iconBackground={status.read ? theme.successSoft : theme.primarySoft} title={status.read ? 'Marked as completed' : 'Mark as completed'} detail={accessible ? (status.read ? 'Tap to move it back to in progress.' : 'Add it to your completed study.') : (status.read ? 'Completion is tracked; premium content remains locked.' : 'Track completion without purchasing or opening the file.')} border={theme.line} fg={theme.fg} muted={theme.muted} onPress={() => toggleRead(lesson.id, initialReaderStatus(lesson))} />
+      {accessible ? <>
+        <Action icon={<Bookmark fill={status.favourite ? theme.goldStrong : 'transparent'} color={theme.goldStrong} size={18} />} iconBackground={theme.goldSoft} title={status.favourite ? 'Remove saved note' : 'Save to favourites'} detail="Keep this note in your quick-access list." border={theme.line} fg={theme.fg} muted={theme.muted} onPress={() => toggleFavourite(lesson.id, initialReaderStatus(lesson))} />
+        <Action icon={<RotateCw color={theme.primary} size={18} />} iconBackground={theme.primarySoft} title="Revise this note" detail={status.revisions ? `${status.revisions} revisions logged so far.` : 'Log your first revision.'} border={theme.line} fg={theme.fg} muted={theme.muted} onPress={() => revise(lesson.id, initialReaderStatus(lesson))} />
+      </> : <View style={[styles.accessNotice, { backgroundColor: theme.goldSoft }]}><LockKeyhole size={16} color={theme.goldStrong} /><Text style={[styles.accessNoticeText, { color: theme.goldStrong }]}>Completion is independent from access. Purchase is still required to read, save or revise this material.</Text></View>}
     </View></View>
   </Modal>;
 }
@@ -62,5 +74,6 @@ function Action({ icon, iconBackground, title, detail, border, fg, muted, onPres
 }
 
 const styles = StyleSheet.create({
-  row: { minHeight: 89, borderWidth: 1, borderRadius: 16, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }, main: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 }, iconWrap: { width: 42, height: 42, position: 'relative' }, icon: { width: 42, height: 42, borderRadius: 13, alignItems: 'center', justifyContent: 'center' }, savedBadge: { position: 'absolute', right: -4, bottom: -4, width: 19, height: 19, borderRadius: 10, borderWidth: 2, alignItems: 'center', justifyContent: 'center' }, copy: { flex: 1, minWidth: 0 }, title: { fontFamily: font.bold, fontSize: 14, lineHeight: 19 }, detail: { fontFamily: font.regular, fontSize: 11, marginTop: 2 }, status: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 5, overflow: 'hidden' }, statusText: { flexShrink: 1, fontFamily: font.semibold, fontSize: 10 }, revision: { flexShrink: 1, fontFamily: font.semibold, fontSize: 10, marginLeft: 4 }, locked: { fontFamily: font.bold, fontSize: 10, marginTop: 5 }, more: { height: 31, width: 31, borderRadius: 10, alignItems: 'center', justifyContent: 'center' }, pressed: { opacity: 0.84 }, modalRoot: { flex: 1, justifyContent: 'flex-end' }, scrim: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(5,9,24,0.6)' }, sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 16, paddingBottom: 28, gap: 5 }, handle: { alignSelf: 'center', width: 38, height: 4, borderRadius: 2, marginBottom: 8 }, sheetHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 }, sheetHeading: { flex: 1, minWidth: 0 }, sheetTitle: { fontFamily: font.bold, fontSize: 16 }, sheetSubtitle: { fontFamily: font.regular, fontSize: 11, marginTop: 2 }, close: { height: 34, width: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }, action: { minHeight: 70, borderTopWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 9 }, actionIcon: { height: 40, width: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }, actionCopy: { flex: 1, minWidth: 0 }, actionTitle: { fontFamily: font.bold, fontSize: 13 }, actionDetail: { fontFamily: font.regular, fontSize: 10, lineHeight: 15, marginTop: 2 },
+  row: { minHeight: 89, borderWidth: 1, borderRadius: 16, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }, main: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 }, iconWrap: { width: 42, height: 42, position: 'relative' }, icon: { width: 42, height: 42, borderRadius: 13, alignItems: 'center', justifyContent: 'center' }, savedBadge: { position: 'absolute', right: -4, bottom: -4, width: 19, height: 19, borderRadius: 10, borderWidth: 2, alignItems: 'center', justifyContent: 'center' }, copy: { flex: 1, minWidth: 0 }, title: { fontFamily: font.bold, fontSize: 14, lineHeight: 19 }, detail: { fontFamily: font.regular, fontSize: 11, marginTop: 2 }, status: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 5, overflow: 'hidden' }, statusText: { flexShrink: 1, fontFamily: font.semibold, fontSize: 10 }, revision: { flexShrink: 1, fontFamily: font.semibold, fontSize: 10, marginLeft: 4 }, premiumTracking: { flexShrink: 1, fontFamily: font.semibold, fontSize: 8, marginLeft: 3 }, locked: { fontFamily: font.bold, fontSize: 10, marginTop: 5 }, more: { height: 31, width: 31, borderRadius: 10, alignItems: 'center', justifyContent: 'center' }, pressed: { opacity: 0.84 },
+  modalRoot: { flex: 1, justifyContent: 'flex-end' }, scrim: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(5,9,24,0.6)' }, sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 16, paddingBottom: 28, gap: 5 }, handle: { alignSelf: 'center', width: 38, height: 4, borderRadius: 2, marginBottom: 8 }, sheetHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 }, sheetHeading: { flex: 1, minWidth: 0 }, sheetTitle: { fontFamily: font.bold, fontSize: 16 }, sheetSubtitle: { fontFamily: font.regular, fontSize: 11, marginTop: 2 }, close: { height: 34, width: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }, action: { minHeight: 70, borderTopWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 9 }, actionIcon: { height: 40, width: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }, actionCopy: { flex: 1, minWidth: 0 }, actionTitle: { fontFamily: font.bold, fontSize: 13 }, actionDetail: { fontFamily: font.regular, fontSize: 10, lineHeight: 15, marginTop: 2 }, accessNotice: { minHeight: 58, marginTop: 4, borderRadius: 14, paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center', gap: 9 }, accessNoticeText: { flex: 1, fontFamily: font.medium, fontSize: 9, lineHeight: 14 },
 });

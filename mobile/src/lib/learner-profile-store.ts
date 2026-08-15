@@ -22,7 +22,13 @@ const defaultProfile: LearnerProfile = {
   reminderTime: '7:00 PM',
 };
 
+export function normalizeExamDate(value: string) {
+  const trimmed = value.trim().replace(/\s+/g, ' ');
+  if (/^[A-Za-z]{3,9}\s+\d{4}$/.test(trimmed)) return `1 ${trimmed}`;
+  return trimmed;
+}
+
 export const useLearnerProfileStore = create<{ profile: LearnerProfile; updateProfile: (profile: LearnerProfile) => void }>((set) => ({
   profile: defaultProfile,
-  updateProfile: (profile) => set({ profile }),
+  updateProfile: (profile) => set({ profile: { ...profile, examDate: normalizeExamDate(profile.examDate) } }),
 }));

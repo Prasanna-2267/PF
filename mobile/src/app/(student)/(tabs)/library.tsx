@@ -6,6 +6,7 @@ import { BookOpen, ChevronRight, CreditCard, FileCheck2, FileText, Gift, Receipt
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ProgressBar } from '@/components/study-ui';
+import { PaidResourceValidity } from '@/components/paid-resource-validity';
 import { font, radius, spacing, themes } from '@/constants/theme';
 import { orders, ownedLessons } from '@/lib/demo-commerce';
 import { useAppTheme } from '@/providers/app-providers';
@@ -51,6 +52,8 @@ export default function LibraryScreen() {
           <View style={[styles.metric, { backgroundColor: theme.surface, borderColor: theme.line }]}><View style={[styles.metricIcon, { backgroundColor: theme.goldSoft }]}><Gift color={theme.goldStrong} size={18} /></View><Text style={[styles.metricValue, { color: theme.fg }]}>{freePurchases}</Text><Text numberOfLines={1} adjustsFontSizeToFit style={[styles.metricLabel, { color: theme.muted }]}>Free purchases</Text></View>
           <View style={[styles.metric, { backgroundColor: theme.surface, borderColor: theme.line }]}><View style={[styles.metricIcon, { backgroundColor: theme.successSoft }]}><CreditCard color={theme.success} size={18} /></View><Text style={[styles.metricValue, { color: theme.fg }]}>{paidPurchases}</Text><Text numberOfLines={1} adjustsFontSizeToFit style={[styles.metricLabel, { color: theme.muted }]}>Paid purchases</Text></View>
         </View>
+
+        <PaidResourceValidity />
 
         <View style={[styles.switcher, { backgroundColor: theme.sunken, borderColor: theme.line }]}>
           {(['lessons', 'orders'] as const).map((item) => {

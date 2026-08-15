@@ -4,7 +4,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BookCheck, CalendarClock, Flame, Gauge, GraduationCap, RotateCcw, Sparkles, Target, TrendingUp } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Card } from '@/components/ui';
+import { RevisionTrackerShortcut } from '@/components/revision-tracker-shortcut';
+import { MonthlyReportShortcut } from '@/components/monthly-report-shortcut';
 import { GrandSessionControl, ProgressBar } from '@/components/study-ui';
+import { TrackerStreakCalendar } from '@/components/tracker-streak-calendar';
 import { font, spacing, themes } from '@/constants/theme';
 import { demoStudy, formatMinutes, useDemoStudyClock } from '@/lib/demo-study';
 import { useAppTheme } from '@/providers/app-providers';
@@ -128,11 +131,16 @@ export default function TrackerScreen() {
 
     <ConsistencyChart />
 
+    <TrackerStreakCalendar />
+
     <View style={styles.metricGrid}><TrackerMetricCard icon={<Flame color={theme.goldStrong} fill={theme.goldStrong} size={19} />} label="STREAK" value={`${demoStudy.streak} days`} detail="Current learning run" color={theme.goldStrong} progress={.68} /><TrackerMetricCard icon={<TrendingUp color={theme.success} size={19} />} label="MOMENTUM" value={`${demoStudy.momentum}`} detail="Strong this week" color={theme.success} progress={.84} /></View>
 
     <Card style={styles.examCard}><View pointerEvents="none" style={[styles.examGlow, { backgroundColor: theme.goldSoft }]} /><View style={styles.examHeading}><View style={styles.examHeadingCopy}><View style={styles.examEyebrowRow}><CalendarClock color={theme.goldStrong} size={16} /><Text style={[styles.sectionEyebrow, { color: theme.goldStrong }]}>EXAM COUNTDOWN</Text></View><Text numberOfLines={1} style={[styles.examName, { color: theme.fg }]}>{demoStudy.exam.label}</Text></View><View style={[styles.examStatus, { backgroundColor: theme.goldSoft }]}><Text style={[styles.examStatusText, { color: theme.goldStrong }]}>IN MOTION</Text></View></View><View style={styles.examRow}><View style={styles.examCountCopy}><Text style={[styles.examDays, { color: theme.fg }]}>{demoStudy.exam.daysLeft}<Text style={[styles.daysSuffix, { color: theme.muted }]}> days</Text></Text><Text style={[styles.examDate, { color: theme.muted }]}>until {demoStudy.exam.date}</Text><Text style={[styles.examPrompt, { color: theme.goldStrong }]}>Build calm through consistent preparation.</Text></View><ExamPressureDial value={demoStudy.exam.pressure} /></View><View style={styles.progressSpacing}><ProgressBar value={demoStudy.exam.pressure} color={theme.gold} /></View><View style={styles.examMilestones}><Text style={[styles.examMilestone, { color: theme.goldStrong }]}>NOW</Text><View style={[styles.examMilestoneLine, { backgroundColor: theme.line }]} /><Text style={[styles.examMilestone, { color: theme.muted }]}>REVISION WINDOW</Text><View style={[styles.examMilestoneLine, { backgroundColor: theme.line }]} /><Text style={[styles.examMilestone, { color: theme.muted }]}>EXAM</Text></View></Card>
 
     <View><View style={styles.readinessHeading}><View><Text style={[styles.readinessLabel, { color: theme.primary }]}>YOUR READINESS</Text><Text style={[styles.readinessTitle, { color: theme.fg }]}>Preparation signals</Text></View><BookCheck size={20} color={theme.primaryStrong} /></View><View style={styles.readiness}><ReadinessCard icon={<BookCheck size={18} color={theme.primaryStrong} />} label="SYLLABUS" value={`${demoStudy.syllabusPercent}%`} detail="Coverage completed" progress={demoStudy.syllabusPercent} color={theme.primaryStrong} /><ReadinessCard icon={<RotateCcw size={18} color={theme.goldStrong} />} label="REVISIONS" value={`${demoStudy.revisions}`} detail="Intentional returns" progress={60} color={theme.goldStrong} /></View></View>
+
+    <RevisionTrackerShortcut />
+    <MonthlyReportShortcut />
   </ScrollView></SafeAreaView>;
 }
 

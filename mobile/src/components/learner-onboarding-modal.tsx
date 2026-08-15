@@ -41,7 +41,7 @@ export function LearnerOnboardingModal({ visible, onComplete, onSkip }: LearnerO
   const finish = () => {
     setSubmitted(true);
     if (!ready || !course || !monthEntry) return;
-    const examDate = `${day ? `${Number(day)} ` : ''}${monthEntry[0]} ${year}`;
+    const examDate = `${day ? Number(day) : 1} ${monthEntry[0]} ${year}`;
     updateProfile({
       ...savedProfile,
       examName: course.name,
@@ -82,7 +82,7 @@ export function LearnerOnboardingModal({ visible, onComplete, onSkip }: LearnerO
 
               <View style={styles.section}>
                 <View style={styles.labelRow}><CalendarDays size={16} color={theme.goldStrong} /><Text style={[styles.label, { color: theme.fg }]}>When is your exam?</Text><Text style={[styles.required, { color: theme.danger }]}>MONTH + YEAR</Text></View>
-                <Text style={[styles.hint, { color: theme.muted }]}>The exact date is optional. Month and year power your countdown.</Text>
+                <Text style={[styles.hint, { color: theme.muted }]}>The exact day is optional. If omitted, we will use the first day of your selected month.</Text>
                 <View style={styles.monthGrid}>{months.map(([short]) => {
                   const selected = month === short;
                   return <Pressable key={short} onPress={() => setMonth(short)} style={[styles.month, { backgroundColor: selected ? theme.goldSoft : theme.surface, borderColor: selected ? theme.gold : theme.line }]}><Text style={[styles.monthText, { color: selected ? theme.goldStrong : theme.muted }]}>{short}</Text></Pressable>;

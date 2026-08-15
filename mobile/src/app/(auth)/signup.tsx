@@ -1,28 +1,61 @@
-import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useState, type ComponentType } from 'react';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type TextInputProps,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { ArrowRight, Check, Mail, ShieldCheck, Sparkles, UserRoundCheck } from 'lucide-react-native';
+import { StatusBar } from 'expo-status-bar';
+import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, LockKeyhole, Mail, Phone, UserRound } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AuthLink, AuthShell } from '@/components/auth-shell';
 import { LearnerOnboardingModal } from '@/components/learner-onboarding-modal';
-import { AppButton, AppTextField, Card } from '@/components/ui';
-import { font, radius, spacing } from '@/constants/theme';
+import { font, spacing } from '@/constants/theme';
 import { type StudentSignupIdentity, useAuthStore } from '@/lib/auth-store';
-import { useAppTheme } from '@/providers/app-providers';
 import { useRocketLaunch } from '@/providers/rocket-launch-provider';
 
 type FormErrors = Partial<Record<'name' | 'phone' | 'email' | 'password', string>>;
+type SignupFieldProps = TextInputProps & {
+  label: string;
+  error?: string;
+  icon: ComponentType<{ size?: number; color?: string }>;
+  fieldKey: 'name' | 'phone' | 'email' | 'password';
+  focusedField: string | null;
+  setFocusedField: (field: string | null) => void;
+  trailing?: React.ReactNode;
+};
+
 const googleDemoEmail = 'student@gmail.com';
+const palette = {
+  canvas: '#06070A',
+  panel: '#0D0E12',
+  line: 'rgba(255,255,255,0.11)',
+  text: '#F8F8FA',
+  muted: '#A9ADB6',
+  faint: '#6F747E',
+  gold: '#F4C55D',
+  orange: '#FF783B',
+  danger: '#FF7A80',
+  success: '#79D6A9',
+} as const;
 
 export default function SignupScreen() {
   const router = useRouter();
-  const { theme } = useAppTheme();
   const { launchTo } = useRocketLaunch();
   const completeStudentSignup = useAuthStore((state) => state.completeStudentSignup);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
   const [showOnboarding, setShowOnboarding] = useState(false);
 
@@ -53,57 +86,137 @@ export default function SignupScreen() {
   };
 
   return <>
-    <AuthShell
-      eyebrow="BEGIN YOUR JOURNEY"
-      title="Create a learning identity that grows with you."
-      description="One secure account connects your course, exam target, verified notes and daily momentum."
-      footer={<View style={styles.switchRow}><View style={[styles.switchIcon, { backgroundColor: theme.successSoft }]}><UserRoundCheck size={17} color={theme.success} /></View><View style={styles.switchCopy}><Text style={[styles.switchTitle, { color: theme.fg }]}>Already learning with us?</Text><Text style={[styles.switchText, { color: theme.muted }]}>Return to your existing plan and progress.</Text></View><AuthLink onPress={() => router.push('/login')}>Sign in</AuthLink></View>}
-    >
-      <View style={[styles.journeyCard, { backgroundColor: theme.goldSoft, borderColor: theme.goldStrong }]}>
-        <View style={[styles.journeyOrb, { backgroundColor: theme.gold }]}><Sparkles size={20} color="#FFFFFF" /></View>
-        <View style={styles.journeyCopy}><Text style={[styles.journeyLabel, { color: theme.goldStrong }]}>YOUR STARTING LINE</Text><Text style={[styles.journeyTitle, { color: theme.fg }]}>Account → verification → personal plan</Text><Text style={[styles.journeyText, { color: theme.muted }]}>A focused setup designed around your exam.</Text></View>
+    <View style={styles.canvas}>
+      <StatusBar style="light" />
+      <LinearGradient colors={['#D99535', '#9D5427', '#44241C', '#111014', '#06070A']} locations={[0, 0.14, 0.28, 0.43, 0.63]} style={StyleSheet.absoluteFill} />
+      <View pointerEvents="none" style={styles.artwork}>
+        <View style={styles.warmGlow} />
+        <View style={[styles.glassTile, styles.tileOne]} />
+        <View style={[styles.glassTile, styles.tileTwo]} />
+        <View style={styles.horizon} />
+        <View style={styles.starOne} />
+        <View style={styles.starTwo} />
       </View>
 
-      <Card style={styles.signupCard}>
-        <View style={[styles.topAccent, { backgroundColor: theme.gold }]} />
-        <View style={styles.cardHeading}>
-          <View style={[styles.cardIcon, { backgroundColor: theme.goldSoft, borderColor: theme.lineStrong }]}><Mail size={21} color={theme.goldStrong} /></View>
-          <View style={styles.cardHeadingCopy}><Text style={[styles.accountStep, { color: theme.goldStrong }]}>SECURE ACCOUNT</Text><Text style={[styles.cardTitle, { color: theme.fg }]}>Tell us who is learning</Text><Text style={[styles.cardSubtitle, { color: theme.muted }]}>Email and mobile receive separate OTPs.</Text></View>
-        </View>
+      <SafeAreaView style={styles.safe}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
+          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <View style={styles.topBar}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Go back" hitSlop={8} onPress={() => router.back()} style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
+                <ArrowLeft size={18} color={palette.text} />
+              </Pressable>
+              <View style={styles.brandLockup}>
+                <View style={styles.brandMark}><View style={styles.brandPupil} /></View>
+                <Text style={styles.wordmark}>PARALLAX FLOW</Text>
+              </View>
+            </View>
 
-        <View style={styles.fields}>
-          <AppTextField label="Full name" value={name} onChangeText={setName} placeholder="Your full name" autoComplete="name" textContentType="name" error={errors.name} />
-          <AppTextField label="Mobile number" value={phone} onChangeText={setPhone} placeholder="+91 98765 43210" keyboardType="phone-pad" autoComplete="tel" textContentType="telephoneNumber" error={errors.phone} />
-          <AppTextField label="Email address" value={email} onChangeText={setEmail} placeholder="you@example.com" keyboardType="email-address" autoCapitalize="none" autoCorrect={false} autoComplete="email" textContentType="emailAddress" error={errors.email} />
-          <AppTextField label="Create password" value={password} onChangeText={setPassword} placeholder="At least 8 characters" secureTextEntry autoComplete="new-password" textContentType="newPassword" error={errors.password} />
-        </View>
+            <View style={styles.heading}>
+              <Text style={styles.eyebrow}>START LEARNING</Text>
+              <Text style={styles.title}>Build a plan around{`\n`}your ambition.</Text>
+              <Text style={styles.description}>Create one account for protected notes, focused practice and visible progress.</Text>
+            </View>
 
-        <PasswordStrength length={password.length} />
-        <AppButton label="Create account securely" variant="gold" onPress={submitSignup} />
-        <View style={styles.divider}><View style={[styles.dividerLine, { backgroundColor: theme.line }]} /><Text style={[styles.dividerText, { color: theme.faint }]}>OR SIGN UP WITH</Text><View style={[styles.dividerLine, { backgroundColor: theme.line }]} /></View>
-        <Pressable accessibilityRole="button" onPress={signupWithGoogle} style={({ pressed }) => [styles.googleButton, { backgroundColor: theme.surface, borderColor: theme.lineStrong }, pressed && styles.pressed]}><View style={styles.googleMark}><Text style={styles.googleLetter}>G</Text></View><Text style={[styles.googleButtonText, { color: theme.fg }]}>Sign up with Google</Text><ArrowRight size={16} color={theme.muted} /></Pressable>
-      </Card>
+            <View style={styles.progressBlock}>
+              <View style={styles.progressTop}><Text style={styles.progressTitle}>Account setup</Text><Text style={styles.progressCount}>1 / 3</Text></View>
+              <View style={styles.progressTrack}><LinearGradient colors={[palette.orange, palette.gold]} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={styles.progressFill} /></View>
+              <View style={styles.progressLabels}><Text style={styles.progressActive}>Account</Text><Text style={styles.progressLabel}>Verify</Text><Text style={styles.progressLabel}>Personalise</Text></View>
+            </View>
 
-      <View style={[styles.verificationNote, { backgroundColor: theme.successSoft, borderColor: theme.line }]}><View style={[styles.noteIcon, { backgroundColor: theme.surface }]}><ShieldCheck size={16} color={theme.success} /></View><View style={styles.noteCopy}><Text style={[styles.noteTitle, { color: theme.fg }]}>Two-step verification</Text><Text style={[styles.noteText, { color: theme.muted }]}>Your email and mobile are verified before personalization begins.</Text></View></View>
-    </AuthShell>
+            <View style={styles.formArea}>
+              <Text style={styles.formTitle}>Create your account</Text>
+              <Text style={styles.formSubtitle}>Email and mobile will be verified separately.</Text>
+
+              <View style={styles.fields}>
+                <SignupField label="Full name" fieldKey="name" icon={UserRound} value={name} onChangeText={setName} placeholder="Your full name" autoComplete="name" textContentType="name" returnKeyType="next" error={errors.name} focusedField={focusedField} setFocusedField={setFocusedField} />
+                <SignupField label="Mobile number" fieldKey="phone" icon={Phone} value={phone} onChangeText={setPhone} placeholder="+91 98765 43210" keyboardType="phone-pad" autoComplete="tel" textContentType="telephoneNumber" returnKeyType="next" error={errors.phone} focusedField={focusedField} setFocusedField={setFocusedField} />
+                <SignupField label="Email address" fieldKey="email" icon={Mail} value={email} onChangeText={setEmail} placeholder="you@example.com" keyboardType="email-address" autoCapitalize="none" autoCorrect={false} autoComplete="email" textContentType="emailAddress" returnKeyType="next" error={errors.email} focusedField={focusedField} setFocusedField={setFocusedField} />
+                <SignupField label="Create password" fieldKey="password" icon={LockKeyhole} value={password} onChangeText={setPassword} onSubmitEditing={submitSignup} placeholder="At least 8 characters" secureTextEntry={!showPassword} autoComplete="new-password" textContentType="newPassword" returnKeyType="done" error={errors.password} focusedField={focusedField} setFocusedField={setFocusedField} trailing={<Pressable accessibilityRole="button" accessibilityLabel={showPassword ? 'Hide password' : 'Show password'} hitSlop={8} onPress={() => setShowPassword((value) => !value)}>{showPassword ? <EyeOff size={17} color={palette.muted} /> : <Eye size={17} color={palette.muted} />}</Pressable>} />
+              </View>
+
+              <PasswordStrength length={password.length} />
+
+              <Pressable accessibilityRole="button" onPress={submitSignup} style={({ pressed }) => [styles.primaryShell, pressed && styles.pressed]}>
+                <LinearGradient colors={['#FF763B', '#FFAE48', '#F7DF59']} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={styles.primaryButton}>
+                  <Text style={styles.primaryText}>Create account</Text>
+                  <View style={styles.arrowWell}><ArrowRight size={18} color="#17120B" /></View>
+                </LinearGradient>
+              </Pressable>
+
+              <View style={styles.divider}><View style={styles.dividerLine} /><Text style={styles.dividerText}>OR</Text><View style={styles.dividerLine} /></View>
+
+              <Pressable accessibilityRole="button" onPress={signupWithGoogle} style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]}>
+                <View style={styles.googleMark}><Text style={styles.googleLetter}>G</Text></View>
+                <Text style={styles.googleText}>Sign up with Google</Text>
+                <ArrowRight size={16} color={palette.faint} />
+              </Pressable>
+            </View>
+
+            <View style={styles.signinRow}><Text style={styles.signinText}>Already have an account?</Text><Pressable accessibilityRole="button" hitSlop={8} onPress={() => router.push('/login')}><Text style={styles.signinLink}>Sign in</Text></Pressable></View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </View>
     <LearnerOnboardingModal visible={showOnboarding} onComplete={() => enterDashboard(googleIdentity)} onSkip={() => enterDashboard(googleIdentity)} />
   </>;
 }
 
+function SignupField({ label, error, icon: Icon, fieldKey, focusedField, setFocusedField, trailing, ...props }: SignupFieldProps) {
+  const focused = focusedField === fieldKey;
+  return <View style={styles.fieldGroup}>
+    <Text style={styles.fieldLabel}>{label}</Text>
+    <View style={[styles.inputShell, focused && styles.inputShellFocused, error && styles.inputShellError]}>
+      <Icon size={17} color={error ? palette.danger : focused ? palette.gold : palette.faint} />
+      <TextInput {...props} onFocus={(event) => { setFocusedField(fieldKey); props.onFocus?.(event); }} onBlur={(event) => { setFocusedField(null); props.onBlur?.(event); }} placeholderTextColor={palette.faint} style={styles.input} />
+      {trailing}
+    </View>
+    {error ? <Text style={styles.errorText}>{error}</Text> : null}
+  </View>;
+}
+
 function PasswordStrength({ length }: { length: number }) {
-  const { theme } = useAppTheme();
   const strength = length === 0 ? 0 : length < 8 ? 1 : length < 12 ? 2 : 3;
-  const color = strength === 1 ? theme.danger : strength === 2 ? theme.warn : theme.success;
+  const color = strength === 1 ? palette.danger : strength === 2 ? palette.gold : palette.success;
   const label = strength === 0 ? 'Use 8+ characters' : strength === 1 ? 'Too short' : strength === 2 ? 'Good password' : 'Strong password';
-  return <View style={styles.strength}><View style={styles.strengthBars}>{[1, 2, 3].map((entry) => <View key={entry} style={[styles.strengthBar, { backgroundColor: entry <= strength ? color : theme.line }]} />)}</View><View style={styles.strengthStatus}>{strength >= 2 ? <Check size={11} color={color} /> : null}<Text style={[styles.strengthText, { color: strength ? color : theme.faint }]}>{label}</Text></View></View>;
+  return <View style={styles.strength}>
+    <View style={styles.strengthBars}>{[1, 2, 3].map((entry) => <View key={entry} style={[styles.strengthBar, { backgroundColor: entry <= strength ? color : palette.line }]} />)}</View>
+    <View style={styles.strengthStatus}>{strength >= 2 ? <Check size={11} color={color} /> : null}<Text style={[styles.strengthText, { color: strength ? color : palette.faint }]}>{label}</Text></View>
+  </View>;
 }
 
 const styles = StyleSheet.create({
-  journeyCard: { minHeight: 82, borderWidth: 1, borderRadius: 20, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 11, overflow: 'hidden' }, journeyOrb: { width: 48, height: 48, borderRadius: 17, alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-6deg' }] }, journeyCopy: { flex: 1, minWidth: 0 }, journeyLabel: { fontFamily: font.bold, fontSize: 7, letterSpacing: 1.1 }, journeyTitle: { marginTop: 3, fontFamily: font.extraBold, fontSize: 13 }, journeyText: { marginTop: 3, fontFamily: font.regular, fontSize: 9 },
-  signupCard: { position: 'relative', borderRadius: 22, padding: spacing.lg, gap: spacing.md, overflow: 'hidden' }, topAccent: { position: 'absolute', top: 0, left: 24, right: 24, height: 2, borderRadius: 1 },
-  cardHeading: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 2 }, cardIcon: { width: 46, height: 46, borderWidth: 1, borderRadius: 15, alignItems: 'center', justifyContent: 'center' }, cardHeadingCopy: { flex: 1, minWidth: 0 }, accountStep: { marginBottom: 2, fontFamily: font.bold, fontSize: 7, letterSpacing: 1 }, cardTitle: { fontFamily: font.extraBold, fontSize: 17, letterSpacing: -.25 }, cardSubtitle: { marginTop: 3, fontFamily: font.regular, fontSize: 10 }, fields: { gap: spacing.md },
-  strength: { marginTop: -3, flexDirection: 'row', alignItems: 'center', gap: 8 }, strengthBars: { flex: 1, flexDirection: 'row', gap: 4 }, strengthBar: { flex: 1, height: 3, borderRadius: 2 }, strengthStatus: { flexDirection: 'row', alignItems: 'center', gap: 3 }, strengthText: { fontFamily: font.semibold, fontSize: 8 },
-  divider: { flexDirection: 'row', alignItems: 'center', gap: 8 }, dividerLine: { flex: 1, height: 1 }, dividerText: { fontFamily: font.bold, fontSize: 6, letterSpacing: .7 }, googleButton: { minHeight: 49, borderWidth: 1, borderRadius: radius.field, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', gap: 10 }, googleMark: { width: 27, height: 27, borderRadius: 14, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' }, googleLetter: { color: '#4285F4', fontFamily: font.extraBold, fontSize: 14 }, googleButtonText: { flex: 1, fontFamily: font.bold, fontSize: 12, textAlign: 'center' },
-  verificationNote: { minHeight: 62, borderWidth: 1, borderRadius: 17, padding: 10, flexDirection: 'row', alignItems: 'center', gap: 9 }, noteIcon: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }, noteCopy: { flex: 1, minWidth: 0 }, noteTitle: { fontFamily: font.bold, fontSize: 10 }, noteText: { marginTop: 2, fontFamily: font.regular, fontSize: 8, lineHeight: 12 },
-  switchRow: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 9 }, switchIcon: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }, switchCopy: { flex: 1, minWidth: 0 }, switchTitle: { fontFamily: font.bold, fontSize: 10 }, switchText: { marginTop: 2, fontFamily: font.regular, fontSize: 8 }, pressed: { opacity: .76, transform: [{ scale: .99 }] },
+  canvas: { flex: 1, backgroundColor: palette.canvas }, safe: { flex: 1 }, flex: { flex: 1 },
+  content: { flexGrow: 1, width: '100%', maxWidth: 480, alignSelf: 'center', paddingHorizontal: spacing.xl, paddingBottom: spacing.xl },
+  artwork: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, overflow: 'hidden' },
+  warmGlow: { position: 'absolute', width: 330, height: 330, borderRadius: 165, top: -150, left: -85, backgroundColor: 'rgba(255,211,113,0.16)' },
+  glassTile: { position: 'absolute', borderWidth: 1.5, borderColor: 'rgba(55,25,18,0.24)', backgroundColor: 'rgba(255,221,151,0.025)', borderRadius: 38 },
+  tileOne: { width: 280, height: 160, top: -62, left: -65, transform: [{ rotate: '-18deg' }] },
+  tileTwo: { width: 260, height: 178, top: 25, right: -108, transform: [{ rotate: '23deg' }] },
+  horizon: { position: 'absolute', width: 620, height: 180, borderRadius: 310, borderWidth: 1, borderColor: 'rgba(246,190,83,0.10)', top: 300, left: -120, transform: [{ rotate: '-5deg' }] },
+  starOne: { position: 'absolute', width: 3, height: 3, borderRadius: 2, top: 276, right: 38, backgroundColor: '#F9D274' },
+  starTwo: { position: 'absolute', width: 2, height: 2, borderRadius: 1, top: 332, right: 78, backgroundColor: 'rgba(249,210,116,0.5)' },
+  topBar: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 11 },
+  backButton: { width: 34, height: 34, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)', backgroundColor: 'rgba(8,9,12,0.22)', alignItems: 'center', justifyContent: 'center' },
+  brandLockup: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  brandMark: { width: 24, height: 15, borderWidth: 1.8, borderColor: 'rgba(255,255,255,0.92)', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  brandPupil: { width: 5, height: 5, borderRadius: 3, backgroundColor: palette.gold },
+  wordmark: { color: 'rgba(255,255,255,0.92)', fontFamily: font.bold, fontSize: 8, letterSpacing: 1.15 },
+  heading: { marginTop: 24, maxWidth: 405 }, eyebrow: { color: palette.gold, fontFamily: font.bold, fontSize: 8, letterSpacing: 1.55 },
+  title: { marginTop: 8, color: palette.text, fontFamily: font.extraBold, fontSize: 30, lineHeight: 36, letterSpacing: -1 },
+  description: { maxWidth: 380, marginTop: 8, color: '#D0C8C2', fontFamily: font.regular, fontSize: 11, lineHeight: 17 },
+  progressBlock: { marginTop: 22 }, progressTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  progressTitle: { color: palette.text, fontFamily: font.bold, fontSize: 10 }, progressCount: { color: palette.gold, fontFamily: font.bold, fontSize: 8, letterSpacing: 0.8 },
+  progressTrack: { height: 4, marginTop: 9, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.12)', overflow: 'hidden' }, progressFill: { width: '33.333%', height: '100%', borderRadius: 2 },
+  progressLabels: { marginTop: 7, flexDirection: 'row', justifyContent: 'space-between' }, progressActive: { color: palette.gold, fontFamily: font.bold, fontSize: 8 }, progressLabel: { color: palette.faint, fontFamily: font.semibold, fontSize: 8 },
+  formArea: { marginTop: 23 }, formTitle: { color: palette.text, fontFamily: font.extraBold, fontSize: 17, letterSpacing: -0.25 }, formSubtitle: { marginTop: 3, color: palette.muted, fontFamily: font.regular, fontSize: 10 },
+  fields: { marginTop: 16, gap: 12 }, fieldGroup: { gap: 6 }, fieldLabel: { color: '#D6D7DB', fontFamily: font.semibold, fontSize: 10 },
+  inputShell: { minHeight: 49, paddingHorizontal: 13, borderWidth: 1, borderColor: palette.line, borderRadius: 14, backgroundColor: palette.panel, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  inputShellFocused: { borderColor: palette.gold, backgroundColor: '#111014' }, inputShellError: { borderColor: palette.danger },
+  input: { flex: 1, minWidth: 0, paddingVertical: 12, color: palette.text, fontFamily: font.regular, fontSize: 13 }, errorText: { color: palette.danger, fontFamily: font.medium, fontSize: 9 },
+  strength: { marginTop: 9, flexDirection: 'row', alignItems: 'center', gap: 8 }, strengthBars: { flex: 1, flexDirection: 'row', gap: 4 }, strengthBar: { flex: 1, height: 3, borderRadius: 2 }, strengthStatus: { flexDirection: 'row', alignItems: 'center', gap: 3 }, strengthText: { fontFamily: font.semibold, fontSize: 8 },
+  primaryShell: { marginTop: 16, borderRadius: 15, shadowColor: '#FF9A3D', shadowOpacity: 0.22, shadowRadius: 16, shadowOffset: { width: 0, height: 7 }, elevation: 5 },
+  primaryButton: { minHeight: 53, borderRadius: 15, paddingLeft: 17, paddingRight: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, primaryText: { color: '#17120B', fontFamily: font.extraBold, fontSize: 13 }, arrowWell: { width: 39, height: 39, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.36)', alignItems: 'center', justifyContent: 'center' },
+  divider: { marginVertical: 14, flexDirection: 'row', alignItems: 'center', gap: 10 }, dividerLine: { flex: 1, height: 1, backgroundColor: palette.line }, dividerText: { color: palette.faint, fontFamily: font.bold, fontSize: 7, letterSpacing: 1 },
+  googleButton: { minHeight: 49, paddingHorizontal: 12, borderWidth: 1, borderColor: palette.line, borderRadius: 14, backgroundColor: '#0B0C10', flexDirection: 'row', alignItems: 'center', gap: 10 }, googleMark: { width: 27, height: 27, borderRadius: 14, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' }, googleLetter: { color: '#4285F4', fontFamily: font.extraBold, fontSize: 14 }, googleText: { flex: 1, color: palette.text, fontFamily: font.bold, fontSize: 11, textAlign: 'center' },
+  signinRow: { minHeight: 49, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 6 }, signinText: { color: palette.muted, fontFamily: font.regular, fontSize: 10 }, signinLink: { color: palette.gold, fontFamily: font.bold, fontSize: 10 }, pressed: { opacity: 0.82, transform: [{ scale: 0.99 }] },
 });

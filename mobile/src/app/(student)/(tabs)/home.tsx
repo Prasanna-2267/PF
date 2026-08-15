@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Animated, Easing, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View, type ViewStyle } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowUpRight, Award, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Coins, Eye, Flame, Gift, Heart, ListTodo, Plus, Share2, ShieldCheck, Sparkles, Target, Trash2, X } from 'lucide-react-native';
+import { ArrowUpRight, Award, CalendarDays, CheckCircle2, Coins, Eye, Flame, Gift, Heart, ListTodo, Plus, Share2, ShieldCheck, Sparkles, Target, Trash2, X } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GrandSessionControl, ProgressBar } from '@/components/study-ui';
@@ -95,8 +95,6 @@ export default function HomeScreen() {
       <View style={styles.planFooter}><View style={[styles.momentumChip, { backgroundColor: theme.primarySoft }]}><Sparkles color={theme.primaryStrong} size={13} /><Text style={[styles.momentumText, { color: theme.primaryStrong }]}>{momentumLabel}</Text></View><Pressable accessibilityRole="button" onPress={() => router.push('/tracker')} style={({ pressed }) => [styles.trackerLink, pressed && styles.pressed]}><Text style={[styles.textLink, { color: theme.primaryStrong }]}>Open tracker</Text><ArrowUpRight color={theme.primaryStrong} size={14} /></Pressable></View>
     </Surface>
 
-    <StreakCalendar currentDate={currentDate} streak={streak} />
-
     <AnimatedExamCard examDays={examDays} examName={profile.examName} category={profile.category} examDate={profile.examDate} pressure={demoStudy.exam.pressure} />
 
     <Surface style={styles.syllabusCard}><View style={[styles.snapshotIcon, { backgroundColor: theme.primarySoft }]}><Target color={theme.primaryStrong} size={20} /></View><View style={styles.syllabusCopy}><Text style={[styles.cardEyebrow, { color: theme.primary }]}>LEARNING PROGRESS</Text><Text style={[styles.syllabusTitle, { color: theme.fg }]}>Syllabus completion</Text><Text style={[styles.snapshotLabel, { color: theme.muted }]}>Keep completing lessons to move this forward.</Text></View><Text style={[styles.syllabusValue, { color: theme.fg }]}>{demoStudy.syllabusPercent}%</Text><View style={styles.syllabusProgress}><ProgressBar value={demoStudy.syllabusPercent} /></View></Surface>
@@ -185,69 +183,6 @@ function RewardWallet({ visible, points, hearts, streak, canRecover, onRecover, 
       <Text style={[styles.walletFootnote, { color: theme.faint }]}>Daily points can be earned once per calendar day.</Text>
     </View></View>
   </Modal>;
-}
-
-function StreakCalendar({ currentDate, streak }: { currentDate: Date; streak: number }) {
-  const { theme } = useAppTheme();
-  const [visibleMonth, setVisibleMonth] = useState(() => new Date(currentDate.getFullYear(), currentDate.getMonth(), 1));
-  const [flameMotion] = useState(() => new Animated.Value(0));
-
-  useEffect(() => {
-    const loop = Animated.loop(Animated.sequence([
-      Animated.timing(flameMotion, { toValue: 1, duration: 620, easing: Easing.inOut(Easing.sin), useNativeDriver: nativeDriver }),
-      Animated.timing(flameMotion, { toValue: 0, duration: 620, easing: Easing.inOut(Easing.sin), useNativeDriver: nativeDriver }),
-    ]));
-    loop.start();
-    return () => loop.stop();
-  }, [flameMotion]);
-
-  const year = visibleMonth.getFullYear();
-  const month = visibleMonth.getMonth();
-  const monthLabel = new Intl.DateTimeFormat('en-IN', { month: 'long', year: 'numeric' }).format(visibleMonth);
-  const firstOffset = (new Date(year, month, 1).getDay() + 6) % 7;
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const todayStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate()).getTime();
-  const cells = Array.from({ length: 42 }, (_, index) => {
-    const day = index - firstOffset + 1;
-    if (day < 1 || day > daysInMonth) return null;
-    const date = new Date(year, month, day);
-    const dateTime = date.getTime();
-    const difference = Math.round((todayStart - dateTime) / dayMs);
-    const active = difference >= 0 && difference < streak;
-    const future = dateTime > todayStart;
-    const missed = !active && !future && difference <= 35 && difference > streak && (day + month) % 6 === 4;
-    return { day, active, missed, today: difference === 0, future };
-  });
-  const missedCount = cells.filter((cell) => cell?.missed).length;
-  const resetCalendar = () => setVisibleMonth(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1));
-  const flameStretch = flameMotion.interpolate({ inputRange: [0, 1], outputRange: [.94, 1.08] });
-  const flameSway = flameMotion.interpolate({ inputRange: [0, 1], outputRange: ['-3deg', '3deg'] });
-  const innerFlameScale = flameMotion.interpolate({ inputRange: [0, 1], outputRange: [1.08, .88] });
-  const innerFlameOpacity = flameMotion.interpolate({ inputRange: [0, 1], outputRange: [.55, 1] });
-  const emberOpacity = flameMotion.interpolate({ inputRange: [0, 1], outputRange: [.18, .9] });
-  const glowOpacity = flameMotion.interpolate({ inputRange: [0, 1], outputRange: [.18, .5] });
-
-  return <Surface style={styles.streakCard}>
-    <View style={styles.streakHero}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Show current streak month" onPress={resetCalendar} style={styles.streakButtonWrap}>
-        <Animated.View style={[styles.streakFlameGlow, { opacity: glowOpacity, transform: [{ scaleY: flameStretch }, { rotate: flameSway }] }]}><Flame size={48} fill="#9F4013" color="#9F4013" strokeWidth={1} /></Animated.View>
-        <View style={styles.streakButton}>
-          <Animated.View style={[styles.flameOuter, { transform: [{ scaleY: flameStretch }, { rotate: flameSway }] }]}><Flame size={38} fill={theme.goldStrong} color={theme.goldStrong} strokeWidth={1.4} /></Animated.View>
-          <Animated.View style={[styles.flameInner, { opacity: innerFlameOpacity, transform: [{ scale: innerFlameScale }] }]}><Flame size={20} fill="#FF8A1F" color="#FF8A1F" strokeWidth={1.2} /></Animated.View>
-          <Animated.View style={[styles.emberOne, { backgroundColor: '#FFB33E', opacity: emberOpacity }]} /><Animated.View style={[styles.emberTwo, { backgroundColor: theme.goldStrong, opacity: innerFlameOpacity }]} />
-        </View>
-      </Pressable>
-      <View style={styles.streakCopy}><Text style={[styles.streakEyebrow, { color: theme.goldStrong }]}>STREAK ACTIVE</Text><Text style={[styles.streakTitle, { color: theme.fg }]}>{streak} day streak</Text><Text style={[styles.streakDescription, { color: theme.muted }]}>Complete a lesson or focus session today to keep the flame alive.</Text></View>
-    </View>
-
-    <View style={[styles.calendarPanel, { backgroundColor: theme.sunken, borderColor: theme.lineStrong }]}>
-      <View style={styles.calendarHeader}><View><Text style={[styles.calendarMonth, { color: theme.fg }]}>{monthLabel}</Text><Text style={[styles.calendarHint, { color: theme.muted }]}>Your daily learning activity</Text></View><View style={styles.monthActions}><Pressable accessibilityLabel="Previous month" onPress={() => setVisibleMonth(new Date(year, month - 1, 1))} style={[styles.monthButton, { backgroundColor: theme.surface }]}><ChevronLeft size={19} color={theme.muted} /></Pressable><Pressable accessibilityLabel="Next month" onPress={() => setVisibleMonth(new Date(year, month + 1, 1))} style={[styles.monthButton, { backgroundColor: theme.surface }]}><ChevronRight size={19} color={theme.muted} /></Pressable></View></View>
-      <View style={styles.weekRow}>{['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map((day, index) => <Text key={day} style={[styles.weekDay, { color: index >= 5 ? theme.goldStrong : theme.muted }]}>{day}</Text>)}</View>
-      <View style={styles.calendarGrid}>{cells.map((cell, index) => <View key={`${year}-${month}-${index}`} style={styles.dayCell}>{cell ? <View style={styles.dayBadge}>{cell.active ? <Flame style={styles.dayFlame} size={cell.today ? 40 : 36} fill={cell.today ? '#FF8614' : '#F0C878'} color={cell.today ? '#FF8614' : '#F0C878'} strokeWidth={1.15} /> : null}<View style={[styles.calendarNumberLayer, cell.active && styles.activeCalendarNumberLayer]}><Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={.7} style={[styles.dayText, { color: cell.missed ? theme.danger : cell.future ? theme.faint : theme.muted }, cell.active && styles.fireDayText, cell.today && styles.todayFireText, cell.active && styles.fireDayTextOptical, cell.active && cell.day > 9 && styles.fireDayTextDoubleOptical]}>{cell.day}</Text>{cell.missed ? <View style={[styles.missedDot, { backgroundColor: theme.danger }]} /> : null}</View></View> : null}</View>)}</View>
-    </View>
-
-    <View style={[styles.streakFooter, { backgroundColor: theme.goldSoft }]}><Flame size={17} fill={theme.goldStrong} color={theme.goldStrong} /><Text style={[styles.streakFooterText, { color: theme.goldStrong }]}>{streak} active days</Text><View style={[styles.streakFooterDivider, { backgroundColor: theme.goldStrong }]} /><View style={[styles.missedLegendDot, { backgroundColor: theme.danger }]} /><Text style={[styles.streakFooterMuted, { color: theme.muted }]}>{missedCount} missed · Best 12 days</Text></View>
-  </Surface>;
 }
 
 function CheckoutCelebration({ visible, streak, seconds, pointsEarned, onClose }: { visible: boolean; streak: number; seconds: number; pointsEarned: number; onClose: () => void }) {
