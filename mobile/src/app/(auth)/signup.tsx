@@ -157,7 +157,7 @@ export default function SignupScreen() {
         </KeyboardAvoidingView>
       </SafeAreaView>
     </View>
-    <LearnerOnboardingModal visible={showOnboarding} onComplete={() => enterDashboard(googleIdentity)} onSkip={() => enterDashboard(googleIdentity)} />
+    <LearnerOnboardingModal visible={showOnboarding} onComplete={() => enterDashboard(googleIdentity)} />
   </>;
 }
 

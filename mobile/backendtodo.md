@@ -113,6 +113,13 @@ This policy is different from limiting concurrent sessions. After the first succ
 
 ## Practice permissions and explanations
 
+- Model the public `Archive (PYQ)` separately from purchasable question banks; authenticated learners must be allowed to query Archive sets without a purchase entitlement.
+- Give each question bank a stable resource ID and issue entitlements per learner and per bank. A generic Paid subscription must not imply ownership of every question bank.
+- Authorize question-bank metadata, question lists, session creation and answer submission against the exact active, unexpired bank entitlement on every request.
+- Store filterable question metadata for subject, chapter/topic, collection (`past_year`, `rtp`, `mtp`) and answer format (`mcq`, `descriptive`, `case_study`). Store exam year for Archive/PYQ records only; question-bank filtering must not expose a separate year selector.
+- Provide server-side filtered session creation so the returned question count and questions actually match all chosen filters; never rely on mobile-only filtering for protected banks.
+- Return an empty-combination response with available alternatives when a valid filter combination has no questions.
+- Do not expose protected question text, answer keys or explanations in filter-count endpoints or locked-bank previews.
 - Tag every question with course, category, subject, chapter/topic and concept identifiers.
 - For Free users, return an explanation only after a correct response.
 - For Paid users, return an explanation after every submitted response.
@@ -120,6 +127,36 @@ This policy is different from limiting concurrent sessions. After the first succ
 - For Paid users, allow repeat attempts and persist each attempt in order.
 - Return attempt number, correctness, retry eligibility and explanation eligibility from the answer endpoint.
 - Ensure restricted explanations are never included in payloads sent to ineligible Free users.
+
+## Solve & Earn practice challenges
+
+The current mobile screen is UI-only. Its chapter question count, time target and points preview are demo values derived locally. Production rewards must be configured, timed, validated and awarded only by the backend.
+
+- Add an Admin-managed challenge policy per course/category, question source, subject and chapter/topic with:
+  - active date range and learner eligibility;
+  - eligible question pool or immutable set version;
+  - required number of questions;
+  - authoritative time limit in seconds;
+  - minimum correct-answer count or accuracy threshold;
+  - points awarded, attempt limit and cooldown;
+  - whether Archive and/or a specifically entitled Question Bank is eligible.
+- Return filter metadata and challenge availability together so the mobile filter can display the authoritative question count, duration, points and unavailable reason for the selected chapter.
+- Create a server-side challenge session before revealing questions. Return a signed session ID, server `startedAt`, `expiresAt`, question-set version and reward rules; never trust a timer started by the phone.
+- Validate every submitted answer against that session and use server timestamps to determine whether it arrived before expiry.
+- Decide and document completion semantics before launch. Recommended first rule: all required questions submitted within the time limit and the configured accuracy threshold met.
+- Award points through an idempotent reward-ledger transaction only after the server validates completion. Replaying the completion request, reopening the app or changing device time must never duplicate points.
+- Return explicit states: `available`, `active`, `completed`, `earned`, `failed_time`, `failed_accuracy`, `attempt_limit_reached`, `expired` and `ineligible`.
+- Support reconnect/resume using the original server deadline. Offline time must continue to elapse and queued submissions received after expiry must not qualify for points.
+- Enforce exact Question Bank ownership and validity before a bank-backed challenge is created. Archive challenges remain available according to the configured Free-user policy.
+- Record challenge attempts, answer outcomes, duration, reward decision, ledger entry and policy version for learner history, Admin audit and abuse investigation.
+- Add rate limits and anomaly checks for impossible response times, repeated answer patterns, concurrent sessions and modified clients.
+- Suggested endpoints:
+  - `GET /practice/challenges/preview?source=&subjectId=&topicId=&collection=`
+  - `POST /practice/challenges/sessions`
+  - `POST /practice/challenges/sessions/:sessionId/answers`
+  - `POST /practice/challenges/sessions/:sessionId/complete`
+  - `GET /practice/challenges/history`
+- Acceptance tests must cover exact-deadline submissions, app background/foreground, disconnect/reconnect, duplicate completion calls, question-bank expiry during a session, changed Admin policy after session start and concurrent-device attempts.
 
 ## Concept-wise weak areas
 

@@ -113,7 +113,36 @@ function ExamPressureDial({ value }: { value: number }) {
 
 function ReadinessCard({ icon, label, value, detail, progress, color }: { icon: ReactNode; label: string; value: string; detail: string; progress: number; color: string }) {
   const { theme } = useAppTheme();
-  return <Card style={styles.readinessCard}><View style={styles.readinessTop}><View style={[styles.readinessIcon, { backgroundColor: `${color}18` }]}>{icon}</View><Text style={[styles.readinessValue, { color: theme.fg }]}>{value}</Text></View><Text style={[styles.readinessCardLabel, { color }]}>{label}</Text><Text style={[styles.readinessDetail, { color: theme.muted }]}>{detail}</Text><View style={[styles.readinessTrack, { backgroundColor: theme.sunken }]}><View style={[styles.readinessFill, { width: `${Math.min(100, progress)}%`, backgroundColor: color }]} /></View></Card>;
+  const [motion] = useState(() => new Animated.Value(0));
+  useEffect(() => {
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(motion, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: nativeDriver }),
+      Animated.timing(motion, { toValue: 0, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: nativeDriver }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [motion]);
+  const iconLift = motion.interpolate({ inputRange: [0, 1], outputRange: [1, -3] });
+  const glowOpacity = motion.interpolate({ inputRange: [0, 1], outputRange: [.18, .42] });
+  const fillScale = motion.interpolate({ inputRange: [0, 1], outputRange: [.97, 1] });
+  return <Card style={styles.readinessCard}>
+    <View pointerEvents="none" style={[styles.readinessCardGlow, { backgroundColor: color }]} />
+    <View style={styles.readinessTop}><View style={styles.readinessIconStage}><Animated.View style={[styles.readinessIconGlow, { backgroundColor: color, opacity: glowOpacity }]} /><Animated.View style={[styles.readinessIcon, { backgroundColor: `${color}18`, transform: [{ translateY: iconLift }] }]}>{icon}</Animated.View></View><View style={styles.readinessValueBlock}><Text style={[styles.readinessValue, { color: theme.fg }]}>{value}</Text><Text style={[styles.readinessValueLabel, { color: theme.faint }]}>CURRENT</Text></View></View>
+    <Text style={[styles.readinessCardLabel, { color }]}>{label}</Text><Text style={[styles.readinessDetail, { color: theme.muted }]}>{detail}</Text>
+    <View style={[styles.readinessTrack, { backgroundColor: theme.sunken }]}><Animated.View style={[styles.readinessFill, { width: `${Math.min(100, progress)}%`, backgroundColor: color, transform: [{ scaleX: fillScale }] }]}><View style={styles.readinessShine} /></Animated.View></View>
+  </Card>;
+}
+
+function ReadinessHubMark() {
+  const { theme } = useAppTheme();
+  const [motion] = useState(() => new Animated.Value(0));
+  useEffect(() => {
+    const loop = Animated.loop(Animated.timing(motion, { toValue: 1, duration: 7000, easing: Easing.linear, useNativeDriver: nativeDriver }));
+    loop.start();
+    return () => loop.stop();
+  }, [motion]);
+  const rotate = motion.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  return <View style={styles.readinessHubMark}><Animated.View style={[styles.readinessHubOrbit, { borderColor: theme.primaryStrong, transform: [{ rotate }] }]}><View style={[styles.readinessHubDot, { backgroundColor: theme.goldStrong }]} /></Animated.View><BookCheck size={19} color={theme.primaryStrong} /></View>;
 }
 
 export default function TrackerScreen() {
@@ -144,10 +173,14 @@ export default function TrackerScreen() {
     <View style={[styles.responsiveCell, wide && styles.responsiveCellWide]}><Card style={styles.examCard}><View pointerEvents="none" style={[styles.examGlow, { backgroundColor: theme.goldSoft }]} /><View style={styles.examHeading}><View style={styles.examHeadingCopy}><View style={styles.examEyebrowRow}><CalendarClock color={theme.goldStrong} size={16} /><Text style={[styles.sectionEyebrow, { color: theme.goldStrong }]}>EXAM COUNTDOWN</Text></View><Text numberOfLines={1} style={[styles.examName, { color: theme.fg }]}>{demoStudy.exam.label}</Text></View><View style={[styles.examStatus, { backgroundColor: theme.goldSoft }]}><Text style={[styles.examStatusText, { color: theme.goldStrong }]}>IN MOTION</Text></View></View><View style={styles.examRow}><View style={styles.examCountCopy}><Text style={[styles.examDays, { color: theme.fg }]}>{demoStudy.exam.daysLeft}<Text style={[styles.daysSuffix, { color: theme.muted }]}> days</Text></Text><Text style={[styles.examDate, { color: theme.muted }]}>until {demoStudy.exam.date}</Text><Text style={[styles.examPrompt, { color: theme.goldStrong }]}>Build calm through consistent preparation.</Text></View><ExamPressureDial value={demoStudy.exam.pressure} /></View><View style={styles.progressSpacing}><ProgressBar value={demoStudy.exam.pressure} color={theme.gold} /></View><View style={styles.examMilestones}><Text style={[styles.examMilestone, { color: theme.goldStrong }]}>NOW</Text><View style={[styles.examMilestoneLine, { backgroundColor: theme.line }]} /><Text style={[styles.examMilestone, { color: theme.muted }]}>REVISION WINDOW</Text><View style={[styles.examMilestoneLine, { backgroundColor: theme.line }]} /><Text style={[styles.examMilestone, { color: theme.muted }]}>EXAM</Text></View></Card></View>
     </View>
 
-    <View style={[styles.responsiveRow, wide && styles.responsiveRowWide]}>
-      <View style={[styles.responsiveCell, wide && styles.responsiveCellWide]}><View><View style={styles.readinessHeading}><View><Text style={[styles.readinessLabel, { color: theme.primary }]}>YOUR READINESS</Text><Text style={[styles.readinessTitle, { color: theme.fg }]}>Preparation signals</Text></View><BookCheck size={20} color={theme.primaryStrong} /></View><View style={styles.readiness}><ReadinessCard icon={<BookCheck size={18} color={theme.primaryStrong} />} label="SYLLABUS" value={`${demoStudy.syllabusPercent}%`} detail="Coverage completed" progress={demoStudy.syllabusPercent} color={theme.primaryStrong} /><ReadinessCard icon={<RotateCcw size={18} color={theme.goldStrong} />} label="REVISIONS" value={`${demoStudy.revisions}`} detail="Intentional returns" progress={60} color={theme.goldStrong} /></View></View></View>
-      <View style={[styles.responsiveCell, styles.shortcutStack, wide && styles.responsiveCellWide]}><RevisionTrackerShortcut /><MonthlyReportShortcut /></View>
-    </View>
+    <LinearGradient colors={dark ? ['#121A2B', '#10151D', '#0D1015'] : ['#F1F5FF', '#F8FAFF', '#FFFFFF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.readinessHub, { borderColor: theme.line }]}>
+      <View pointerEvents="none" style={[styles.readinessHubGlow, { backgroundColor: theme.primaryStrong }]} />
+      <View style={styles.readinessHeading}><View style={styles.readinessHeadingCopy}><Text style={[styles.readinessLabel, { color: theme.primary }]}>YOUR READINESS</Text><Text style={[styles.readinessTitle, { color: theme.fg }]}>Preparation command centre</Text><Text style={[styles.readinessSubtitle, { color: theme.muted }]}>Coverage, revision rhythm and long-term signals in one place.</Text></View><View style={[styles.readinessSignal, { backgroundColor: theme.primarySoft }]}><View style={[styles.readinessSignalDot, { backgroundColor: theme.success }]} /><Text style={[styles.readinessSignalText, { color: theme.primaryStrong }]}>LIVE</Text></View><ReadinessHubMark /></View>
+      <View style={[styles.readinessHubBody, wide && styles.readinessHubBodyWide]}>
+        <View style={[styles.responsiveCell, wide && styles.responsiveCellWide]}><View style={styles.readiness}><ReadinessCard icon={<BookCheck size={18} color={theme.primaryStrong} />} label="SYLLABUS" value={`${demoStudy.syllabusPercent}%`} detail="Coverage completed" progress={demoStudy.syllabusPercent} color={theme.primaryStrong} /><ReadinessCard icon={<RotateCcw size={18} color={theme.goldStrong} />} label="REVISIONS" value={`${demoStudy.revisions}`} detail="Intentional returns" progress={60} color={theme.goldStrong} /></View></View>
+        <View style={[styles.responsiveCell, styles.shortcutStack, wide && styles.responsiveCellWide]}><RevisionTrackerShortcut /><MonthlyReportShortcut /></View>
+      </View>
+    </LinearGradient>
   </ScrollView></SafeAreaView>;
 }
 
@@ -201,16 +234,34 @@ const styles = StyleSheet.create({
   examMilestones: { minHeight: 31, marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 6 },
   examMilestone: { fontFamily: font.bold, fontSize: 6, letterSpacing: .5 },
   examMilestoneLine: { flex: 1, height: 1 },
-  readinessHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  readinessTitle: { marginTop: 3, fontFamily: font.extraBold, fontSize: 17, letterSpacing: -.35 },
-  readinessCard: { flex: 1, minWidth: 0, minHeight: 147, padding: 13 },
+  readinessHub: { borderWidth: 1, borderRadius: 24, padding: 15, overflow: 'hidden' },
+  readinessHubGlow: { position: 'absolute', width: 240, height: 240, borderRadius: 120, right: -150, top: -165, opacity: .08 },
+  readinessHeading: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  readinessHeadingCopy: { flex: 1, minWidth: 0 },
+  readinessTitle: { marginTop: 3, fontFamily: font.extraBold, fontSize: 18, letterSpacing: -.4 },
+  readinessSubtitle: { maxWidth: 390, marginTop: 3, fontFamily: font.regular, fontSize: 9, lineHeight: 14 },
+  readinessSignal: { minHeight: 25, borderRadius: 13, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  readinessSignalDot: { width: 5, height: 5, borderRadius: 3 },
+  readinessSignalText: { fontFamily: font.bold, fontSize: 7, letterSpacing: .7 },
+  readinessHubMark: { width: 43, height: 43, alignItems: 'center', justifyContent: 'center' },
+  readinessHubOrbit: { position: 'absolute', width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderStyle: 'dashed', alignItems: 'center' },
+  readinessHubDot: { width: 6, height: 6, marginTop: -3, borderRadius: 3 },
+  readinessHubBody: { marginTop: 13, gap: spacing.lg },
+  readinessHubBodyWide: { flexDirection: 'row', alignItems: 'flex-start' },
+  readinessCard: { flex: 1, minWidth: 0, minHeight: 156, padding: 13, overflow: 'hidden' },
+  readinessCardGlow: { position: 'absolute', width: 95, height: 95, borderRadius: 48, right: -55, top: -58, opacity: .07 },
   readinessTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  readinessIconStage: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
+  readinessIconGlow: { position: 'absolute', width: 36, height: 36, borderRadius: 12 },
   readinessIcon: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  readinessValueBlock: { alignItems: 'flex-end' },
   readinessValue: { fontFamily: font.extraBold, fontSize: 20, letterSpacing: -.5 },
+  readinessValueLabel: { marginTop: -1, fontFamily: font.bold, fontSize: 5.5, letterSpacing: .8 },
   readinessCardLabel: { marginTop: 11, fontFamily: font.bold, fontSize: 8, letterSpacing: 1 },
   readinessDetail: { marginTop: 3, fontFamily: font.regular, fontSize: 8 },
-  readinessTrack: { width: '100%', height: 6, marginTop: 12, borderRadius: 3, overflow: 'hidden' },
-  readinessFill: { height: '100%', borderRadius: 3 },
+  readinessTrack: { width: '100%', height: 7, marginTop: 13, borderRadius: 4, overflow: 'hidden' },
+  readinessFill: { height: '100%', borderRadius: 4, overflow: 'hidden' },
+  readinessShine: { position: 'absolute', top: 0, right: 0, width: 18, height: '100%', backgroundColor: 'rgba(255,255,255,0.36)' },
   safe: { flex: 1 }, content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: 106, maxWidth: 720, width: '100%', alignSelf: 'center' }, contentWide: { maxWidth: layout.studentContentMaxWidth, paddingHorizontal: spacing.xl }, responsiveRow: { gap: spacing.lg }, responsiveRowWide: { flexDirection: 'row', alignItems: 'flex-start' }, responsiveCell: { minWidth: 0 }, responsiveCellWide: { flex: 1 }, shortcutStack: { gap: spacing.lg }, eyebrow: { fontFamily: font.bold, fontSize: 9, letterSpacing: 1.35 }, title: { fontFamily: font.extraBold, fontSize: 29, letterSpacing: -0.8, marginTop: 4 }, description: { fontFamily: font.regular, fontSize: 13, lineHeight: 19, marginTop: 3 }, sessionHero: { minHeight: 326, borderWidth: 1, borderRadius: 22, padding: spacing.lg, overflow: 'hidden' }, heroGlow: { position: 'absolute', width: 190, height: 190, borderRadius: 95, right: -80, top: -90, backgroundColor: 'rgba(124,156,255,0.11)' }, sessionTop: { minHeight: 29, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }, sessionIntro: { alignItems: 'center', paddingHorizontal: 18, marginTop: 9 }, sessionTitle: { fontFamily: font.extraBold, fontSize: 20, letterSpacing: -0.4, textAlign: 'center' }, sessionCopy: { maxWidth: 265, fontFamily: font.regular, fontSize: 11, lineHeight: 16, marginTop: 4, textAlign: 'center' }, sessionControl: { flex: 1, minHeight: 184, alignItems: 'center', justifyContent: 'center', marginTop: 5 }, sectionEyebrow: { fontFamily: font.bold, fontSize: 9, letterSpacing: 1.15 }, livePill: { minHeight: 29, borderRadius: 15, paddingHorizontal: 9, flexDirection: 'row', alignItems: 'center', gap: 5 }, liveDot: { width: 6, height: 6, borderRadius: 3 }, liveText: { fontFamily: font.bold, fontSize: 9, letterSpacing: 0.7 }, targetTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, focusValue: { marginTop: 4, fontFamily: font.extraBold, fontSize: 31, letterSpacing: -0.8 }, targetHint: { marginTop: 2, fontFamily: font.regular, fontSize: 10 }, percentRing: { width: 58, height: 58, borderRadius: 29, borderWidth: 1, alignItems: 'center', justifyContent: 'center' }, target: { fontFamily: font.extraBold, fontSize: 17 }, progressSpacing: { marginTop: spacing.md }, targetLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 }, targetSmall: { fontFamily: font.medium, fontSize: 9 }, chartCard: { gap: 0 }, chartHeading: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }, cardTitle: { fontFamily: font.extraBold, fontSize: 19, letterSpacing: -0.4, marginTop: 4 }, chartSummary: { fontFamily: font.regular, fontSize: 10, marginTop: 4 }, trendBadge: { minHeight: 30, borderRadius: 15, paddingHorizontal: 9, flexDirection: 'row', alignItems: 'center', gap: 5 }, trendText: { fontFamily: font.bold, fontSize: 10 }, chartArea: { height: 164, marginTop: 18, position: 'relative' }, goalLine: { position: 'absolute', top: 42, left: 0, right: 0, borderTopWidth: 1, borderStyle: 'dashed' }, goalLabel: { position: 'absolute', right: 0, top: -15, fontFamily: font.medium, fontSize: 8 }, bars: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 7 }, barColumn: { flex: 1, height: '100%', alignItems: 'center', justifyContent: 'flex-end' }, barValue: { fontFamily: font.semibold, fontSize: 8, marginBottom: 5 }, barTrack: { width: '74%', maxWidth: 28, height: 108, borderRadius: 9, overflow: 'hidden', justifyContent: 'flex-end' }, barFill: { width: '100%', borderRadius: 9 }, dayLabel: { fontFamily: font.bold, fontSize: 9, marginTop: 6 }, todayDot: { width: 4, height: 4, borderRadius: 2, marginTop: 2 }, chartInsights: { minHeight: 73, borderTopWidth: 0, flexDirection: 'row', alignItems: 'center', marginTop: 11 }, insight: { flex: 1, alignItems: 'center' }, insightValue: { fontFamily: font.bold, fontSize: 12, marginTop: 4 }, insightLabel: { fontFamily: font.regular, fontSize: 8, marginTop: 2 }, insightDivider: { width: 1, height: 37 }, metricGrid: { flexDirection: 'row', gap: spacing.sm }, examHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, examName: { fontFamily: font.bold, fontSize: 15, marginTop: 4 }, examRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.md }, examDays: { fontFamily: font.extraBold, fontSize: 30, letterSpacing: -0.8 }, daysSuffix: { fontFamily: font.medium, fontSize: 14, letterSpacing: 0 }, examDate: { fontFamily: font.regular, fontSize: 10, marginTop: 3 }, pressure: { width: 62, height: 62, borderRadius: 31, alignItems: 'center', justifyContent: 'center' }, pressureValue: { fontFamily: font.extraBold, fontSize: 17 }, pressureText: { fontFamily: font.bold, fontSize: 7 }, readinessLabel: { fontFamily: font.bold, fontSize: 9, letterSpacing: 1.2 }, readiness: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   pageHeading: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 }, pageHeadingCopy: { flex: 1, minWidth: 0 },
 });

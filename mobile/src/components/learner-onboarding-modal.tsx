@@ -31,10 +31,9 @@ const palette = {
 type LearnerOnboardingModalProps = {
   visible: boolean;
   onComplete: () => void;
-  onSkip: () => void;
 };
 
-export function LearnerOnboardingModal({ visible, onComplete, onSkip }: LearnerOnboardingModalProps) {
+export function LearnerOnboardingModal({ visible, onComplete }: LearnerOnboardingModalProps) {
   const courses = useAdminCourseStore((state) => state.courses);
   const savedProfile = useLearnerProfileStore((state) => state.profile);
   const updateProfile = useLearnerProfileStore((state) => state.updateProfile);
@@ -66,7 +65,7 @@ export function LearnerOnboardingModal({ visible, onComplete, onSkip }: LearnerO
     onComplete();
   };
 
-  return <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onSkip}>
+  return <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => undefined}>
     <View style={styles.backdrop}>
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboard}>
@@ -142,7 +141,6 @@ export function LearnerOnboardingModal({ visible, onComplete, onSkip }: LearnerO
                   <Text style={styles.finishText}>Finish setup</Text><View style={styles.arrowWell}><ArrowRight size={18} color="#17120B" /></View>
                 </LinearGradient>
               </Pressable>
-              <Pressable accessibilityRole="button" onPress={onSkip} style={styles.skip}><Text style={styles.skipText}>Skip for now</Text></Pressable>
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -163,5 +161,5 @@ const styles = StyleSheet.create({
   courseGrid: { marginTop: 11, flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, course: { flexGrow: 1, flexBasis: '29%', maxWidth: '32%', minHeight: 91, borderWidth: 1, borderColor: palette.line, borderRadius: 15, padding: 10, backgroundColor: palette.panel }, courseSelected: { borderColor: palette.gold, backgroundColor: '#1A160E' }, courseMark: { width: 31, height: 31, borderRadius: 10, backgroundColor: '#15171C', alignItems: 'center', justifyContent: 'center' }, courseMarkSelected: { backgroundColor: palette.gold }, courseName: { marginTop: 8, color: palette.text, fontFamily: font.extraBold, fontSize: 12 }, courseNameSelected: { color: palette.gold }, courseMeta: { marginTop: 2, color: palette.muted, fontFamily: font.regular, fontSize: 7, lineHeight: 10 },
   controlLabel: { marginTop: 14, marginBottom: 7, color: palette.faint, fontFamily: font.bold, fontSize: 7, letterSpacing: 1.15 }, choiceRail: { gap: 7, paddingRight: spacing.lg }, month: { minWidth: 61, minHeight: 36, paddingHorizontal: 13, borderWidth: 1, borderColor: palette.line, borderRadius: 12, backgroundColor: palette.panel, alignItems: 'center', justifyContent: 'center' }, monthText: { color: palette.muted, fontFamily: font.bold, fontSize: 9 }, year: { minWidth: 69, minHeight: 36, paddingHorizontal: 12, borderWidth: 1, borderColor: palette.line, borderRadius: 12, backgroundColor: palette.panel, alignItems: 'center', justifyContent: 'center' }, yearText: { color: palette.muted, fontFamily: font.bold, fontSize: 9 }, choiceSelected: { borderColor: palette.gold, backgroundColor: '#231A0D' }, choiceTextSelected: { color: palette.gold },
   inputShell: { minHeight: 53, marginTop: 11, paddingHorizontal: 12, borderWidth: 1, borderColor: palette.line, borderRadius: 14, backgroundColor: palette.panel, flexDirection: 'row', alignItems: 'center', gap: 10 }, inputFocused: { borderColor: palette.gold, backgroundColor: palette.panelRaised }, inputError: { borderColor: palette.danger }, inputCopy: { flex: 1, minWidth: 0, paddingVertical: 7 }, inputLabel: { color: palette.faint, fontFamily: font.bold, fontSize: 7, letterSpacing: 0.75 }, input: { minHeight: 29, paddingVertical: 0, color: palette.text, fontFamily: font.semibold, fontSize: 11 }, error: { marginTop: 6, color: palette.danger, fontFamily: font.semibold, fontSize: 9 },
-  actions: { paddingHorizontal: spacing.lg, paddingTop: 10, paddingBottom: 7, borderTopWidth: 1, borderTopColor: palette.line, backgroundColor: 'rgba(6,7,10,0.96)' }, finishShell: { borderRadius: 15, shadowColor: '#FF9A3D', shadowOpacity: 0.2, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 5 }, finish: { minHeight: 52, borderRadius: 15, paddingLeft: 17, paddingRight: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, finishText: { color: '#17120B', fontFamily: font.extraBold, fontSize: 13 }, arrowWell: { width: 38, height: 38, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.35)', alignItems: 'center', justifyContent: 'center' }, skip: { minHeight: 38, alignItems: 'center', justifyContent: 'center' }, skipText: { color: palette.muted, fontFamily: font.bold, fontSize: 10 }, pressed: { opacity: 0.8, transform: [{ scale: 0.99 }] },
+  actions: { paddingHorizontal: spacing.lg, paddingTop: 10, paddingBottom: 14, borderTopWidth: 1, borderTopColor: palette.line, backgroundColor: 'rgba(6,7,10,0.96)' }, finishShell: { borderRadius: 15, shadowColor: '#FF9A3D', shadowOpacity: 0.2, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 5 }, finish: { minHeight: 52, borderRadius: 15, paddingLeft: 17, paddingRight: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, finishText: { color: '#17120B', fontFamily: font.extraBold, fontSize: 13 }, arrowWell: { width: 38, height: 38, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.35)', alignItems: 'center', justifyContent: 'center' }, pressed: { opacity: 0.8, transform: [{ scale: 0.99 }] },
 });

@@ -33,8 +33,10 @@ type RewardState = {
   streak: number;
   lastCompletedDate: string | null;
   lastRewardDate: string | null;
+  practiceChallengeClaims: string[];
   syncMonth: (today?: Date) => void;
   awardDailyStreak: (minutesStudied: number, targetMinutes: number, today?: Date) => number;
+  awardPracticeChallenge: (challengeKey: string, points: number) => boolean;
   recoverStreak: (today?: Date) => boolean;
 };
 
@@ -47,6 +49,7 @@ export const useRewardStore = create<RewardState>()(persist((set) => ({
   streak: 6,
   lastCompletedDate: previousDateKey(now),
   lastRewardDate: null,
+  practiceChallengeClaims: [],
   syncMonth: (today = new Date()) => set((state) => state.heartMonth === monthKey(today) ? state : { ...state, hearts: monthlyHeartLimit, heartMonth: monthKey(today) }),
   awardDailyStreak: (minutesStudied, targetMinutes, today = new Date()) => {
     let awarded = 0;
@@ -58,6 +61,16 @@ export const useRewardStore = create<RewardState>()(persist((set) => ({
       awarded = minutesStudied >= targetMinutes ? 20 : 10;
       const continuesStreak = normalized.lastCompletedDate ? differenceInDays(normalized.lastCompletedDate, today) <= 1 : false;
       return { ...normalized, points: normalized.points + awarded, streak: continuesStreak ? normalized.streak + 1 : 1, lastCompletedDate: todayKey, lastRewardDate: todayKey };
+    });
+    return awarded;
+  },
+  awardPracticeChallenge: (challengeKey, points) => {
+    let awarded = false;
+    set((state) => {
+      const existingClaims = state.practiceChallengeClaims ?? [];
+      if (existingClaims.includes(challengeKey)) return state;
+      awarded = true;
+      return { ...state, points: state.points + Math.max(0, Math.floor(points)), practiceChallengeClaims: [...existingClaims, challengeKey] };
     });
     return awarded;
   },
@@ -76,7 +89,7 @@ export const useRewardStore = create<RewardState>()(persist((set) => ({
 }), {
   name: 'parallax-flow-rewards',
   storage: createJSONStorage(() => AsyncStorage),
-  partialize: (state) => ({ points: state.points, hearts: state.hearts, heartMonth: state.heartMonth, streak: state.streak, lastCompletedDate: state.lastCompletedDate, lastRewardDate: state.lastRewardDate }),
+  partialize: (state) => ({ points: state.points, hearts: state.hearts, heartMonth: state.heartMonth, streak: state.streak, lastCompletedDate: state.lastCompletedDate, lastRewardDate: state.lastRewardDate, practiceChallengeClaims: state.practiceChallengeClaims }),
 }));
 
 export function canRecoverStreak(lastCompletedDate: string | null, today = new Date()) {

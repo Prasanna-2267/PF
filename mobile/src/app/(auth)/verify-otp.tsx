@@ -120,7 +120,7 @@ export default function VerifyOtpScreen() {
         <Text style={styles.demoHint}>Demo: enter any four digits. Verification starts automatically.</Text>
       </ScrollView>
     </KeyboardAvoidingView>
-    <LearnerOnboardingModal visible={showOnboarding} onComplete={completePersonalisation} onSkip={completePersonalisation} />
+    <LearnerOnboardingModal visible={showOnboarding} onComplete={completePersonalisation} />
   </SafeAreaView>;
 }
 
