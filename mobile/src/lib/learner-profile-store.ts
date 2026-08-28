@@ -22,6 +22,27 @@ const defaultProfile: LearnerProfile = {
   reminderTime: '7:00 PM',
 };
 
+export function deviceTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone?.trim() || 'Asia/Kolkata';
+  } catch {
+    return 'Asia/Kolkata';
+  }
+}
+
+export function emptyLearnerProfile(): LearnerProfile {
+  return {
+    examName: '',
+    category: '',
+    examDate: '',
+    academyId: '',
+    dailyTarget: '2 hours',
+    language: 'English',
+    timezone: deviceTimezone(),
+    reminderTime: '7:00 PM',
+  };
+}
+
 export function normalizeExamDate(value: string) {
   const trimmed = value.trim().replace(/\s+/g, ' ');
   if (/^[A-Za-z]{3,9}\s+\d{4}$/.test(trimmed)) return `1 ${trimmed}`;

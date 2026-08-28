@@ -11,6 +11,8 @@ import { NoteRow, initialReaderStatus } from '@/components/note-management';
 import { useAppTheme } from '@/providers/app-providers';
 import { useLearnerProfileStore } from '@/lib/learner-profile-store';
 import { useLessonReaderStore } from '@/lib/lesson-reader-store';
+import { RemoteNotesScreen } from '@/components/remote-notes';
+import { isDemoSession } from '@/lib/student-session';
 
 type Filter = 'all' | 'inprogress' | 'completed';
 type Layout = 'list' | 'grid';
@@ -21,6 +23,11 @@ const packages = [
 ];
 
 export default function NotesScreen() {
+  const demo = useAuthStore((state) => isDemoSession(state.accessToken, state.user?.id));
+  return demo ? <DemoNotesScreen /> : <RemoteNotesScreen />;
+}
+
+function DemoNotesScreen() {
   const { theme } = useAppTheme();
   const router = useRouter();
   const profile = useLearnerProfileStore((state) => state.profile);
@@ -36,7 +43,7 @@ export default function NotesScreen() {
   const entries = useMemo(() => allLessonEntries(), []);
   const lookup = (lessonId: string) => entries.find((entry) => entry.lesson.id === lessonId);
   const statusFor = (entry: LessonEntry) => statusById[entry.lesson.id] ?? initialReaderStatus(entry.lesson);
-  const open = (lessonId: string) => { const entry = lookup(lessonId); if (!entry) return; if (canOpenNote(entry.lesson, userEmail, grants)) { recordOpen(lessonId); router.push({ pathname: '/lesson/[id]', params: { id: lessonId } }); } else router.push({ pathname: '/purchase/[id]', params: { id: lessonId } }); };
+  const open = (lessonId: string) => { const entry = lookup(lessonId); if (!entry) return; if (canOpenNote(entry.lesson, userEmail, grants)) { recordOpen(lessonId); router.push({ pathname: '/lesson/[id]', params: { id: lessonId, returnTo: '/notes' } }); } else router.push({ pathname: '/purchase/[id]', params: { id: lessonId, returnTo: '/notes' } }); };
   const matchesFilter = (entry: LessonEntry) => filter === 'all' || (filter === 'completed' ? statusFor(entry).read : !statusFor(entry).read);
   const recently = recentlyOpened.map(lookup).filter((entry): entry is LessonEntry => Boolean(entry)).slice(0, 3);
   const favourites = entries.filter((entry) => statusFor(entry).favourite);

@@ -12,10 +12,17 @@ import { practiceSubjects, type PracticeTopic } from '@/lib/demo-practice';
 import { useAuthStore } from '@/lib/auth-store';
 import { usePracticeProgressStore } from '@/lib/practice-progress-store';
 import { useAppTheme } from '@/providers/app-providers';
+import { isDemoSession } from '@/lib/student-session';
+import { RemotePracticeTrackerScreen } from '@/components/remote-practice-tracker';
 
 const nativeDriver = Platform.OS !== 'web';
 
 export default function PracticeTrackerScreen() {
+  const demo = useAuthStore((state) => isDemoSession(state.accessToken, state.user?.id));
+  return demo ? <DemoPracticeTrackerScreen /> : <RemotePracticeTrackerScreen />;
+}
+
+function DemoPracticeTrackerScreen() {
   const router = useRouter();
   const { theme } = useAppTheme();
   const dark = theme.canvas === themes.dark.canvas;

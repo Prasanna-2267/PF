@@ -1,5 +1,27 @@
 # Parallax Flow backend integration backlog
 
+## Authoritative practice correction — 2026-08-26
+
+This section supersedes every older Practice, Question Bank and Solve & Earn item later in this file.
+
+- There is no Solve & Earn feature. Do not implement challenge policies, challenge rewards, challenge endpoints or Practice point awards.
+- All published questions uploaded through the Admin Excel/question flow are free to learners who selected the matching course.
+- Practice access never depends on purchasing a package, note or Question Bank.
+- A purchasable “Question Bank” is a PDF note/package. It appears in Notes/Library after entitlement and opens through the protected PDF reader. It never supplies questions to Practice.
+- Admin question metadata drives Practice filters: course, subject, chapter, optional lesson/topic, collection, answer format and optional year.
+- Free/Paid status affects answer behavior only: Free wrong-answer lock and explanation rules versus Paid retry, explanations and detailed weak-topic analytics.
+- Remaining backend work: retire/sanitize the legacy answer-leaking student questions endpoint, validate Admin Excel metadata/backfill, and add scalable analytics materialization when volume requires it.
+
+## Tracker and revision checkpoint — 2026-08-26
+
+The real Tracker consistency projection, chapter-wise revision projection and revision-history API are implemented and connected to real mobile sessions. They reuse `LearnerDailyActivity`, `LearnerStreakState`, `LearnerNoteState`, `NoteRevisionEvent` and the published `ContentItem` hierarchy. No migration or Admin change was required. Remaining related work belongs to the adaptive study-plan and monthly-report batches.
+
+The proposed Admin-mobile backend batch is out of scope at the user's request. Do not build a parallel Admin API surface unless the user explicitly restores it.
+
+## Mobile commerce scope correction — 2026-08-26
+
+Purchasing is website-only. Remove mobile checkout, coupon-validation, order-creation, payment-confirmation and refund mutation work from the mobile backend roadmap. The mobile app only needs safe read projections for locked paid resources, active/expired entitlements, owned Library items, website-created order history and receipts. After a website purchase or grant, mobile must reflect access through normal refresh/session bootstrap without duplicating the commerce transaction.
+
 This file records server-side work intentionally deferred while the React Native application is being reviewed as a UI-only prototype. The mobile UI may use local demo data for these states, but none of the rules below should be considered authoritative or secure until the backend enforces them.
 
 ## Subscription and entitlement
@@ -102,16 +124,18 @@ This policy is different from limiting concurrent sessions. After the first succ
 
 ## Resource validity and expiry
 
-- Add resource types for standard notes, infographic notes and question banks.
-- Add an Admin-configurable validity policy while creating a resource.
-- Confirm the expiry formula: recommended default is `learner exam date + admin-configured offset days`; support explicit absolute expiry only if product policy requires it.
-- Store the calculated authoritative `expiresAt` for every learner-resource entitlement.
-- Enforce expiry on every resource metadata/content request; do not rely on device time or local storage.
-- Return safe UI states: `active`, `expiring_soon`, `expired`, `revoked`, plus server time and `expiresAt`.
-- Prevent expired secure PDFs/assets from being reused through stale signed URLs or cached authorization.
-- Log Admin validity changes and learner expiry events in the audit trail.
+Implementation checkpoint (2026-08-26): resource-level validity is complete in code for paid PDFs. Existing content defaults to permanent. The existing Admin upload and Edit Access forms gained one compact selector for `Permanent` or `Exam date + days`, with no redesign of the Admin workspace. Package-owned PDFs enforce their individual policies. Notes access derives the effective server expiry from the canonical learner exam date and uses the earlier of resource and entitlement/grant expiry; missing exam data and elapsed access fail closed. Protected viewer sessions cannot renew beyond that effective expiry. Notes, Library, course-content and adaptive-plan projections now carry or enforce the same rule. Public website catalogue reads expose validity terms before purchase. Admin validity edits are included in the existing content audit event. Migration `20260827110000_add_resource_validity_policy` is additive and has not been applied to the shared database.
+
+Remaining production work:
+
+- Decide whether fixed-duration-from-purchase or absolute resource end dates are actually required; do not add them without approved product rules.
+- Add expiry-warning notification jobs and immutable learner expiry-event auditing if operational notifications are enabled.
+- Add active/expiring/expired Admin catalogue filters and a learner-specific expiry preview if the Admin team requests them.
+- Run the guarded end-to-end expiry matrix against a disposable PostgreSQL database before coordinated migration deployment.
 
 ## Practice permissions and explanations
+
+Core Student practice session/attempt enforcement is implemented in Gate 3 Feature 8. Remaining work in this section includes Admin authoring, legacy endpoint retirement, richer concept tagging and production data migration.
 
 - Model the public `Archive (PYQ)` separately from purchasable question banks; authenticated learners must be allowed to query Archive sets without a purchase entitlement.
 - Give each question bank a stable resource ID and issue entitlements per learner and per bank. A generic Paid subscription must not imply ownership of every question bank.
@@ -128,9 +152,20 @@ This policy is different from limiting concurrent sessions. After the first succ
 - Return attempt number, correctness, retry eligibility and explanation eligibility from the answer endpoint.
 - Ensure restricted explanations are never included in payloads sent to ineligible Free users.
 
+### Practice follow-ups requiring Admin-team approval
+
+- Extend the existing Admin question create/edit UI and Admin question API contract to author `questionBankPackageId`, `practiceCollection` (`PYQ/RTP/MTP/ORIGINAL`) and Archive-only `practiceYear`. The database and Student read contract now support these fields, but this Gate intentionally did not edit Admin-owned code.
+- Classify/backfill existing published questions. They currently migrate safely as `ORIGINAL` Archive questions with no year, so year-specific PYQ filters require curated metadata before launch.
+- Migrate all mobile practice traffic to `/api/student/practice/*`, then deprecate or sanitize legacy `GET /api/student/questions`, which currently returns `answerHtml`. Do not expose that legacy route to production mobile clients.
+- Decide whether “Paid user” means an active plan/subscription or any active non-complimentary purchase. The current compatibility rule follows the existing bootstrap convention: an active paid purchase/subscription enables Paid Archive retry/explanation, while Question Banks always require the exact package entitlement.
+
 ## Solve & Earn practice challenges
 
 The current mobile screen is UI-only. Its chapter question count, time target and points preview are demo values derived locally. Production rewards must be configured, timed, validated and awarded only by the backend.
+
+Implementation checkpoint (2026-08-26): the prerequisite reward wallet, server-minted claims, immutable ledger, idempotent claim endpoint and three-heart wallet cap are implemented in migration `20260827010000_add_reward_wallet_and_ledger`. Challenge policy authoring, timed challenge sessions, validation and source-specific claim creation below remain pending.
+
+Focus/streak checkpoint (2026-08-26): server-timed focus sessions, learner-timezone daily totals, daily reward claims, current/longest streak, calendar projection, monthly three-heart refresh and missed-day recovery are implemented in migration `20260827030000_add_focus_daily_activity_and_streak` and connected to real-session Home/Tracker. Consistency aggregation beyond the current daily summary and the adaptive study plan remain separate future work.
 
 - Add an Admin-managed challenge policy per course/category, question source, subject and chapter/topic with:
   - active date range and learner eligibility;
@@ -167,6 +202,8 @@ The current mobile screen is UI-only. Its chapter question count, time target an
 - Recalculate analytics asynchronously after practice submissions.
 
 ## Adaptive daily to-do and study-plan engine
+
+Implementation checkpoint (2026-08-26): deterministic v1 is complete in code and integrated with real-session Home. It persists stable daily plans and task history; packs carry-over, due revision, continue-note and unread-note work into the learner's daily capacity; supports manual/start/complete/reopen/skip/reschedule/hide/clear actions; excludes inaccessible paid resources; and consumes optional versioned `StudyWorkloadEstimate` values with an explicit fallback when Admin estimates are missing. Remaining work in this section is Practice-derived weak-concept input (paused), Admin authoring for workload estimates (approval required), weekday-specific availability/overrides, prerequisites/weightage, background pre-generation and production-scale monitoring.
 
 This feature must be generated and enforced by the backend. The mobile app should only collect learner preferences, display the generated plan and send user actions such as complete, skip or reschedule.
 
@@ -320,12 +357,16 @@ This feature must be generated and enforced by the backend. The mobile app shoul
 
 ## Monthly reports
 
-- Aggregate study time, goal days, streak activity, notes completed, revisions, questions solved, accuracy and weak concepts by calendar month.
-- Store immutable monthly snapshots so historical reports do not change unexpectedly.
-- Provide a paginated month archive and a month-detail endpoint.
-- Handle learner timezone when assigning activity to a month.
-- Restrict full report history to Paid users according to entitlement policy.
-- Define empty, partial-current-month and unavailable-data responses.
+- [x] Aggregate study time, goal days, streak activity, notes completed, revisions, completed study-plan tasks and syllabus progress by learner calendar month.
+- [x] Store immutable completed-month snapshots; compute the current month as a live partial report.
+- [x] Provide a month archive and month-detail endpoint.
+- [x] Handle learner timezone when assigning timestamped activity to a month.
+- [x] Restrict report history to learners with an active Paid entitlement.
+- [x] Define loading, empty, current-live, frozen-history and unavailable UI states.
+- [ ] Add a scheduled month-close worker so snapshots are proactively created without waiting for the learner's first archive request.
+- [ ] Add historical note-completion event provenance if the product must preserve completion followed by later reopening before the month is frozen.
+- [ ] Add question counts, accuracy and weak-concept sections only after Practice development resumes; do not infer them from incomplete data.
+- [ ] Add subject-level monthly drill-down only if the final report UX requires it.
 
 ## Exam-date normalization
 
@@ -353,3 +394,19 @@ This feature must be generated and enforced by the backend. The mobile app shoul
 - Add clock-boundary tests around timezone, month-end, exam date and expiry timestamps.
 - Add analytics aggregation tests and retry/explanation permission tests.
 - Confirm API responses never expose protected content or explanations to ineligible users.
+
+## Notifications and reminders — implemented in code, deployment pending
+
+- [x] Register/revoke a learner's Expo push token per app installation.
+- [x] Persist a learner notification inbox independently of device delivery.
+- [x] Persist category preferences for broadcasts, daily plans, revisions, resource expiry, streak risk, security and account events.
+- [x] Respect quiet hours in the learner timezone; urgent security alerts bypass quiet hours.
+- [x] Fan out the existing Admin website Publish/Schedule broadcast workflow into learner inbox and durable push deliveries without replacing the Admin UI.
+- [x] Generate deterministic daily-plan, revision-due, seven-day resource-expiry and streak-risk reminders.
+- [x] Create security alerts for password/Google sign-in and account alerts for profile changes.
+- [x] Retry failed push deliveries in the existing durable worker and revoke Expo tokens reported as `DeviceNotRegistered`.
+- [x] Add mobile foreground presentation, notification-tap routing and Account preference controls.
+- [ ] Review and apply migration `20260827130000_add_mobile_notifications` through the coordinated shared-database deployment process.
+- [ ] Configure `EXPO_PUBLIC_EAS_PROJECT_ID`, Android FCM V1 credentials, iOS APNs credentials and optional `EXPO_ACCESS_TOKEN` in each deployed environment.
+- [ ] Test remote push using an Expo development/release build; Android Expo Go cannot receive remote pushes on SDK 57.
+- [ ] Add provider receipt reconciliation if production analytics must distinguish Expo ticket acceptance from final FCM/APNs delivery.

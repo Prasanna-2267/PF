@@ -12,7 +12,7 @@ export default function SubjectScreen() {
   const { id } = useLocalSearchParams(); const subject = findSubject(id); const router = useRouter(); const { theme } = useAppTheme(); const [query, setQuery] = useState('');
   const units = subject.units.filter((unit) => `${unit.title} ${unit.description}`.toLowerCase().includes(query.trim().toLowerCase()));
   return <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safe, { backgroundColor: theme.canvas }]}>
-    <NotesBrowserHeader query={query} onChangeQuery={setQuery} onBack={() => router.back()} placeholder="Search units" />
+    <NotesBrowserHeader query={query} onChangeQuery={setQuery} onBack={() => router.replace('/notes')} placeholder="Search units" />
     <View style={[styles.divider, { backgroundColor: theme.line }]} />
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <Text style={[styles.breadcrumb, { color: theme.primary }]}>NOTES  /  {subject.title.toUpperCase()}</Text><Text style={[styles.title, { color: theme.fg }]}>{subject.title}</Text><Text style={[styles.description, { color: theme.muted }]}>Choose a unit to continue through the syllabus.</Text>

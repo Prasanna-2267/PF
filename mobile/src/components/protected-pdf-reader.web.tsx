@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 type ProtectedPdfReaderProps = {
+  source?: { uri: string; headers?: Record<string, string> };
   onLoadComplete: (pages: number) => void;
   onError: (error: string) => void;
 };
@@ -8,8 +9,9 @@ type ProtectedPdfReaderProps = {
 const sampleFivePagePdf = require('../../assets/sample-notes/study-preview.pdf');
 type PdfComponents = Pick<typeof import('react-pdf'), 'Document' | 'Page'>;
 
-export function ProtectedPdfReader({ onLoadComplete, onError }: ProtectedPdfReaderProps) {
+export function ProtectedPdfReader({ source, onLoadComplete, onError }: ProtectedPdfReaderProps) {
   const [pageWidth, setPageWidth] = useState(360);
+  const [documentPages, setDocumentPages] = useState(0);
   const [pdfComponents, setPdfComponents] = useState<PdfComponents | null>(null);
 
   useEffect(() => {
@@ -35,13 +37,13 @@ export function ProtectedPdfReader({ onLoadComplete, onError }: ProtectedPdfRead
 
   return <div style={styles.viewer} data-protected-pdf="true">
     <Document
-      file={sampleFivePagePdf}
+      file={source ? { url: source.uri, httpHeaders: source.headers } : sampleFivePagePdf}
       loading={<div style={styles.status}>Opening protected PDF…</div>}
       error={<div style={styles.status}>Unable to open the sample PDF.</div>}
-      onLoadSuccess={({ numPages }) => onLoadComplete(numPages)}
+      onLoadSuccess={({ numPages }) => { setDocumentPages(numPages); onLoadComplete(numPages); }}
       onLoadError={(error) => onError(error.message)}
     >
-      {Array.from({ length: 5 }, (_, index) => <div key={index} style={styles.page}><Page pageNumber={index + 1} width={pageWidth} renderAnnotationLayer={false} renderTextLayer={false} /></div>)}
+      {Array.from({ length: documentPages }, (_, index) => <div key={index} style={styles.page}><Page pageNumber={index + 1} width={pageWidth} renderAnnotationLayer={false} renderTextLayer={false} /></div>)}
     </Document>
   </div>;
 }

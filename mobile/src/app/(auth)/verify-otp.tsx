@@ -8,6 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import { LearnerOnboardingModal } from '@/components/learner-onboarding-modal';
 import { font, spacing } from '@/constants/theme';
 import { useAuthStore, type StudentSignupIdentity } from '@/lib/auth-store';
+import { completeStudentRegistration, getAuthErrorMessage, sendStudentRegistrationOtp, verifyStudentRegistrationOtp } from '@/lib/auth-session';
 import { useRocketLaunch } from '@/providers/rocket-launch-provider';
 
 type OtpChannel = 'email' | 'mobile';
@@ -24,11 +25,12 @@ export default function VerifyOtpScreen() {
   const router = useRouter();
   const { launchTo } = useRocketLaunch();
   const scrollRef = useRef<ScrollView>(null);
-  const params = useLocalSearchParams<{ name?: string; email?: string; phone?: string; demoRole?: string }>();
+  const params = useLocalSearchParams<{ name?: string; email?: string; phone?: string; demoRole?: string; demoMode?: string; registrationId?: string; developmentCode?: string }>();
   const completeStudentSignup = useAuthStore((state) => state.completeStudentSignup);
   const beginAdminDemoSession = useAuthStore((state) => state.beginAdminDemoSession);
   const emailAttempt = useRef(0);
   const mobileAttempt = useRef(0);
+  const registrationCompleted = useRef(false);
   const [activeChannel, setActiveChannel] = useState<OtpChannel>('email');
   const [emailCode, setEmailCode] = useState('');
   const [mobileCode, setMobileCode] = useState('');
@@ -37,8 +39,12 @@ export default function VerifyOtpScreen() {
   const [resent, setResent] = useState<OtpChannel>();
   const [stageVersion, setStageVersion] = useState(0);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [verificationError, setVerificationError] = useState('');
+  const [developmentCode, setDevelopmentCode] = useState(param(params.developmentCode, ''));
   const identity: StudentSignupIdentity = { name: param(params.name, 'New learner'), email: param(params.email, 'student@example.com'), phone: param(params.phone, '+91 98765 43210') };
   const isAdminDemo = param(params.demoRole, 'student') === 'admin';
+  const isDemo = param(params.demoMode, 'false') === 'true';
+  const registrationId = param(params.registrationId, '');
 
   const finishFlow = () => {
     if (isAdminDemo) {
@@ -50,7 +56,7 @@ export default function VerifyOtpScreen() {
   };
 
   const completePersonalisation = () => {
-    completeStudentSignup(identity);
+    if (!registrationCompleted.current) completeStudentSignup(identity);
     setShowOnboarding(false);
     requestAnimationFrame(() => launchTo('/home'));
   };
@@ -63,6 +69,7 @@ export default function VerifyOtpScreen() {
     const setStatus = isEmail ? setEmailStatus : setMobileStatus;
     const attempt = ++attemptRef.current;
     setCode(cleaned);
+    setVerificationError('');
     if (cleaned.length !== 4) {
       setStatus('idle');
       return;
@@ -70,21 +77,62 @@ export default function VerifyOtpScreen() {
 
     Keyboard.dismiss();
     setStatus('verifying');
-    setTimeout(() => {
-      if (attempt !== attemptRef.current) return;
-      setStatus('verified');
-      scrollRef.current?.scrollTo({ y: 0, animated: true });
+    if (isDemo) {
       setTimeout(() => {
         if (attempt !== attemptRef.current) return;
+        setStatus('verified');
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+        setTimeout(() => {
+          if (attempt !== attemptRef.current) return;
+          if (isEmail) {
+            setActiveChannel('mobile');
+            setStageVersion((current) => current + 1);
+          } else finishFlow();
+        }, 1550);
+      }, 900);
+      return;
+    }
+
+    void (async () => {
+      try {
+        if (!registrationId) throw new Error('This registration session is missing. Return to signup and try again.');
+        await verifyStudentRegistrationOtp(registrationId, channel, cleaned);
+        if (attempt !== attemptRef.current) return;
+
         if (isEmail) {
-          setActiveChannel('mobile');
-          setStageVersion((current) => current + 1);
-        } else finishFlow();
-      }, 1550);
-    }, 1250);
+          try {
+            const mobileDelivery = await sendStudentRegistrationOtp(registrationId, 'mobile');
+            setDevelopmentCode(mobileDelivery.developmentCode ?? '');
+          } catch (error) {
+            setDevelopmentCode('');
+            setVerificationError(`Email verified. ${getAuthErrorMessage(error)}`);
+          }
+        } else {
+          await completeStudentRegistration(registrationId);
+          registrationCompleted.current = true;
+        }
+
+        if (attempt !== attemptRef.current) return;
+        setStatus('verified');
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+        setTimeout(() => {
+          if (attempt !== attemptRef.current) return;
+          if (isEmail) {
+            setActiveChannel('mobile');
+            setStageVersion((current) => current + 1);
+          } else finishFlow();
+        }, 1550);
+      } catch (error) {
+        if (attempt !== attemptRef.current) return;
+        setStatus('idle');
+        setCode('');
+        setVerificationError(getAuthErrorMessage(error));
+        setStageVersion((current) => current + 1);
+      }
+    })();
   };
 
-  const resendCode = () => {
+  const resendCode = async () => {
     const isEmail = activeChannel === 'email';
     if (isEmail) {
       emailAttempt.current += 1;
@@ -95,9 +143,19 @@ export default function VerifyOtpScreen() {
       setMobileCode('');
       setMobileStatus('idle');
     }
+    setVerificationError('');
     setResent(activeChannel);
     setStageVersion((current) => current + 1);
     setTimeout(() => setResent((current) => current === activeChannel ? undefined : current), 2200);
+    if (isDemo) return;
+    try {
+      if (!registrationId) throw new Error('This registration session is missing. Return to signup and try again.');
+      const delivery = await sendStudentRegistrationOtp(registrationId, activeChannel);
+      setDevelopmentCode(delivery.developmentCode ?? '');
+    } catch (error) {
+      setResent(undefined);
+      setVerificationError(getAuthErrorMessage(error));
+    }
   };
 
   const code = activeChannel === 'email' ? emailCode : mobileCode;
@@ -117,14 +175,15 @@ export default function VerifyOtpScreen() {
         <ReferenceOtpCard key={`${activeChannel}-${stageVersion}`} channel={activeChannel} destination={destination} code={code} status={status} resent={resent === activeChannel} onInputFocus={() => setTimeout(() => scrollRef.current?.scrollTo({ y: 235, animated: true }), 120)} onChange={(value) => updateCode(activeChannel, value)} onResend={resendCode} />
 
         <View style={styles.progressDots}><View style={[styles.progressDot, { backgroundColor: emailStatus === 'verified' ? palette.green : activeChannel === 'email' ? palette.orange : palette.faint }]} /><View style={[styles.progressLine, { backgroundColor: emailStatus === 'verified' ? palette.green : palette.cardLine }]} /><View style={[styles.progressDot, { backgroundColor: mobileStatus === 'verified' ? palette.green : activeChannel === 'mobile' ? palette.orange : palette.faint }]} /></View>
-        <Text style={styles.demoHint}>Demo: enter any four digits. Verification starts automatically.</Text>
+        {verificationError ? <Text accessibilityLiveRegion="polite" style={styles.verificationError}>{verificationError}</Text> : null}
+        <Text style={styles.demoHint}>{isDemo ? 'Demo: enter any four digits. Verification starts automatically.' : __DEV__ && developmentCode ? `Development verification code: ${developmentCode}` : 'Verification starts automatically after the fourth digit.'}</Text>
       </ScrollView>
     </KeyboardAvoidingView>
     <LearnerOnboardingModal visible={showOnboarding} onComplete={completePersonalisation} />
   </SafeAreaView>;
 }
 
-function ReferenceOtpCard({ channel, destination, code, status, resent, onInputFocus, onChange, onResend }: { channel: OtpChannel; destination: string; code: string; status: OtpStatus; resent: boolean; onInputFocus: () => void; onChange: (value: string) => void; onResend: () => void }) {
+function ReferenceOtpCard({ channel, destination, code, status, resent, onInputFocus, onChange, onResend }: { channel: OtpChannel; destination: string; code: string; status: OtpStatus; resent: boolean; onInputFocus: () => void; onChange: (value: string) => void; onResend: () => void | Promise<void> }) {
   const inputRefs = useRef<(TextInput | null)[]>([]);
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [entrance] = useState(() => new Animated.Value(0));
@@ -224,7 +283,7 @@ function ReferenceOtpCard({ channel, destination, code, status, resent, onInputF
 
     {verified ? <Animated.View style={[styles.successLoader, { opacity: success }]}>{showFinalTick ? <Animated.View style={[styles.finalTick, { transform: [{ scale: tickPop.interpolate({ inputRange: [0, 1], outputRange: [.35, 1] }) }, { rotate: tickPop.interpolate({ inputRange: [0, 1], outputRange: ['-18deg', '0deg'] }) }] }]}><Check size={29} color="#07170F" strokeWidth={3.5} /></Animated.View> : <ActivityIndicator size="large" color={palette.green} />}<Text style={[styles.successStatus, { opacity: showFinalTick ? 1 : 0 }]}>{channel === 'email' ? 'Email confirmed' : 'Mobile confirmed'}</Text></Animated.View> : <>
       <View style={styles.codeRow}>{digits.map((digit, index) => <Animated.View key={index} style={{ flex: 1, transform: [{ scale: digitScales[index] }] }}><TextInput ref={(node) => { inputRefs.current[index] = node; }} value={digit} editable={!verifying} onFocus={() => { setFocusedIndex(index); onInputFocus(); }} onChangeText={(value) => changeDigit(index, value)} onKeyPress={({ nativeEvent }) => { if (nativeEvent.key === 'Backspace') backspace(index); }} keyboardType="number-pad" textContentType={index === 0 ? 'oneTimeCode' : 'none'} autoComplete={index === 0 ? 'sms-otp' : 'off'} maxLength={4} selectTextOnFocus style={[styles.codeInput, (focusedIndex === index || digit) && { borderColor: palette.active }, focusedIndex === index && styles.codeInputActive]} /></Animated.View>)}</View>
-      <View style={styles.resendRow}><Text style={styles.resendQuestion}>{"Didn't receive the code?"}</Text><Pressable accessibilityRole="button" onPress={onResend} hitSlop={9} style={({ pressed }) => pressed && styles.pressed}><Text style={[styles.resendText, resent && { color: palette.green }]}>{resent ? 'Code sent ✓' : 'Resend'}</Text></Pressable></View>
+      <View style={styles.resendRow}><Text style={styles.resendQuestion}>{"Didn't receive the code?"}</Text><Pressable accessibilityRole="button" onPress={() => void onResend()} hitSlop={9} style={({ pressed }) => pressed && styles.pressed}><Text style={[styles.resendText, resent && { color: palette.green }]}>{resent ? 'Code sent ✓' : 'Resend'}</Text></Pressable></View>
     </>}
   </Animated.View>;
 }
@@ -239,5 +298,5 @@ const styles = StyleSheet.create({
   message: { minHeight: 92, alignItems: 'center', justifyContent: 'center' }, cardTitle: { color: palette.fg, fontFamily: font.extraBold, fontSize: 20, letterSpacing: -.45, textAlign: 'center' }, cardDescription: { maxWidth: 285, marginTop: 10, color: palette.muted, fontFamily: font.regular, fontSize: 10, lineHeight: 16, textAlign: 'center' },
   codeRow: { width: '100%', marginTop: 15, flexDirection: 'row', gap: 10 }, codeInput: { width: '100%', height: 58, borderWidth: 1, borderColor: palette.fieldLine, borderRadius: 14, backgroundColor: palette.field, color: palette.fg, fontFamily: font.extraBold, fontSize: 21, textAlign: 'center' }, codeInputActive: { shadowColor: palette.active, shadowOpacity: .55, shadowRadius: 10, shadowOffset: { width: 0, height: 0 }, elevation: 5 },
   resendRow: { minHeight: 52, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', gap: 8 }, resendQuestion: { color: palette.faint, fontFamily: font.medium, fontSize: 9 }, resendText: { color: palette.fg, fontFamily: font.bold, fontSize: 10 }, successLoader: { height: 100, alignItems: 'center', justifyContent: 'center', gap: 7 }, finalTick: { width: 52, height: 52, borderRadius: 26, backgroundColor: palette.green, alignItems: 'center', justifyContent: 'center', shadowColor: palette.green, shadowOpacity: .48, shadowRadius: 14, shadowOffset: { width: 0, height: 0 }, elevation: 6 }, successStatus: { color: palette.green, fontFamily: font.bold, fontSize: 8, letterSpacing: .45 },
-  progressDots: { width: 90, height: 20, alignSelf: 'center', flexDirection: 'row', alignItems: 'center' }, progressDot: { width: 7, height: 7, borderRadius: 4 }, progressLine: { flex: 1, height: 1, marginHorizontal: 7 }, demoHint: { color: palette.faint, fontFamily: font.medium, fontSize: 7.5, textAlign: 'center' }, pressed: { opacity: .68, transform: [{ scale: .98 }] },
+  progressDots: { width: 90, height: 20, alignSelf: 'center', flexDirection: 'row', alignItems: 'center' }, progressDot: { width: 7, height: 7, borderRadius: 4 }, progressLine: { flex: 1, height: 1, marginHorizontal: 7 }, verificationError: { maxWidth: 330, alignSelf: 'center', marginBottom: 6, color: '#FF7A80', fontFamily: font.semibold, fontSize: 9, lineHeight: 14, textAlign: 'center' }, demoHint: { color: palette.faint, fontFamily: font.medium, fontSize: 7.5, textAlign: 'center' }, pressed: { opacity: .68, transform: [{ scale: .98 }] },
 });

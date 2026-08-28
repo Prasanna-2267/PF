@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Animated, Easing, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View, useWindowDimensions, type ViewStyle } from 'react-native';
+import { Animated, Easing, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View, useWindowDimensions, type ViewStyle } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowUpRight, Award, CalendarDays, CheckCircle2, Coins, Eye, Flame, Gift, Heart, ListTodo, Plus, Share2, ShieldCheck, Sparkles, Target, Trash2, X } from 'lucide-react-native';
+import { ArrowUpRight, Award, CalendarDays, CheckCircle2, Coins, Eye, Flame, Gift, Heart, Share2, ShieldCheck, Sparkles, Target, X } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GrandSessionControl, ProgressBar } from '@/components/study-ui';
+import { StudyPlanCard } from '@/components/study-plan-card';
 import { font, layout, radius, spacing, themes } from '@/constants/theme';
 import { useAuthStore } from '@/lib/auth-store';
-import { demoStudy, formatDuration, formatMinutes, useDemoStudyClock } from '@/lib/demo-study';
-import { homeTodoDateKey, useHomeTodoStore } from '@/lib/home-todo-store';
+import { demoStudy, formatDuration, formatMinutes } from '@/lib/demo-study';
 import { useLearnerProfileStore } from '@/lib/learner-profile-store';
-import { canRecoverStreak, monthlyHeartLimit, useRewardStore } from '@/lib/reward-store';
+import { monthlyHeartLimit } from '@/lib/reward-store';
+import { useStudySession } from '@/lib/use-study-session';
 import { useAppTheme } from '@/providers/app-providers';
 
 const nativeDriver = Platform.OS !== 'web';
@@ -34,53 +35,35 @@ export default function HomeScreen() {
   const wide = width >= layout.tabletBreakpoint;
   const dark = theme.canvas === themes.dark.canvas;
   const router = useRouter();
-  const study = useDemoStudyClock();
   const profile = useLearnerProfileStore((state) => state.profile);
+  const fallbackTargetMinutes = targetMinutesFrom(profile.dailyTarget);
+  const study = useStudySession('HOME', fallbackTargetMinutes);
   const userName = useAuthStore((state) => state.user?.name?.split(' ')[0] ?? 'Learner');
-  const todos = useHomeTodoStore((state) => state.todos);
-  const syncTodos = useHomeTodoStore((state) => state.syncToday);
-  const addTodo = useHomeTodoStore((state) => state.addTodo);
-  const toggleTodo = useHomeTodoStore((state) => state.toggleTodo);
-  const removeTodo = useHomeTodoStore((state) => state.removeTodo);
-  const clearCompleted = useHomeTodoStore((state) => state.clearCompleted);
-  const [todoText, setTodoText] = useState('');
   const [currentDate] = useState(() => new Date());
   const [showCelebration, setShowCelebration] = useState(false);
   const [showRewards, setShowRewards] = useState(false);
   const [completedSeconds, setCompletedSeconds] = useState(0);
   const [earnedPoints, setEarnedPoints] = useState(0);
-  const points = useRewardStore((state) => state.points);
-  const hearts = useRewardStore((state) => state.hearts);
-  const streak = useRewardStore((state) => state.streak);
-  const lastCompletedDate = useRewardStore((state) => state.lastCompletedDate);
-  const syncRewardMonth = useRewardStore((state) => state.syncMonth);
-  const awardDailyStreak = useRewardStore((state) => state.awardDailyStreak);
-  const recoverStreak = useRewardStore((state) => state.recoverStreak);
-  const completedTodos = todos.filter((todo) => todo.completed).length;
-  const todoPercent = todos.length ? Math.round((completedTodos / todos.length) * 100) : 0;
-  const dailyTargetMinutes = targetMinutesFrom(profile.dailyTarget);
+  const dailyTargetMinutes = study.targetMinutes;
   const remaining = Math.max(0, dailyTargetMinutes - study.todayMinutes);
   const planPercent = Math.min(100, Math.round((study.todayMinutes / dailyTargetMinutes) * 100));
   const completedPlanSegments = Math.round((planPercent / 100) * 12);
   const momentumLabel = planPercent >= 100 ? 'Goal complete' : planPercent >= 60 ? 'Strong momentum' : planPercent >= 30 ? 'Building rhythm' : 'Start your focus';
   const examTime = new Date(profile.examDate).getTime();
   const examDays = Number.isNaN(examTime) ? demoStudy.exam.daysLeft : Math.max(0, Math.ceil((examTime - currentDate.getTime()) / dayMs));
-  const recoveryAvailable = canRecoverStreak(lastCompletedDate);
+  const recoveryAvailable = study.recoveryAvailable;
   const today = new Intl.DateTimeFormat('en-IN', { weekday: 'long', day: 'numeric', month: 'long' }).format(currentDate).toUpperCase();
-  const submitTodo = () => { if (!todoText.trim()) return; addTodo(todoText); setTodoText(''); };
-  const handleSession = () => {
-    if (study.checkedIn) {
-      setCompletedSeconds(study.sessionSeconds);
-      setEarnedPoints(awardDailyStreak(study.todayMinutes, dailyTargetMinutes));
-      setShowCelebration(true);
-    }
-    study.toggleSession();
+  const handleSession = async () => {
+    if (study.isPending) return;
+    const result = await study.toggleSession();
+    if (!result) return;
+    setCompletedSeconds(result.seconds);
+    setEarnedPoints(result.points);
+    setShowCelebration(true);
   };
 
-  useFocusEffect(useCallback(() => { syncRewardMonth(); syncTodos(homeTodoDateKey(currentDate)); }, [currentDate, syncRewardMonth, syncTodos]));
-
   return <><SafeAreaView edges={['top', 'left', 'right']} style={[styles.safe, { backgroundColor: theme.canvas }]}><ScrollView contentContainerStyle={[styles.content, wide && styles.contentWide]} showsVerticalScrollIndicator={false}>
-    <RewardHeader points={points} hearts={hearts} streak={streak} onPress={() => setShowRewards(true)} />
+    <RewardHeader points={study.points} hearts={study.hearts} streak={study.streak} onPress={() => setShowRewards(true)} />
     <View style={[styles.dashboardLead, wide && styles.dashboardLeadWide]}>
     <View style={[styles.heroColumn, wide && styles.heroColumnWide]}>
     <LinearGradient colors={dark ? ['#17213A', '#101522', '#0B0D12'] : ['#263A82', '#424A94', '#5A4D59']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, wide && styles.heroWide, { borderColor: dark ? theme.line : 'transparent' }]}>
@@ -88,7 +71,8 @@ export default function HomeScreen() {
       <View style={styles.heroGlowOne} /><View style={styles.heroGlowTwo} />
       <View style={styles.heroTop}><Text style={[styles.date, { color: dark ? theme.goldStrong : '#E3C27E' }]}>●  {today}</Text><View style={[styles.liveStatus, { backgroundColor: study.checkedIn ? 'rgba(217,170,87,.15)' : 'rgba(124,156,255,.14)' }]}><View style={[styles.liveStatusDot, { backgroundColor: study.checkedIn ? theme.goldStrong : theme.primary }]} /><Text style={[styles.liveStatusText, { color: study.checkedIn ? theme.goldStrong : theme.primaryStrong }]}>{study.checkedIn ? 'FOCUS LIVE' : 'READY'}</Text></View></View>
       <Text style={styles.heroTitle}>{study.checkedIn ? 'Stay in the zone' : `Good morning, ${userName}`}</Text><Text style={[styles.heroCopy, { color: dark ? theme.muted : '#E1E5F0' }]}>{study.checkedIn ? 'Every focused minute is strengthening your consistency.' : 'Check in, protect your streak, and make today count.'}</Text>
-      <View style={styles.sessionWrap}><GrandSessionControl active={study.checkedIn} seconds={study.sessionSeconds} onPress={handleSession} /></View>
+      <View style={styles.sessionWrap}><GrandSessionControl active={study.checkedIn} seconds={study.sessionSeconds} onPress={() => { void handleSession(); }} /></View>
+      {study.error ? <Text style={[styles.heroCopy, { color: theme.danger }]}>{study.error}</Text> : null}
     </LinearGradient>
     </View>
 
@@ -107,14 +91,8 @@ export default function HomeScreen() {
     </View>
     </View>
 
-    <Surface style={styles.todoSurface}>
-      <View style={styles.todoHeader}><View style={[styles.todoIcon, { backgroundColor: theme.primarySoft }]}><ListTodo color={theme.primaryStrong} size={21} /></View><View style={styles.todoHeadingCopy}><Text style={[styles.cardEyebrow, { color: theme.primary }]}>TODAY’S ACTIONS</Text><Text style={[styles.cardTitle, { color: theme.fg }]}>Study to-do list</Text><Text style={[styles.todoIntro, { color: theme.muted }]}>{completedTodos === todos.length && todos.length ? 'Everything planned is complete.' : 'Keep today clear, small and achievable.'}</Text></View><View style={[styles.todoScore, { backgroundColor: todoPercent === 100 && todos.length ? theme.successSoft : theme.sunken, borderColor: todoPercent === 100 && todos.length ? theme.success : theme.line }]}><Text style={[styles.todoScoreValue, { color: todoPercent === 100 && todos.length ? theme.success : theme.fg }]}>{completedTodos}/{todos.length}</Text><Text style={[styles.todoScoreLabel, { color: theme.muted }]}>DONE</Text></View></View>
-      <View style={[styles.todoProgressTrack, { backgroundColor: theme.sunken }]}><View style={[styles.todoProgressFill, { width: `${todoPercent}%`, backgroundColor: todoPercent === 100 && todos.length ? theme.success : theme.primary }]} /></View>
-      <View style={[styles.todoComposer, { backgroundColor: theme.sunken, borderColor: theme.line }]}><TextInput value={todoText} onChangeText={setTodoText} onSubmitEditing={submitTodo} placeholder="Add a study task…" placeholderTextColor={theme.faint} returnKeyType="done" style={[styles.todoInput, { color: theme.fg }]} /><Pressable disabled={!todoText.trim()} accessibilityRole="button" accessibilityLabel="Add to-do" onPress={submitTodo} style={({ pressed }) => [styles.todoAdd, { backgroundColor: todoText.trim() ? theme.primary : theme.line }, !todoText.trim() && styles.todoDisabled, pressed && styles.pressed]}><Plus color={todoText.trim() ? theme.primaryFg : theme.faint} size={18} strokeWidth={2.8} /></Pressable></View>
-      <View style={styles.todoList}>{todos.map((todo) => <View key={todo.id} style={[styles.todoRow, { borderTopColor: theme.line }]}><Pressable accessibilityRole="checkbox" accessibilityState={{ checked: todo.completed }} accessibilityLabel={`${todo.completed ? 'Mark incomplete' : 'Complete'} ${todo.title}`} onPress={() => toggleTodo(todo.id)} style={[styles.todoCheck, { backgroundColor: todo.completed ? theme.success : theme.sunken, borderColor: todo.completed ? theme.success : theme.lineStrong }]}>{todo.completed ? <CheckCircle2 color={theme.primaryFg} size={17} strokeWidth={2.8} /> : null}</Pressable><Text numberOfLines={2} style={[styles.todoTitle, { color: todo.completed ? theme.faint : theme.fg }, todo.completed && styles.todoTitleDone]}>{todo.title}</Text><Pressable accessibilityRole="button" accessibilityLabel={`Delete ${todo.title}`} onPress={() => removeTodo(todo.id)} hitSlop={7} style={({ pressed }) => [styles.todoDelete, pressed && styles.pressed]}><Trash2 color={theme.faint} size={16} /></Pressable></View>)}</View>
-      {todos.length === 0 ? <View style={[styles.todoEmpty, { backgroundColor: theme.sunken }]}><Sparkles color={theme.primaryStrong} size={18} /><Text style={[styles.todoEmptyText, { color: theme.muted }]}>Your list is clear. Add one meaningful task for today.</Text></View> : completedTodos > 0 ? <Pressable accessibilityRole="button" onPress={clearCompleted} style={styles.clearTodos}><Text style={[styles.clearTodosText, { color: theme.muted }]}>Clear completed</Text></Pressable> : null}
-    </Surface>
-  </ScrollView></SafeAreaView><CheckoutCelebration visible={showCelebration} streak={streak} seconds={completedSeconds} pointsEarned={earnedPoints} onClose={() => setShowCelebration(false)} /><RewardWallet visible={showRewards} points={points} hearts={hearts} streak={streak} canRecover={recoveryAvailable} onRecover={() => recoverStreak()} onClose={() => setShowRewards(false)} /></>;
+    <StudyPlanCard />
+  </ScrollView></SafeAreaView><CheckoutCelebration visible={showCelebration} streak={study.streak} seconds={completedSeconds} pointsEarned={earnedPoints} onClose={() => setShowCelebration(false)} /><RewardWallet visible={showRewards} points={study.points} hearts={study.hearts} streak={study.streak} canRecover={recoveryAvailable} onRecover={() => study.recoverStreak()} onClose={() => setShowRewards(false)} /></>;
 }
 
 function HeroAmbientMotion() {
@@ -174,7 +152,7 @@ function RewardHeader({ points, hearts, streak, onPress }: { points: number; hea
   </View></View>;
 }
 
-function RewardWallet({ visible, points, hearts, streak, canRecover, onRecover, onClose }: { visible: boolean; points: number; hearts: number; streak: number; canRecover: boolean; onRecover: () => boolean; onClose: () => void }) {
+function RewardWallet({ visible, points, hearts, streak, canRecover, onRecover, onClose }: { visible: boolean; points: number; hearts: number; streak: number; canRecover: boolean; onRecover: () => void; onClose: () => void }) {
   const { theme } = useAppTheme();
   const recoveryEnabled = canRecover && hearts > 0;
   return <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>

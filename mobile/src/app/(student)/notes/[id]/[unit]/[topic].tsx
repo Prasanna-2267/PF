@@ -14,10 +14,10 @@ import { useLessonReaderStore } from '@/lib/lesson-reader-store';
 export default function TopicScreen() {
   const { id, unit: unitId, topic: topicId } = useLocalSearchParams(); const { subject, unit, topic } = findTopic(id, unitId, topicId); const router = useRouter(); const { theme } = useAppTheme(); const recordOpen = useLessonReaderStore((state) => state.recordOpen); const userEmail = useAuthStore((state) => state.user?.email); const grants = useAdminAccessStore((state) => state.grants); const [query, setQuery] = useState('');
   const lessons = (topic?.lessons ?? []).filter((lesson) => lesson.title.toLowerCase().includes(query.trim().toLowerCase()));
-  const open = (lesson: Lesson) => { if (canOpenNote(lesson, userEmail, grants)) { recordOpen(lesson.id); router.push({ pathname: '/lesson/[id]', params: { id: lesson.id } }); } else router.push({ pathname: '/purchase/[id]', params: { id: lesson.id } }); };
+  const open = (lesson: Lesson) => { const returnTo = `/notes/${subject.id}/${unit.id}/${topic?.id ?? ''}`; if (canOpenNote(lesson, userEmail, grants)) { recordOpen(lesson.id); router.push({ pathname: '/lesson/[id]', params: { id: lesson.id, returnTo } }); } else router.push({ pathname: '/purchase/[id]', params: { id: lesson.id, returnTo } }); };
   if (!topic) return null;
   return <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safe, { backgroundColor: theme.canvas }]}>
-    <NotesBrowserHeader query={query} onChangeQuery={setQuery} onBack={() => router.back()} placeholder="Search notes" />
+    <NotesBrowserHeader query={query} onChangeQuery={setQuery} onBack={() => router.replace({ pathname: '/notes/[id]/[unit]', params: { id: subject.id, unit: unit.id } })} placeholder="Search notes" />
     <View style={[styles.divider, { backgroundColor: theme.line }]} />
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <Text numberOfLines={1} style={[styles.breadcrumb, { color: theme.primary }]}>NOTES  /  {subject.title.toUpperCase()}  /  {unit.title.toUpperCase()}</Text><Text style={[styles.title, { color: theme.fg }]}>{topic.title}</Text><Text style={[styles.description, { color: theme.muted }]}>Protected notes available in this topic.</Text>

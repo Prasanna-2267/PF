@@ -11,6 +11,7 @@
       "icon": "./assets/expo.icon"
     },
     "android": {
+      "package": "com.parallaxflow.mobile",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -34,7 +35,15 @@
         }
       ],
       "expo-secure-store",
-      "@config-plugins/react-native-pdf"
+      [
+        "expo-notifications",
+        {
+          "color": "#FFB547",
+          "defaultChannel": "learning-reminders"
+        }
+      ],
+      "@config-plugins/react-native-pdf",
+      "expo-image"
     ],
     "experiments": {
       "typedRoutes": true,

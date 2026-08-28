@@ -16,6 +16,7 @@ import { ArrowLeft, ArrowRight, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } fr
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { font, radius, spacing } from '@/constants/theme';
+import { getAuthErrorMessage, loginWithPassword } from '@/lib/auth-session';
 import { useAuthStore } from '@/lib/auth-store';
 
 const palette = {
@@ -36,29 +37,48 @@ export default function LoginScreen() {
   const beginPaidDemoSession = useAuthStore((state) => state.beginPaidDemoSession);
   const beginAdminDemoSession = useAuthStore((state) => state.beginAdminDemoSession);
   const [identifier, setIdentifier] = useState('');
-  const [password, setPassword] = useState('demo-password');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState<'email' | 'password' | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const signIn = () => {
+  const signIn = async () => {
     const handle = identifier.trim().toLowerCase();
-    if (handle === 'mockadmin') {
+    setErrorMessage(null);
+    if (__DEV__ && handle === 'mockadmin') {
       beginAdminDemoSession();
       router.replace('/admin' as never);
       return;
     }
-    if (handle === 'mockpaid') {
+    if (__DEV__ && handle === 'mockpaid') {
       beginPaidDemoSession();
       router.replace('/home');
       return;
     }
-    beginDemoSession();
-    router.replace('/home');
+    if (__DEV__ && handle === 'mockuser') {
+      beginDemoSession();
+      router.replace('/home');
+      return;
+    }
+    if (!handle || !password) {
+      setErrorMessage('Enter your email address and password.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await loginWithPassword(handle, password);
+      router.replace('/home');
+    } catch (error) {
+      setErrorMessage(getAuthErrorMessage(error));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const signInWithGoogle = () => {
-    beginDemoSession();
-    router.replace('/home');
+    setErrorMessage('Google sign-in is not connected in this build yet. Use email and password.');
   };
 
   return <View style={styles.canvas}>
@@ -126,9 +146,11 @@ export default function LoginScreen() {
               </View>
             </View>
 
-            <Pressable accessibilityRole="button" onPress={signIn} style={({ pressed }) => [styles.primaryShell, pressed && styles.pressed]}>
+            {errorMessage ? <Text accessibilityRole="alert" style={styles.formError}>{errorMessage}</Text> : null}
+
+            <Pressable accessibilityRole="button" disabled={submitting} onPress={() => void signIn()} style={({ pressed }) => [styles.primaryShell, (pressed || submitting) && styles.pressed]}>
               <LinearGradient colors={['#FF763B', '#FFAE48', '#F7DF59']} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={styles.primaryButton}>
-                <Text style={styles.primaryText}>Sign in</Text>
+                <Text style={styles.primaryText}>{submitting ? 'Signing in…' : 'Sign in'}</Text>
                 <View style={styles.arrowWell}><ArrowRight size={18} color="#17120B" /></View>
               </LinearGradient>
             </Pressable>
@@ -147,7 +169,7 @@ export default function LoginScreen() {
             <Pressable accessibilityRole="button" hitSlop={8} onPress={() => router.push('/signup')}><Text style={styles.createLink}>Create an account</Text></Pressable>
           </View>
 
-          <Text style={styles.demoHint}>UI preview · mockuser · mockpaid · mockadmin</Text>
+          {__DEV__ ? <Text style={styles.demoHint}>UI preview · mockuser · mockpaid · mockadmin</Text> : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -193,6 +215,7 @@ const styles = StyleSheet.create({
   inputShell: { minHeight: 50, paddingHorizontal: 13, borderWidth: 1, borderColor: palette.line, borderRadius: 14, backgroundColor: palette.panelStrong, flexDirection: 'row', alignItems: 'center', gap: 10 },
   inputShellFocused: { borderColor: palette.gold, backgroundColor: '#111014' },
   input: { flex: 1, minWidth: 0, paddingVertical: 13, color: palette.text, fontFamily: font.regular, fontSize: 13 },
+  formError: { color: '#FF9A86', fontFamily: font.semibold, fontSize: 10, lineHeight: 15 },
   primaryShell: { marginTop: 4, borderRadius: 15, shadowColor: '#FF9A3D', shadowOpacity: 0.22, shadowRadius: 16, shadowOffset: { width: 0, height: 7 }, elevation: 5 },
   primaryButton: { minHeight: 53, borderRadius: 15, paddingLeft: 17, paddingRight: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   primaryText: { color: '#17120B', fontFamily: font.extraBold, fontSize: 13 },

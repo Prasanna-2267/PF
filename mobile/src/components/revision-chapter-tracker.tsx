@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Animated, Easing, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useQuery } from '@tanstack/react-query';
 import { BookOpenCheck, CalendarClock, Check, Clock3, RotateCcw, Sparkles } from 'lucide-react-native';
 
 import { initialReaderStatus } from '@/components/note-management';
@@ -8,10 +9,15 @@ import { font, layout, radius, themes } from '@/constants/theme';
 import { allLessonEntries } from '@/lib/demo-catalog';
 import { useLessonReaderStore } from '@/lib/lesson-reader-store';
 import { useAppTheme } from '@/providers/app-providers';
+import { isDemoSession } from '@/lib/student-session';
+import { getRevisionChapters } from '@/lib/tracker-api';
 
 const nativeDriver = Platform.OS !== 'web';
 type RevisionFilter = 'all' | 'due' | 'not-started';
-type ChapterStat = { id: string; subjectId: string; subject: string; accent: string; chapter: string; lessonIds: string[]; revisions: number; completed: number; percent: number };
+type ChapterStat = { id: string; subjectId: string; subject: string; accent: string; chapter: string; lessonIds: string[]; revisions: number; completed: number; percent: number; remoteStatus?: 'not_started' | 'due' | 'upcoming' | 'in_rhythm'; nextDueAt?: string | null };
+
+const subjectAccents = ['#7C9CFF', '#EDB955', '#5ED7AF', '#B693FF', '#FF8C72'];
+function subjectAccent(subjectId: string) { return subjectAccents[[...subjectId].reduce((sum, value) => sum + value.charCodeAt(0), 0) % subjectAccents.length]; }
 
 export function RevisionChapterTracker() {
   const { theme } = useAppTheme();
@@ -19,6 +25,8 @@ export function RevisionChapterTracker() {
   const wide = width >= layout.tabletBreakpoint;
   const dark = theme.canvas === themes.dark.canvas;
   const stored = useLessonReaderStore((state) => state.byLessonId);
+  const demo = isDemoSession();
+  const remote = useQuery({ queryKey: ['student', 'revisions', 'chapters'], queryFn: () => getRevisionChapters('all'), enabled: !demo });
   const [filter, setFilter] = useState<RevisionFilter>('all');
   const definitions = useMemo(() => {
     const grouped = new Map<string, Omit<ChapterStat, 'revisions' | 'completed' | 'percent'>>();
@@ -31,20 +39,33 @@ export function RevisionChapterTracker() {
     return [...grouped.values()];
   }, []);
   const lessonEntries = useMemo(() => new Map(allLessonEntries().map((entry) => [entry.lesson.id, entry.lesson])), []);
-  const chapters: ChapterStat[] = definitions.map((chapter) => {
+  const demoChapters: ChapterStat[] = definitions.map((chapter) => {
     const statuses = chapter.lessonIds.map((id) => stored[id] ?? initialReaderStatus(lessonEntries.get(id)!));
     const revisions = statuses.reduce((sum, status) => sum + status.revisions, 0);
     const completed = statuses.filter((status) => status.read).length;
     return { ...chapter, revisions, completed, percent: Math.min(100, Math.round((revisions / Math.max(chapter.lessonIds.length * 3, 1)) * 100)) };
   });
+  const chapters: ChapterStat[] = demo ? demoChapters : (remote.data?.chapters ?? []).map((chapter) => ({
+    id: chapter.id,
+    subjectId: chapter.subject.id,
+    subject: chapter.subject.title,
+    accent: subjectAccent(chapter.subject.id),
+    chapter: chapter.title,
+    lessonIds: Array.from({ length: chapter.totalNotes }, (_, index) => `${chapter.id}-${index}`),
+    revisions: chapter.revisionCount,
+    completed: chapter.completedNotes,
+    percent: chapter.revisionDepthPercent,
+    remoteStatus: chapter.status,
+    nextDueAt: chapter.nextDueAt,
+  }));
   const totalRevisions = chapters.reduce((sum, chapter) => sum + chapter.revisions, 0);
   const revisedChapters = chapters.filter((chapter) => chapter.revisions > 0).length;
   const dueChapters = chapters.filter((chapter) => chapter.revisions > 0 && chapter.percent < 66).length;
   const coverage = Math.round((revisedChapters / Math.max(chapters.length, 1)) * 100);
   const filtered = chapters.filter((chapter) => {
     if (filter === 'all') return true;
-    if (filter === 'due') return chapter.revisions > 0 && chapter.percent < 66;
-    return chapter.revisions === 0;
+    if (filter === 'due') return chapter.remoteStatus ? chapter.remoteStatus === 'due' : chapter.revisions > 0 && chapter.percent < 66;
+    return chapter.remoteStatus ? chapter.remoteStatus === 'not_started' : chapter.revisions === 0;
   });
   const subjectGroups = [...new Set(filtered.map((chapter) => chapter.subjectId))].map((subjectId) => ({ subjectId, chapters: filtered.filter((chapter) => chapter.subjectId === subjectId) }));
 
@@ -95,8 +116,8 @@ function SubjectRevisionGroup({ chapters, index, wide }: { chapters: ChapterStat
 
 function ChapterLane({ chapter, last }: { chapter: ChapterStat; last: boolean }) {
   const { theme } = useAppTheme();
-  const due = chapter.revisions > 0 && chapter.percent < 66;
-  const inRhythm = chapter.percent >= 66;
+  const due = chapter.remoteStatus ? chapter.remoteStatus === 'due' : chapter.revisions > 0 && chapter.percent < 66;
+  const inRhythm = chapter.remoteStatus ? chapter.remoteStatus === 'in_rhythm' : chapter.percent >= 66;
   const status = inRhythm ? 'In rhythm' : due ? 'Due next' : 'Not started';
   const statusColor = inRhythm ? theme.success : due ? theme.goldStrong : theme.faint;
   const filledStages = chapter.revisions === 0 ? 0 : chapter.percent < 34 ? 1 : chapter.percent < 67 ? 2 : 3;

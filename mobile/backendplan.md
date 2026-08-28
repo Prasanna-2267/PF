@@ -1,5 +1,48 @@
 # Parallax Flow Mobile Backend Plan
 
+## Authoritative product correction — 2026-08-26
+
+This correction supersedes older references in this document to Question Bank Practice sources or Solve & Earn:
+
+- Practice questions are completely free and come only from published Admin Excel/question uploads for the learner's selected course.
+- Practice has no package entitlement gate, purchasable question source or Solve & Earn/reward mode.
+- Purchasable Question Banks are PDF notes/packages. They use the existing Notes, Library, entitlement and protected-reader APIs.
+- Practice filters use Admin-authored course, subject, chapter, optional lesson/topic, collection, answer format and optional year metadata.
+- Free/Paid capability changes retry/explanation and advanced weak-topic analytics only; it never changes question visibility.
+- The implemented Student Practice source is `ARCHIVE` as an internal compatibility identifier. It means the single free course-question pool, not a separate commercial product.
+
+## Scope correction — Admin mobile backend
+
+The user explicitly removed the proposed Admin-mobile backend batch from the mobile backend roadmap on 26 August 2026. The existing Admin-team backend remains authoritative for Admin operations. Section 17 is retained only as historical discovery context and must not be implemented unless the user restores that scope.
+
+## Scope correction — Mobile commerce is read-only
+
+Purchases happen only on the website. The mobile application must never create quotes, validate coupons for checkout, create purchase orders, initialize/confirm payments, process refunds or provide an in-app purchase flow. Mobile may show published paid notes/packages and their locked state, then refresh authoritative entitlements, Library ownership, order history and receipts after a website purchase. Commerce-write endpoints later in this document are website-backend context only and are not part of the mobile implementation roadmap.
+
+## Batch 10 implementation checkpoint — Tracker and revision
+
+Implemented in the shared server and connected to real authenticated mobile sessions without changing Admin contracts or adding a migration:
+
+- `GET /api/student/tracker/summary?days=7|30|90` aggregates learner-timezone activity, consistency, goals, streak, note completion, revision totals and exam countdown;
+- `GET /api/student/revisions/chapters?filter=all|due|not_started&subjectId=...` projects chapter/subject groups from the published `ContentItem` hierarchy and existing learner note states;
+- `GET /api/student/revisions/history?page=...&limit=...` returns learner-scoped append-only revision history;
+- spaced revision due dates use a transparent first-version rhythm of 1, 7 and 21 days based on revision depth;
+- real Tracker and Revision Tracker screens consume these endpoints, while named demo accounts remain on local fixtures.
+
+## Batch 11 implementation checkpoint — Adaptive daily study plan
+
+Implemented as deterministic, non-AI learner planning with additive migration `20260827070000_add_adaptive_study_plans`:
+
+- stable learner-timezone daily plans persisted in `LearnerStudyPlan` and append-preserving task history in `LearnerStudyTask`;
+- priority order: unfinished carry-over, due revision, continue an in-progress note, then the next accessible unread syllabus note;
+- daily packing respects the learner target, 15–45 minute bounded sessions, content deduplication and a five-task maximum;
+- supports manual creation, start, idempotent complete/reopen, skip, future-date reschedule, non-destructive removal and clear-completed;
+- locked paid resources are excluded unless an active content/package/course entitlement grants access;
+- optional `StudyWorkloadEstimate` records supply Admin-estimated reading/revision minutes; missing records are explicitly versioned as `FALLBACK_V1` rather than inferred silently;
+- real Home sessions consume the API with loading/error states and task actions; named demo sessions retain the persisted local preview.
+
+The current v1 deliberately excludes Practice-derived weak-concept tasks while Practice work is paused. Admin UI/API authoring for workload estimates requires separate approval before editing Admin-owned code.
+
 Status: implementation reference for the React Native mobile application
 
 API base used in this document: `/api/v1`
@@ -218,10 +261,14 @@ The forced-logout mobile screen must be driven by these errors or a revoked-sess
 
 | Method | Endpoint | Purpose and important fields |
 | --- | --- | --- |
-| GET | `/me/profile` | Name, email, mobile, verification flags, avatar metadata, course/category, exam date, `examDaySource`, academy ID, plan, daily target, language, timezone, reminder, onboarding completion |
-| PATCH | `/me/profile` | Edit safe identity/profile fields. Email/mobile changes use verification flows and cannot be directly overwritten. |
-| PUT | `/me/onboarding` | Complete initial personalization: `courseId`, `categoryId` where required, `examMonth`, `examYear`, optional `examDay`, optional `academyId`. Normalize omitted day to 1. No skip path. |
-| PATCH | `/me/study-preferences` | Daily target minutes, language, timezone, reminder time, preferred session length, adaptive-plan enabled flag |
+| GET | `/student/bootstrap` | **Implemented in Gate 3.** Authenticated user/session, memberships, active Academy, access summary and current learner preference. |
+| GET | `/student/me` | **Implemented.** Name, email, mobile, verification flags, avatar and role/profile identity. |
+| PATCH | `/student/me` | **Implemented.** Edit safe identity fields (`fullName`, `phone`). A future contact-change flow must replace direct phone editing once re-verification is enforced. |
+| GET | `/student/preferences/options` | **Implemented.** Active platform courses plus courses visible through active learner Academy membership. Visibility does not imply ownership. |
+| GET | `/student/preferences` | **Implemented.** Selected course, normalized exam date and precision, academy reference, daily target, language, timezone, reminder, onboarding completion and version. |
+| PUT | `/student/preferences` | **Implemented.** Create/replace personalisation using `selectedCourseId`, `examMonth`, `examYear`, optional `examDay`, optional `academyReference`, target and locale/reminder fields. Missing day becomes day 1 with `MONTH` precision. Never creates an enrollment, entitlement, order or unlock. |
+| PATCH | `/student/preferences` | **Implemented.** Partial preference update with optional optimistic `expectedVersion`; date changes require month and year together. |
+| PATCH | `/student/study-preferences` | Future extension for preferred session length and adaptive-plan enabled flag; the currently displayed target/language/timezone/reminder fields already use `/student/preferences`. |
 | GET | `/me/study-availability` | Weekday availability and date overrides used by deterministic planning |
 | PUT | `/me/study-availability` | Set minutes available by weekday, preferred study windows, and temporary overrides |
 | POST | `/me/contact-verifications` | Begin verified email or phone change; return flow ID and masked target |
@@ -340,13 +387,14 @@ Each generated task stores its hierarchy IDs, title, reason, planned minutes, pr
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| GET | `/notes` | Search/filter notes by course/category/subject/unit/topic, access, `all/in_progress/completed`, favourite, resource kind, and package; returns locked metadata safely |
-| GET | `/notes/recent?limit=3` | Top recently opened accessible notes, ordered by last actual open time |
-| GET | `/notes/favourites` | Favourite note cards, including locked/unpurchased premium notes |
-| GET | `/notes/{noteId}` | Metadata, hierarchy breadcrumbs, pages, type, access reason, price, validity, learner state, and allowed actions |
-| GET | `/packages` | Published packages searchable/filterable by learner course/category and ownership |
-| GET | `/packages/{packageId}` | Package detail, included resources, price, access/expiry summary, and learner entitlement |
-| GET | `/me/library` | Owned/granted/free resources with progress; counts for owned, free purchases, and paid purchases |
+| GET | `/student/notes/tree` | **Implemented in Gate 3.** Selected-course folder/note tree built directly from published Admin-uploaded `ContentItem` hierarchy, including safe locked metadata and learner state. |
+| GET | `/student/notes` | **Implemented.** Search/filter selected-course PDF notes by parent, `all/in_progress/completed`, favourite and pagination; returns breadcrumbs and access reason without storage paths. |
+| GET | `/student/notes/recent?limit=3` | **Implemented.** Top notes ordered by the learner's last successful protected-viewer open, not card taps. |
+| GET | `/student/notes/favourites` | **Implemented.** Favourite cards, including locked/unpurchased premium notes. |
+| GET | `/student/notes/{noteId}` | **Implemented.** Metadata, folder breadcrumbs, access reason, price and learner state. |
+| GET | `/student/packages` | **Implemented in Gate 3.** Published packages for the selected course, searchable and filterable by `all/owned/available`, with authoritative ownership and expiry. |
+| GET | `/student/packages/{packageId}` | **Implemented.** Package detail, published included resources, server price, and direct/course entitlement summary. |
+| GET | `/student/library` | **Implemented.** Entitled PDF resources with learner progress plus authoritative counts for owned notes, free purchases, paid purchases, active entitlements, and expiring access. |
 
 Recent and favourite card layout/sideways scrolling is client presentation. `recent` includes only resources successfully opened, not cards merely viewed.
 
@@ -354,9 +402,9 @@ Recent and favourite card layout/sideways scrolling is client presentation. `rec
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| GET | `/me/notes/{noteId}/state` | Read/completed, favourite, revisions, reading progress, last opened, and access summary |
-| PATCH | `/me/notes/{noteId}/state` | Set `completed` and/or `favourite`. Allowed even when premium content is unpurchased |
-| POST | `/me/notes/{noteId}/revisions` | Record an intentional revision event. Allowed for locked cards; include source and optional completed timestamp |
+| GET | `/student/notes/{noteId}/state` | **Implemented.** Completion, favourite, revision count/latest revision, reading progress, last opened and access summary. |
+| PATCH | `/student/notes/{noteId}/state` | **Implemented.** Set `completed` and/or `favourite`; allowed for visible unpurchased premium notes without granting access. |
+| POST | `/student/notes/{noteId}/revisions` | **Implemented.** Append an intentional revision event with `ACTION_SHEET`, `READER`, or `MANUAL` source; allowed for visible locked notes. |
 | DELETE | `/me/notes/{noteId}/revisions/{revisionId}` | Undo only a recent accidental revision under a short policy window; otherwise ledger remains append-only |
 
 Completion/favourite/revision APIs do not grant content access and must not call the viewer implicitly.
@@ -365,15 +413,17 @@ Completion/favourite/revision APIs do not grant content access and must not call
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| POST | `/notes/{noteId}/viewer-sessions` | Re-evaluate publication, entitlement/grant, expiry, user verification, permanent device proof, and plan gates; create short viewer session and record open event |
-| GET | `/viewer-sessions/{viewerSessionId}/manifest` | Resource title/page count, rendering mode, session expiry, watermark-safe display identity, last reading position, capabilities; no answer/private storage URL |
-| GET | `/viewer-sessions/{viewerSessionId}/content` | Authenticated, range-capable, short-lived watermarked PDF stream with `no-store`; must reject a different user/device/session and recheck expiry |
-| PATCH | `/viewer-sessions/{viewerSessionId}/progress` | Persist scroll/page position and derived percentage with throttling and monotonic validation |
-| POST | `/viewer-sessions/{viewerSessionId}/heartbeat` | Keep active view telemetry and detect token sharing; never extend resource entitlement |
-| DELETE | `/viewer-sessions/{viewerSessionId}` | Close viewer session and finalize reading duration/progress |
+| POST | `/student/notes/{noteId}/viewer-sessions` | **Implemented in Gate 3.** Re-evaluate publication, course visibility, enrolment and entitlement/grant expiry; bind a short viewer session to the current authenticated user session and record the actual open. Permanent device proof remains deferred. |
+| GET | `/student/viewer-sessions/{viewerSessionId}/manifest` | **Implemented.** Resource title/page count when known, session expiry, watermark display identity and trace ID, last reading position and explicit no-download/no-print capabilities; never returns a private storage URL. |
+| GET | `/student/viewer-sessions/{viewerSessionId}/content` | **Implemented.** Authenticated, range-capable, server-watermarked PDF response with `private, no-store`; rejects another user/session and rechecks access before every render. |
+| PATCH | `/student/viewer-sessions/{viewerSessionId}/progress` | **Implemented.** Persist page/scroll position and monotonic highest progress percentage. |
+| POST | `/student/viewer-sessions/{viewerSessionId}/heartbeat` | **Implemented.** Recheck access, record active view telemetry and renew only the short viewer window; never extends the underlying entitlement. |
+| DELETE | `/student/viewer-sessions/{viewerSessionId}` | **Implemented.** Idempotently close the viewer session and finalize its last-seen time. |
 | POST | `/notes/{noteId}/external-open` | For a curated government/external link, authorize access and return a validated short-lived redirect/URL plus audit event |
 
-Viewer session creation returns explicit access states: `allowed`, `purchase_required`, `phone_verification_required`, `entitlement_expired`, `grant_revoked`, `resource_unpublished`, or `device_proof_required`.
+Successful viewer-session creation returns `allowed`. Current denials use typed API errors including `NOTE_NOT_FOUND`, `CONTENT_ENTITLEMENT_REQUIRED`, `COURSE_ENROLLMENT_REQUIRED`, and `COURSE_SELECTION_REQUIRED`. More granular `entitlement_expired`, phone-verification, grant-revocation and device-proof presentation states remain future refinements.
+
+The former `/student/content/{contentId}/access` route was removed in Gate 3 because returning a raw object-storage signed URL bypassed watermarking and exposed a direct download path. The server now fetches the private source internally and returns only the personalized inline PDF stream. Device-proof-specific states remain pending with the deferred permanent-device feature.
 
 Server-side watermarking should include email plus a non-obtrusive trace ID/view timestamp. Cache only encrypted source assets; rendered personalized artifacts must be short-lived and access-logged. A viewer session must stop working immediately after refund, grant revocation, resource expiry, device revocation, or user suspension.
 
@@ -383,12 +433,12 @@ Server-side watermarking should include email plus a non-obtrusive trace ID/view
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| GET | `/store/resources` | Purchasable notes, infographic notes, Question Banks, and packages with hierarchy, price, ownership, validity preview, and publication state |
+| GET | `/student/store/resources` | **Implemented for notes/packages.** Selected-course published paid notes and packages with server price, ownership and active-expiry summary. Question Bank projection remains part of the practice backend. |
 | GET | `/store/resources/{resourceId}` | Purchase detail and exact contents/benefits; never claim lifetime access when a validity policy expires it |
 | GET | `/plans` | Public/mobile-safe Free and Paid feature comparison and current pricing only if plan upgrades are offered in-app |
 | GET | `/me/plan` | Authoritative Free/Paid state, activation/end/grace dates, source, feature flags, and entitlement version |
-| GET | `/me/entitlements` | Active/expiring/expired/revoked entitlements with source (`free`, `purchase`, `package`, `admin_grant`, `plan`) |
-| GET | `/me/entitlements/{resourceId}` | One authoritative access decision, `expiresAt`, server time, and allowed capabilities |
+| GET | `/student/entitlements` | **Implemented.** User-owned active, expiring-soon, expired and revoked entitlement ledger with grant/purchase source, order reference, expiry and server time. |
+| GET | `/student/entitlements/{entitlementId}` | **Implemented.** One user-scoped entitlement decision; another user's ID is returned as not found. |
 
 If Paid-plan checkout is later exposed in mobile, it must reuse the quote/order/payment pipeline with an item type of `plan`. Until then, plan activation, cancellation, grace, expiry, refund, and restoration may arrive through verified provider/back-office events, while `/me/plan` remains the sole mobile source of truth.
 
@@ -401,6 +451,7 @@ If Paid-plan checkout is later exposed in mobile, it must reuse the quote/order/
 | POST | `/orders` | Idempotently create order from quote. A zero-total/free purchase completes immediately and creates a `free_purchase` entitlement; paid order returns payment-provider parameters |
 | GET | `/orders/{orderId}` | Learner-safe order/payment state for polling and recovery |
 | POST | `/orders/{orderId}/payment/confirm` | Verify provider response server-to-server, then atomically mark paid, redeem coupon, create entitlements, and create receipt |
+| GET | `/student/orders/{orderId}/receipt` | **Implemented.** User-scoped presentation-safe receipt with normalized totals, items, successful/refunded payments and coupon summary; provider secrets are excluded. |
 | POST | `/webhooks/payments/{provider}` | Signed provider webhook for success, failure, refund, dispute, and reconciliation. Though called by the provider, it is required for reliable mobile checkout |
 | GET | `/me/orders` | Order history filtered by all/free/paid and status |
 | GET | `/me/orders/{orderId}` | Learner order detail and purchased items |
@@ -411,14 +462,16 @@ Do not accept price, discount, paid status, currency, entitlement expiry, or pay
 
 ### 12.3 Entitlement validity
 
-Every purchasable resource has a validity policy:
+The implemented mobile resource-validity contract supports:
 
-- `lifetime`
+- `permanent` (the backward-compatible default)
 - `exam_date_plus_offset` with an Admin-specified number of days
-- `fixed_duration_from_purchase`
-- `absolute_end_date`
 
-At purchase/grant time, calculate and persist the authoritative `startsAt` and `expiresAt` on each entitlement. For an exam-based policy, use the learner's canonical exam date (day 1 when omitted). Return `active`, `expiring_soon`, `expired`, or `revoked`. Changing a content policy does not silently rewrite existing purchases unless an explicit, audited migration policy is run.
+`fixed_duration_from_purchase` and resource-level `absolute_end_date` are deferred until product policy explicitly requires them; absolute expiry on an individual Admin grant already remains supported by the entitlement model.
+
+Each paid PDF stores its own policy, including PDFs purchased inside a package. For exam-relative resources the server derives an exclusive effective expiry from the learner's canonical exam date (day 1 when omitted) plus the Admin offset, allowing access through the complete final date. The effective expiry is the earlier of this resource expiry and any absolute entitlement/grant expiry. It is resolved on every protected access request so a package entitlement cannot bypass a child PDF's policy. Missing exam data fails closed with `EXAM_DATE_REQUIRED`; elapsed policy returns `RESOURCE_EXPIRED`/`CONTENT_ACCESS_EXPIRED`.
+
+The Notes catalogue, Library projection, legacy course-content projection, adaptive study plan and protected viewer use server time and the same policy. Viewer sessions are capped at the effective resource expiry and cannot renew past it. Responses return the policy plus authoritative `expiresAt`; learner progress, favourites, revisions, order history and receipts remain preserved after expiry. Changing a resource policy is an audited Admin action and takes effect on subsequent authorization checks.
 
 Refund/cancellation/dispute workflows revoke the relevant entitlement but preserve learner state and receipts. Expired or revoked secure URLs and practice sessions must fail on the next authorization check.
 
@@ -428,9 +481,10 @@ Refund/cancellation/dispute workflows revoke the relevant entitlement but preser
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| GET | `/practice/sources` | Return Archive and owned/available Question Banks with access/expiry states |
-| GET | `/practice/filters?sourceType=archive&sourceId=...` | Source-specific filter schema and available counts. Archive includes subjects, chapters, years, formats. Empty combinations return alternatives |
-| GET | `/practice/filters?sourceType=question_bank&sourceId=...` | Exact entitled bank filters: subjects, chapters, collection types (`past_year`, `rtp`, `mtp`), and formats. Never return a year filter |
+| GET | `/student/practice/sources` | **Implemented in Gate 3.** Return free Archive and published Question Banks with exact entitlement/expiry state and available Archive years. |
+| GET | `/student/practice/filters?sourceKind=ARCHIVE` | **Implemented.** Source-specific taxonomy, collections, years and Free/Paid capabilities. |
+| GET | `/student/practice/filters?sourceKind=QUESTION_BANK&questionBankPackageId=...` | **Implemented.** Exact entitled-bank taxonomy and collections; never returns a year filter. |
+| POST | `/student/practice/sets/preview` | **Implemented.** Validate source/filter combination and return eligible/selected counts, normalized timer and access policy without question or answer data. |
 | GET | `/practice/challenges/preview` | For current source/filter selection, return Solve & Earn question count, server duration, points, accuracy threshold, eligibility, attempts remaining, and availability window |
 
 Question counts must reflect the exact selection and exclude unpublished/invalidated questions. The filter UI color and layout remain client-only.
@@ -439,19 +493,19 @@ Question counts must reflect the exact selection and exclude unpublished/invalid
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| POST | `/practice/sessions` | Create immutable question-set snapshot from source/filters/format and `timerMode=off/custom`; validate Archive or exact Question Bank access |
-| GET | `/practice/sessions/{sessionId}` | Resume session with authoritative state, deadline if timed, counts, navigator statuses, current question, and capabilities |
-| GET | `/practice/sessions/{sessionId}/questions` | Sanitized paginated questions/options/prompts without answers or explanations |
-| PATCH | `/practice/sessions/{sessionId}/questions/{questionId}` | Mark/unmark for review and optionally set current navigator position |
-| POST | `/practice/sessions/{sessionId}/questions/{questionId}/attempts` | Idempotently submit MCQ answer with response duration. Grade server-side and return correctness, policy-safe explanation, retry permission, and navigator update |
+| POST | `/student/practice/sessions` | **Implemented.** Create immutable server-side question snapshots with Archive/exact-bank authorization and optional authoritative timer. |
+| GET | `/student/practice/sessions/{sessionId}` | **Implemented.** Resume user-owned session with deadline, counts and navigator states. |
+| GET | `/student/practice/sessions/{sessionId}/questions` | **Implemented.** Sanitized prompts/options only; correct answers and explanations remain server-side. |
+| PATCH | `/student/practice/sessions/{sessionId}/questions/{sessionQuestionId}/review` | **Implemented.** Mark/unmark an unanswered question for review. |
+| POST | `/student/practice/sessions/{sessionId}/questions/{sessionQuestionId}/attempts` | **Implemented.** Idempotent MCQ/descriptive submission, server grading for MCQ, policy-safe explanation and retry decision. |
 | POST | `/practice/sessions/{sessionId}/questions/{questionId}/written-attempts` | Submit descriptive/case-study response. Return rubric/model feedback or `grading_pending` according to configured grading policy |
-| POST | `/practice/sessions/{sessionId}/complete` | Finalize once, return answered/unanswered/review/locked counts, accuracy, earned status, and tracker deltas |
+| POST | `/student/practice/sessions/{sessionId}/complete` | **Implemented for standard sessions.** Idempotently finalize and return persisted navigator/count state. Solve & Earn reward evaluation remains separate. |
 | POST | `/practice/sessions/{sessionId}/abandon` | Explicitly close without fabricating attempts; preserve valid submitted answers |
 | GET | `/practice/sessions` | Learner session history and resumable sessions |
 
 Navigator states are `unanswered`, `answered_correct`, `answered_wrong`, `marked_review`, and `locked_wrong`. With Free policy, a wrong first attempt creates `locked_wrong`, rejects another attempt with `WRONG_RETRY_PAID_REQUIRED`, and withholds explanation. Paid policy permits another attempt and returns explanations after every attempt.
 
-For descriptive/case-study answers, deterministic rubric/model-answer feedback can be provided without AI. Automatic semantic scoring of free-form writing requires either human grading or a separately approved AI/grading service and must not be presented as reliable until that decision is made.
+Descriptive and case-study free-text responses may be stored and displayed, but evaluation, semantic scoring, grading workflows and score-derived analytics are outside the mobile application's backend scope.
 
 ### 13.3 Solve & Earn
 
@@ -475,6 +529,8 @@ Challenge states: `available`, `active`, `completed`, `earned`, `failed_time`, `
 | GET | `/me/practice/chapters/{chapterId}/questions` | All | Question-level attempt/navigator history subject to question-source access |
 | GET | `/me/practice/weak-concepts` | Paid | Ranked concept, confidence, distinct questions, attempts, accuracy, last evidence, recommended resource/action |
 | GET | `/me/practice/weak-concepts/{conceptId}` | Paid | Transparent evidence and trend; never expose another learner or hidden answer data |
+
+Current consolidated implementation: `GET /api/student/practice/tracker` returns all-user totals and chapter aggregates plus Paid-only preliminary weak chapters. Split summary/subject/chapter drill-down endpoints and robust concept confidence scoring remain a later analytics slice.
 
 Weak-area computation must:
 
@@ -514,9 +570,10 @@ Recommended first schedule is configurable spaced return stages (for example 1, 
 
 | Method | Endpoint | Access | Purpose |
 | --- | --- | --- | --- |
-| GET | `/me/reports/monthly` | Paid | Available completed month summaries, newest first |
-| GET | `/me/reports/monthly/{yearMonth}` | Paid | Immutable monthly snapshot: weekly study bars, total time, questions, accuracy, goal days, notes completed, revisions, weak concepts, and algorithm/report version |
-| GET | `/me/reports/monthly/{yearMonth}/subjects` | Paid | Optional subject-level drill-down for responsive tablet layouts |
+| GET | `/api/student/reports/monthly` | Paid | Live current-month report plus immutable completed-month archive, newest first |
+| GET | `/api/student/reports/monthly/{yearMonth}` | Paid | Live current month or immutable completed snapshot with weekly study bars, activity breakdown, goal/streak days, notes, revisions, plan tasks and syllabus progress |
+
+Subject drill-down and Practice-derived questions, accuracy and weak concepts are deferred until their underlying data contracts are resumed and verified.
 
 Generate one snapshot after each learner-local month closes. Do not rebuild old reports from mutable live aggregates on every request. Plan expiry blocks access to the archive but does not delete snapshots; restored Paid access reveals them again according to product policy.
 
@@ -829,7 +886,7 @@ Errors should include safe remediation data such as `purchaseResourceId`, `recov
 - Study-note/package upload, editing, publishing, and unpublishing from mobile.
 - Question creation/editing/publishing from mobile.
 - Admin payment mutation, receipt printing/downloading, and data export from mobile.
-- AI is not required for the deterministic weak-area study plan. If automatic free-form answer grading is later requested, it needs a separately approved grading design.
+- AI is not required for the deterministic weak-area study plan. Descriptive-answer grading is outside this backend scope.
 
 ## 27. Backend completion definition
 
@@ -845,3 +902,40 @@ The backend is not complete merely when endpoints return demo-shaped JSON. It is
 - metrics, structured logs, traces, job visibility, alerting, backup/restore, and migration/rollback procedures exist.
 
 This file is the canonical backend implementation plan for the current `mobile/` application. Any future mobile UI feature must update this document with its endpoint, data ownership, entitlement rule, background work, security rule, and acceptance test before backend implementation.
+
+## 29. Implemented test commerce contract
+
+The website-only test purchase flow uses the shared backend and shared PostgreSQL source of truth:
+
+- `POST /api/checkout` accepts server-validated `PACKAGE` and `CONTENT` item references plus an optional coupon. Legacy `packageIds` remains supported.
+- Prices, course scope, publication status and ownership are resolved exclusively by the server. The browser cannot submit an amount.
+- A non-zero test checkout persists a `CREATED` Order, OrderItems and one `PENDING` Payment. It grants no access at this stage.
+- `POST /api/checkout/{orderId}/fake-payment` is authenticated, ownership-scoped and idempotent. It is available only when `FAKE_PAYMENT_ENABLED=true` outside production.
+- Successful test confirmation marks Payment `SUCCESS`, Order `PAID`, assigns receipt/payment metadata and creates PURCHASE entitlements in one serializable transaction.
+- `GET /api/student/orders/{orderId}/receipt`, `/api/student/entitlements`, `/api/student/library`, `/api/student/notes` and `/api/student/packages` project that same result to the website and mobile app.
+- Mobile Library and Notes/Packages refetch on screen focus so website purchases become visible after returning to the app.
+- No real card/bank data is requested or stored. Production configuration rejects fake payment.
+
+## 28. Notification implementation contract
+
+Student endpoints now implemented:
+
+- `POST /api/student/notifications/push-tokens` — idempotently register the current Expo token and installation.
+- `DELETE /api/student/notifications/push-tokens/:installationId` — revoke one installation token.
+- `GET/PATCH /api/student/notifications/preferences` — read/update category switches and quiet hours.
+- `GET /api/student/notifications/feed` — paginated durable learner inbox.
+- `PATCH /api/student/notifications/feed/:notificationId/read` — learner-scoped read state.
+
+The Admin team's existing platform Broadcast Create, Schedule and Publish UI/API remains authoritative. Publishing creates the existing academy notification recipients, then additively fans them into learner notifications and push deliveries. `LEARNER_PUSH_DELIVERY` jobs and periodic worker maintenance provide retries. Reminder scans use learner-local time and idempotent source keys. Database migration: `20260827130000_add_mobile_notifications`; coordinated deployment is pending and no shared database migration was applied during implementation.
+
+## Batch 12 implementation checkpoint — Paid monthly reports
+
+Implemented in the shared backend as additive Student-only functionality. No Admin route, Admin service, Admin UI, or existing Admin contract was changed.
+
+- Added an immutable `LearnerMonthlyReport` snapshot per learner and calendar month, with learner timezone, selected-course snapshot, weekly study totals, focus/reading/practice/revision time, active and goal days, streak/protected days, notes completed, revision events, completed study-plan tasks, and syllabus completion.
+- The current learner month is computed live and is never frozen. Completed Paid months are created idempotently and existing snapshots are never updated.
+- Report access follows the existing mobile plan rule: at least one currently active, non-expired entitlement is required. Requests before the learner's first entitlement month and future months are rejected.
+- Practice question count, accuracy, and weak-area metrics are deliberately unavailable while Practice development is paused. Persisted practice time remains part of total study time so recorded activity is not discarded.
+- Added `GET /api/student/reports/monthly` and `GET /api/student/reports/monthly/:yearMonth`.
+- Real authenticated mobile users consume the new API. Named demo accounts retain isolated report fixtures, and Free users retain the Paid lock presentation.
+- Added migration `20260827090000_add_paid_monthly_reports`. It has not been applied to the shared database.

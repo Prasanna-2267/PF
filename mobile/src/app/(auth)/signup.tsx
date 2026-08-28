@@ -1,5 +1,6 @@
 import { useState, type ComponentType } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -19,6 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LearnerOnboardingModal } from '@/components/learner-onboarding-modal';
 import { font, spacing } from '@/constants/theme';
 import { type StudentSignupIdentity, useAuthStore } from '@/lib/auth-store';
+import { beginStudentRegistration, getAuthErrorMessage } from '@/lib/auth-session';
 import { useRocketLaunch } from '@/providers/rocket-launch-provider';
 
 type FormErrors = Partial<Record<'name' | 'phone' | 'email' | 'password', string>>;
@@ -58,11 +60,15 @@ export default function SignupScreen() {
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
-  const submitSignup = () => {
+  const submitSignup = async () => {
+    if (submitting) return;
+    setSubmitError('');
     const demoHandle = name.trim().toLowerCase();
     if (demoHandle === 'mockuser' || demoHandle === 'mockadmin') {
-      router.push({ pathname: '/verify-otp', params: { name: demoHandle, email: demoHandle === 'mockadmin' ? 'admin@parallaxflow.demo' : 'student@parallaxflow.demo', phone: demoHandle === 'mockadmin' ? '+91 90000 00002' : '+91 90000 00001', demoRole: demoHandle === 'mockadmin' ? 'admin' : 'student' } });
+      router.push({ pathname: '/verify-otp', params: { name: demoHandle, email: demoHandle === 'mockadmin' ? 'admin@parallaxflow.demo' : 'student@parallaxflow.demo', phone: demoHandle === 'mockadmin' ? '+91 90000 00002' : '+91 90000 00001', demoRole: demoHandle === 'mockadmin' ? 'admin' : 'student', demoMode: 'true' } });
       return;
     }
 
@@ -74,7 +80,25 @@ export default function SignupScreen() {
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
-    router.push({ pathname: '/verify-otp', params: { name: name.trim(), email: email.trim().toLowerCase(), phone: phone.trim(), demoRole: 'student' } });
+    try {
+      setSubmitting(true);
+      const registration = await beginStudentRegistration({ fullName: name.trim(), phone: phone.trim(), email: email.trim().toLowerCase(), password });
+      router.push({
+        pathname: '/verify-otp',
+        params: {
+          registrationId: registration.registrationId,
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          phone: phone.trim(),
+          demoRole: 'student',
+          ...(registration.developmentCode ? { developmentCode: registration.developmentCode } : {}),
+        },
+      });
+    } catch (error) {
+      setSubmitError(getAuthErrorMessage(error));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const googleIdentity: StudentSignupIdentity = { name: name.trim() || 'Google learner', email: googleDemoEmail, phone: null };
@@ -136,10 +160,12 @@ export default function SignupScreen() {
 
               <PasswordStrength length={password.length} />
 
-              <Pressable accessibilityRole="button" onPress={submitSignup} style={({ pressed }) => [styles.primaryShell, pressed && styles.pressed]}>
+              {submitError ? <Text accessibilityLiveRegion="polite" style={styles.submitError}>{submitError}</Text> : null}
+
+              <Pressable accessibilityRole="button" disabled={submitting} onPress={() => void submitSignup()} style={({ pressed }) => [styles.primaryShell, (pressed || submitting) && styles.pressed]}>
                 <LinearGradient colors={['#FF763B', '#FFAE48', '#F7DF59']} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={styles.primaryButton}>
-                  <Text style={styles.primaryText}>Create account</Text>
-                  <View style={styles.arrowWell}><ArrowRight size={18} color="#17120B" /></View>
+                  <Text style={styles.primaryText}>{submitting ? 'Creating secure account…' : 'Create account'}</Text>
+                  <View style={styles.arrowWell}>{submitting ? <ActivityIndicator size="small" color="#17120B" /> : <ArrowRight size={18} color="#17120B" />}</View>
                 </LinearGradient>
               </Pressable>
 
@@ -213,6 +239,7 @@ const styles = StyleSheet.create({
   inputShell: { minHeight: 49, paddingHorizontal: 13, borderWidth: 1, borderColor: palette.line, borderRadius: 14, backgroundColor: palette.panel, flexDirection: 'row', alignItems: 'center', gap: 10 },
   inputShellFocused: { borderColor: palette.gold, backgroundColor: '#111014' }, inputShellError: { borderColor: palette.danger },
   input: { flex: 1, minWidth: 0, paddingVertical: 12, color: palette.text, fontFamily: font.regular, fontSize: 13 }, errorText: { color: palette.danger, fontFamily: font.medium, fontSize: 9 },
+  submitError: { marginTop: 13, color: palette.danger, fontFamily: font.semibold, fontSize: 10, lineHeight: 15, textAlign: 'center' },
   strength: { marginTop: 9, flexDirection: 'row', alignItems: 'center', gap: 8 }, strengthBars: { flex: 1, flexDirection: 'row', gap: 4 }, strengthBar: { flex: 1, height: 3, borderRadius: 2 }, strengthStatus: { flexDirection: 'row', alignItems: 'center', gap: 3 }, strengthText: { fontFamily: font.semibold, fontSize: 8 },
   primaryShell: { marginTop: 16, borderRadius: 15, shadowColor: '#FF9A3D', shadowOpacity: 0.22, shadowRadius: 16, shadowOffset: { width: 0, height: 7 }, elevation: 5 },
   primaryButton: { minHeight: 53, borderRadius: 15, paddingLeft: 17, paddingRight: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, primaryText: { color: '#17120B', fontFamily: font.extraBold, fontSize: 13 }, arrowWell: { width: 39, height: 39, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.36)', alignItems: 'center', justifyContent: 'center' },

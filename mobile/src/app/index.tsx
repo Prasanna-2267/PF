@@ -1,14 +1,17 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { ArrowRight, BookOpenCheck, ShieldCheck, Sparkles } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
 import { font, radius, spacing } from '@/constants/theme';
+import { useAuthStore } from '@/lib/auth-store';
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const status = useAuthStore((state) => state.status);
+  if (status === 'authenticated') return <Redirect href="/home" />;
   return <View style={styles.canvas}>
     <StatusBar style="light" />
     <SafeAreaView style={styles.safe}>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Animated, Easing, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Archive, ArrowRight, ArrowUpRight, Award, BarChart3, BookOpen, BookOpenCheck, CalendarDays, Check, CheckCircle2, CircleHelp, Clock3, Crown, FileStack, Flag, Layers3, ListFilter, LockKeyhole, PenLine, Play, RotateCcw, ShieldCheck, TimerReset, Trophy, X } from 'lucide-react-native';
+import { Archive, ArrowRight, ArrowUpRight, BarChart3, BookOpen, CalendarDays, Check, CheckCircle2, CircleHelp, Clock3, Crown, FileStack, Flag, Layers3, ListFilter, LockKeyhole, PenLine, Play, RotateCcw, X } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton, Card } from '@/components/ui';
@@ -9,17 +9,21 @@ import { font, radius, spacing } from '@/constants/theme';
 import { useAuthStore } from '@/lib/auth-store';
 import { practiceSubjects } from '@/lib/demo-practice';
 import { usePracticeProgressStore } from '@/lib/practice-progress-store';
-import { useRewardStore } from '@/lib/reward-store';
+import { isDemoSession } from '@/lib/student-session';
+import { RemotePracticeScreen } from '@/components/remote-practice';
 import { useAppTheme } from '@/providers/app-providers';
 
 type PracticeMode = 'mcq' | 'written' | 'case-study';
-type PracticeSource = 'archive' | 'question-bank';
-type PaperCollection = 'past-year' | 'rtp' | 'mtp';
-type SessionIntent = 'standard' | 'earn';
+type PracticeSource = 'archive';
 const nativeDriver = Platform.OS !== 'web';
 const archiveYears = ['2025', '2024', '2023', '2022'];
 
 export default function PracticeScreen() {
+  const demo = useAuthStore((state) => isDemoSession(state.accessToken, state.user?.id));
+  return demo ? <DemoPracticeScreen /> : <RemotePracticeScreen />;
+}
+
+function DemoPracticeScreen() {
   const { theme } = useAppTheme();
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
@@ -27,23 +31,15 @@ export default function PracticeScreen() {
   const paid = plan === 'paid';
   const practiceProgress = usePracticeProgressStore((state) => state.byQuestionId);
   const recordAnswer = usePracticeProgressStore((state) => state.recordAnswer);
-  const awardPracticeChallenge = useRewardStore((state) => state.awardPracticeChallenge);
-  const [source, setSource] = useState<PracticeSource>('archive');
-  const [collection, setCollection] = useState<PaperCollection>('past-year');
+  const source: PracticeSource = 'archive';
   const [year, setYear] = useState(archiveYears[0]);
   const [showFilters, setShowFilters] = useState(false);
   const [mode, setMode] = useState<PracticeMode>('mcq');
-  const [sessionIntent, setSessionIntent] = useState<SessionIntent>('standard');
   const [subjectId, setSubjectId] = useState(practiceSubjects[0].id);
   const subject = practiceSubjects.find((item) => item.id === subjectId) ?? practiceSubjects[0];
   const [topicId, setTopicId] = useState(subject.topics[0].id);
   const topic = subject.topics.find((item) => item.id === topicId) ?? subject.topics[0];
   const questions = topic.questions;
-  const challenge = {
-    questionCount: questions.length,
-    duration: Math.max(5 * 60, questions.length * 90),
-    points: questions.length * 5,
-  };
   const [started, setStarted] = useState(false);
   const [current, setCurrent] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -54,7 +50,6 @@ export default function PracticeScreen() {
   const [written, setWritten] = useState('');
   const [writtenSubmitted, setWrittenSubmitted] = useState(false);
   const [explanationQuestionId, setExplanationQuestionId] = useState<string | null>(null);
-  const [rewardOutcome, setRewardOutcome] = useState<'earned' | 'already-earned' | null>(null);
   const question = questions[Math.min(current, questions.length - 1)];
   const selected = answers[question.id];
   const isSubmitted = submitted.has(question.id);
@@ -64,11 +59,9 @@ export default function PracticeScreen() {
   const canRetry = paid && submittedWrong;
   const answeredCount = questions.filter((item) => Boolean(answers[item.id])).length;
   const progress = Math.round((answeredCount / Math.max(questions.length, 1)) * 100);
-  const hasQuestionBank = user?.id === 'demo-paid-student';
   const formatLabel = mode === 'mcq' ? 'MCQ' : mode === 'written' ? 'Descriptive' : 'Case study';
-  const sourceLabel = source === 'archive' ? `PYQ · ${year}` : `Question Bank · ${collection === 'past-year' ? 'Past year' : collection.toUpperCase()}`;
-  const effectiveTimerDuration = mode === 'mcq' && sessionIntent === 'earn' ? challenge.duration : timerDuration;
-  const challengeKey = `${source}:${source === 'archive' ? year : collection}:${subject.id}:${topic.id}`;
+  const sourceLabel = `Course practice · ${year}`;
+  const effectiveTimerDuration = timerDuration;
 
   useEffect(() => {
     if (!started || mode !== 'mcq' || effectiveTimerDuration === null || timeLeft <= 0) return;
@@ -77,21 +70,12 @@ export default function PracticeScreen() {
   }, [effectiveTimerDuration, mode, started, timeLeft]);
 
   const clock = useMemo(() => formatCountdown(timeLeft), [timeLeft]);
-  const clearAttempt = () => { setStarted(false); setCurrent(0); setAnswers({}); setMarked(new Set()); setSubmitted(new Set()); setWritten(''); setWrittenSubmitted(false); setExplanationQuestionId(null); setRewardOutcome(null); setTimeLeft(effectiveTimerDuration ?? 0); };
+  const clearAttempt = () => { setStarted(false); setCurrent(0); setAnswers({}); setMarked(new Set()); setSubmitted(new Set()); setWritten(''); setWrittenSubmitted(false); setExplanationQuestionId(null); setTimeLeft(effectiveTimerDuration ?? 0); };
   const chooseSubject = (nextId: string) => { const next = practiceSubjects.find((item) => item.id === nextId) ?? practiceSubjects[0]; setSubjectId(next.id); setTopicId(next.topics[0].id); clearAttempt(); };
   const chooseTopic = (nextId: string) => { setTopicId(nextId); clearAttempt(); };
-  const chooseMode = (nextMode: PracticeMode) => { setMode(nextMode); if (nextMode !== 'mcq') setSessionIntent('standard'); clearAttempt(); };
-  const chooseSource = (nextSource: PracticeSource) => {
-    if (nextSource === 'question-bank' && !hasQuestionBank) {
-      router.push('/library' as never);
-      return;
-    }
-    setSource(nextSource);
-    clearAttempt();
-  };
+  const chooseMode = (nextMode: PracticeMode) => { setMode(nextMode); clearAttempt(); };
   const changeTimer = (seconds: number | null) => { setTimerDuration(seconds); setTimeLeft(seconds ?? 0); };
-  const chooseSessionIntent = (nextIntent: SessionIntent) => { setSessionIntent(nextIntent); setTimeLeft(nextIntent === 'earn' ? challenge.duration : timerDuration ?? 0); };
-  const startSession = () => { if (mode === 'mcq' && effectiveTimerDuration !== null && effectiveTimerDuration <= 0) return; setCurrent(0); setAnswers({}); setMarked(new Set()); setSubmitted(new Set()); setWritten(''); setWrittenSubmitted(false); setExplanationQuestionId(null); setRewardOutcome(null); setTimeLeft(effectiveTimerDuration ?? 0); setStarted(true); };
+  const startSession = () => { if (mode === 'mcq' && effectiveTimerDuration !== null && effectiveTimerDuration <= 0) return; setCurrent(0); setAnswers({}); setMarked(new Set()); setSubmitted(new Set()); setWritten(''); setWrittenSubmitted(false); setExplanationQuestionId(null); setTimeLeft(effectiveTimerDuration ?? 0); setStarted(true); };
   const selectAnswer = (option: string) => {
     if (lockedWrong || (effectiveTimerDuration !== null && timeLeft === 0)) return;
     if (canRetry) {
@@ -111,37 +95,25 @@ export default function PracticeScreen() {
     const explanationShown = paid || correct;
     setExplanationQuestionId(explanationShown ? question.id : null);
     recordAnswer({ questionId: question.id, subjectId: subject.id, topicId: topic.id, correct, lockWrong: !paid, explanationShown });
-    if (sessionIntent === 'earn' && timeLeft > 0 && submitted.size + 1 >= questions.length) {
-      setRewardOutcome(awardPracticeChallenge(challengeKey, challenge.points) ? 'earned' : 'already-earned');
-    }
   };
 
   return <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safe, { backgroundColor: theme.canvas }]}><ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-    <View style={styles.practiceHeading}><View style={styles.practiceHeadingCopy}><View style={styles.eyebrowRow}><Text style={[styles.eyebrow, { color: theme.primary }]}>FOCUSED PRACTICE</Text><View style={[styles.planPill, { backgroundColor: paid ? theme.goldSoft : theme.sunken }]}>{paid ? <Crown size={10} color={theme.goldStrong} /> : null}<Text style={[styles.planText, { color: paid ? theme.goldStrong : theme.muted }]}>{paid ? 'PAID' : 'FREE'}</Text></View></View><Text style={[styles.title, { color: theme.fg }]}>Practice</Text><Text style={[styles.description, { color: theme.muted }]}>Start from the free PYQ archive or use a question bank you own. Detailed filters stay out of the way until you need them.</Text></View><PracticeTrackerShortcut onPress={() => router.push('/practice-tracker' as never)} /></View>
+    <View style={styles.practiceHeading}><View style={styles.practiceHeadingCopy}><View style={styles.eyebrowRow}><Text style={[styles.eyebrow, { color: theme.primary }]}>FOCUSED PRACTICE</Text><View style={[styles.planPill, { backgroundColor: paid ? theme.goldSoft : theme.sunken }]}>{paid ? <Crown size={10} color={theme.goldStrong} /> : null}<Text style={[styles.planText, { color: paid ? theme.goldStrong : theme.muted }]}>{paid ? 'PAID' : 'FREE'}</Text></View></View><Text style={[styles.title, { color: theme.fg }]}>Practice</Text><Text style={[styles.description, { color: theme.muted }]}>Every published question for your selected course is free. Refine the set by subject, chapter, year and answer format.</Text></View><PracticeTrackerShortcut onPress={() => router.push('/practice-tracker' as never)} /></View>
 
     {!started ? <Card style={styles.builderCard}>
       <View style={styles.builderHeading}><View style={[styles.builderIcon, { backgroundColor: theme.primarySoft }]}><Layers3 size={20} color={theme.primaryStrong} /></View><View style={styles.builderCopy}><Text style={[styles.builderTitle, { color: theme.fg }]}>Choose how you want to practise</Text><Text style={[styles.builderHint, { color: theme.muted }]}>Pick a source, then refine only when needed.</Text></View></View>
 
-      <View style={styles.sourceGrid}>
-        <Pressable accessibilityRole="radio" accessibilityState={{ selected: source === 'archive' }} onPress={() => chooseSource('archive')} style={({ pressed }) => [styles.sourceCard, { backgroundColor: source === 'archive' ? theme.primarySoft : theme.sunken, borderColor: source === 'archive' ? theme.primary : theme.line }, pressed && styles.pressed]}>
-          <View style={[styles.sourceIcon, { backgroundColor: source === 'archive' ? theme.primary : theme.surface }]}><Archive size={19} color={source === 'archive' ? theme.primaryFg : theme.primaryStrong} /></View><View style={styles.sourceCopy}><View style={styles.sourceTitleRow}><Text style={[styles.sourceTitle, { color: theme.fg }]}>Archive</Text><View style={[styles.freeBadge, { backgroundColor: theme.successSoft }]}><Text style={[styles.freeBadgeText, { color: theme.success }]}>FREE</Text></View></View><Text style={[styles.sourceDescription, { color: theme.muted }]}>Previous-year questions for every learner.</Text></View>{source === 'archive' ? <Check size={17} color={theme.primaryStrong} strokeWidth={3} /> : null}
-        </Pressable>
-        <Pressable accessibilityRole="radio" accessibilityState={{ selected: source === 'question-bank', disabled: !hasQuestionBank }} onPress={() => chooseSource('question-bank')} style={({ pressed }) => [styles.sourceCard, { backgroundColor: source === 'question-bank' ? theme.goldSoft : theme.sunken, borderColor: source === 'question-bank' ? theme.goldStrong : theme.line }, pressed && styles.pressed]}>
-          <View style={[styles.sourceIcon, { backgroundColor: source === 'question-bank' ? theme.goldStrong : theme.surface }]}>{hasQuestionBank ? <BookOpenCheck size={19} color={source === 'question-bank' ? '#191208' : theme.goldStrong} /> : <LockKeyhole size={18} color={theme.faint} />}</View><View style={styles.sourceCopy}><View style={styles.sourceTitleRow}><Text style={[styles.sourceTitle, { color: theme.fg }]}>Question Bank</Text>{hasQuestionBank ? <View style={[styles.ownedBadge, { backgroundColor: theme.goldSoft }]}><ShieldCheck size={9} color={theme.goldStrong} /><Text style={[styles.ownedBadgeText, { color: theme.goldStrong }]}>OWNED</Text></View> : null}</View><Text style={[styles.sourceDescription, { color: theme.muted }]}>{hasQuestionBank ? 'Use your purchased bank, RTP and MTP sets.' : 'Requires this question bank purchase.'}</Text></View>{!hasQuestionBank ? <ArrowRight size={16} color={theme.goldStrong} /> : source === 'question-bank' ? <Check size={17} color={theme.goldStrong} strokeWidth={3} /> : null}
-        </Pressable>
-      </View>
+      <View style={styles.sourceGrid}><View style={[styles.sourceCard, { backgroundColor: theme.primarySoft, borderColor: theme.primary }]}><View style={[styles.sourceIcon, { backgroundColor: theme.primary }]}><Archive size={19} color={theme.primaryFg} /></View><View style={styles.sourceCopy}><View style={styles.sourceTitleRow}><Text style={[styles.sourceTitle, { color: theme.fg }]}>Free course questions</Text><View style={[styles.freeBadge, { backgroundColor: theme.successSoft }]}><Text style={[styles.freeBadgeText, { color: theme.success }]}>FREE</Text></View></View><Text style={[styles.sourceDescription, { color: theme.muted }]}>Questions published by Admin for your selected course.</Text></View><Check size={17} color={theme.primaryStrong} strokeWidth={3} /></View></View>
 
       <View style={[styles.selectionSummary, { backgroundColor: theme.sunken, borderColor: theme.line }]}>
         <View style={styles.selectionTop}><View style={[styles.selectionIcon, { backgroundColor: theme.primarySoft }]}><ListFilter size={18} color={theme.primaryStrong} /></View><View style={styles.selectionCopy}><Text style={[styles.selectionEyebrow, { color: theme.primary }]}>YOUR SET</Text><Text numberOfLines={1} style={[styles.selectionTitle, { color: theme.fg }]}>{subject.title} · {topic.title}</Text></View><Pressable accessibilityRole="button" onPress={() => setShowFilters(true)} style={({ pressed }) => [styles.adjustFilters, { backgroundColor: theme.surface, borderColor: theme.lineStrong }, pressed && styles.pressed]}><ListFilter size={14} color={theme.primaryStrong} /><Text style={[styles.adjustFiltersText, { color: theme.primaryStrong }]}>Adjust</Text></Pressable></View>
-        <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator={false} contentContainerStyle={styles.selectionChips}><SelectionChip icon={source === 'archive' ? <Archive size={11} color={theme.primaryStrong} /> : <BookOpenCheck size={11} color={theme.goldStrong} />} label={sourceLabel} /><SelectionChip icon={mode === 'mcq' ? <CircleHelp size={11} color={theme.primaryStrong} /> : mode === 'written' ? <PenLine size={11} color={theme.primaryStrong} /> : <FileStack size={11} color={theme.primaryStrong} />} label={formatLabel} /><SelectionChip icon={sessionIntent === 'earn' ? <Trophy size={11} color={theme.goldStrong} /> : <Clock3 size={11} color={theme.primaryStrong} />} label={mode === 'mcq' ? sessionIntent === 'earn' ? `${challenge.questionCount} Q · ${formatCountdown(challenge.duration)} · +${challenge.points} pts` : effectiveTimerDuration === null ? 'Untimed' : formatCountdown(effectiveTimerDuration) : '1 writing prompt'} /></ScrollView>
+        <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator={false} contentContainerStyle={styles.selectionChips}><SelectionChip icon={<Archive size={11} color={theme.primaryStrong} />} label={sourceLabel} /><SelectionChip icon={mode === 'mcq' ? <CircleHelp size={11} color={theme.primaryStrong} /> : mode === 'written' ? <PenLine size={11} color={theme.primaryStrong} /> : <FileStack size={11} color={theme.primaryStrong} />} label={formatLabel} /><SelectionChip icon={<Clock3 size={11} color={theme.primaryStrong} />} label={mode === 'mcq' ? effectiveTimerDuration === null ? 'Untimed' : formatCountdown(effectiveTimerDuration) : '1 writing prompt'} /></ScrollView>
       </View>
 
-      <Pressable disabled={mode === 'mcq' && effectiveTimerDuration !== null && effectiveTimerDuration <= 0} onPress={startSession} style={({ pressed }) => [styles.startButton, { backgroundColor: sessionIntent === 'earn' && mode === 'mcq' ? theme.goldStrong : theme.primary }, mode === 'mcq' && effectiveTimerDuration !== null && effectiveTimerDuration <= 0 && styles.disabled, pressed && styles.pressed]}><Play size={18} fill={sessionIntent === 'earn' && mode === 'mcq' ? '#171108' : theme.primaryFg} color={sessionIntent === 'earn' && mode === 'mcq' ? '#171108' : theme.primaryFg} /><Text style={[styles.startText, { color: sessionIntent === 'earn' && mode === 'mcq' ? '#171108' : theme.primaryFg }]}>{sessionIntent === 'earn' && mode === 'mcq' ? 'Start Solve & Earn' : `Start ${formatLabel} session`}</Text></Pressable>
-    </Card> : <SessionSummary subject={subject.title} topic={topic.title} source={sourceLabel} mode={mode} intent={sessionIntent} points={challenge.points} timer={effectiveTimerDuration === null || mode !== 'mcq' ? 'Untimed' : clock} answered={answeredCount} total={questions.length} reviewCount={marked.size} words={written.trim() ? written.trim().split(/\s+/).length : 0} writtenSubmitted={writtenSubmitted} onChange={clearAttempt} />}
+      <Pressable disabled={mode === 'mcq' && effectiveTimerDuration !== null && effectiveTimerDuration <= 0} onPress={startSession} style={({ pressed }) => [styles.startButton, { backgroundColor: theme.primary }, mode === 'mcq' && effectiveTimerDuration !== null && effectiveTimerDuration <= 0 && styles.disabled, pressed && styles.pressed]}><Play size={18} fill={theme.primaryFg} color={theme.primaryFg} /><Text style={[styles.startText, { color: theme.primaryFg }]}>{`Start ${formatLabel} session`}</Text></Pressable>
+    </Card> : <SessionSummary subject={subject.title} topic={topic.title} source={sourceLabel} mode={mode} timer={effectiveTimerDuration === null || mode !== 'mcq' ? 'Untimed' : clock} answered={answeredCount} total={questions.length} reviewCount={marked.size} words={written.trim() ? written.trim().split(/\s+/).length : 0} writtenSubmitted={writtenSubmitted} onChange={clearAttempt} />}
 
-    <PracticeFilterSheet visible={showFilters} source={source} subjectId={subject.id} topicId={topic.id} year={year} collection={collection} mode={mode} sessionIntent={sessionIntent} timerDuration={timerDuration} onClose={() => setShowFilters(false)} onChooseSubject={chooseSubject} onChooseTopic={chooseTopic} onChooseYear={setYear} onChooseCollection={setCollection} onChooseMode={chooseMode} onChooseSessionIntent={chooseSessionIntent} onChangeTimer={changeTimer} />
-
-    {started && rewardOutcome ? <RewardResult points={challenge.points} alreadyEarned={rewardOutcome === 'already-earned'} /> : null}
+    <PracticeFilterSheet visible={showFilters} source={source} subjectId={subject.id} topicId={topic.id} year={year} mode={mode} timerDuration={timerDuration} onClose={() => setShowFilters(false)} onChooseSubject={chooseSubject} onChooseTopic={chooseTopic} onChooseYear={setYear} onChooseMode={chooseMode} onChangeTimer={changeTimer} />
 
     {started && mode === 'mcq' ? <>
       <Card><View style={styles.progressHeader}><View><Text style={[styles.cardLabel, { color: theme.fg }]}>Question navigator</Text><Text style={[styles.progressCopy, { color: theme.muted }]}>{answeredCount} answered of {questions.length} · {topic.title}</Text></View><Text style={[styles.progressValue, { color: theme.primaryStrong }]}>{progress}%</Text></View><View style={[styles.progressTrack, { backgroundColor: theme.sunken }]}><View style={[styles.progressFill, { backgroundColor: theme.primary, width: `${progress}%` }]} /></View><View style={styles.legend}><Legend color={theme.success} label="Answered" /><Legend color={theme.goldStrong} label="Review" />{!paid ? <Legend color={theme.danger} label="Free attempt closed" /> : null}<Legend color={theme.faint} label="Unanswered" /></View><View style={styles.navigator}>{questions.map((item, index) => { const answered = Boolean(answers[item.id]); const review = marked.has(item.id); const wrongLocked = !paid && Boolean(practiceProgress[item.id]?.lockedWrong); const active = index === current; const backgroundColor = active ? theme.primary : wrongLocked ? theme.dangerSoft : review ? theme.goldSoft : answered ? theme.successSoft : theme.surface; const borderColor = active ? theme.primary : wrongLocked ? theme.danger : review ? theme.goldStrong : answered ? theme.success : theme.line; return <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`Question ${index + 1}${answered ? ', answered' : ''}${review ? ', marked for review' : ''}${wrongLocked ? ', incorrect attempt closed' : ''}`} onPress={() => navigateToQuestion(index)} style={[styles.navItem, { backgroundColor, borderColor }]}><Text style={[styles.navText, { color: active ? theme.primaryFg : wrongLocked ? theme.danger : review ? theme.goldStrong : answered ? theme.success : theme.muted }]}>{index + 1}</Text></Pressable>; })}</View></Card>
@@ -152,7 +124,7 @@ export default function PracticeScreen() {
         <View style={styles.options}>{question.options.map((option) => { const selectedThis = selected === option; const correctOption = option === question.answer; const backgroundColor = isSubmitted && correctOption ? theme.successSoft : isSubmitted && selectedThis ? theme.dangerSoft : selectedThis ? theme.primarySoft : theme.surface; const borderColor = isSubmitted && correctOption ? theme.success : isSubmitted && selectedThis ? theme.danger : selectedThis ? theme.primary : theme.line; return <Pressable key={option} disabled={lockedWrong || (isSubmitted && !canRetry) || (effectiveTimerDuration !== null && timeLeft === 0)} onPress={() => selectAnswer(option)} style={[styles.option, { backgroundColor, borderColor }, lockedWrong && styles.closedOption]}><View style={[styles.radio, { borderColor: selectedThis ? theme.primary : theme.faint, backgroundColor: selectedThis ? theme.primary : 'transparent' }]}>{selectedThis ? <Text style={[styles.radioCheck, { color: theme.primaryFg }]}>✓</Text> : null}</View><Text style={[styles.optionText, { color: lockedWrong ? theme.faint : theme.fg }]}>{option}</Text></Pressable>; })}</View>
         {isSubmitted && explanationQuestionId === question.id ? <View style={[styles.feedback, { backgroundColor: selected === question.answer ? theme.successSoft : theme.dangerSoft }]}><Text style={[styles.feedbackTitle, { color: selected === question.answer ? theme.success : theme.danger }]}>{selected === question.answer ? 'Correct — well done.' : 'Not quite — try once more.'}</Text><Text style={[styles.feedbackText, { color: theme.muted }]}>{question.explanation}</Text>{canRetry ? <Text style={[styles.retryHint, { color: theme.primaryStrong }]}>Tap any option to retry this question.</Text> : null}</View> : isSubmitted ? <View style={[styles.answerRecorded, { backgroundColor: theme.dangerSoft }]}><LockKeyhole size={16} color={theme.danger} /><View style={styles.recordedCopy}><Text style={[styles.answerRecordedText, { color: theme.danger }]}>Incorrect answer recorded</Text><Text style={[styles.recordedHint, { color: theme.muted }]}>Explanation is available after correct answers on Free.</Text></View></View> : null}
         <View style={styles.actions}><AppButton label={lockedWrong ? 'Free attempt closed' : canRetry ? 'Choose another option' : isSubmitted ? 'Answered' : 'Submit answer'} disabled={!selected || lockedWrong || isSubmitted || (effectiveTimerDuration !== null && timeLeft === 0)} onPress={submitAnswer} /><Pressable onPress={() => navigateToQuestion(current + 1)} style={[styles.next, { borderColor: theme.line, backgroundColor: theme.surface }]}><Text style={[styles.nextText, { color: theme.primaryStrong }]}>{current === questions.length - 1 ? 'Last question' : 'Next question'}</Text></Pressable></View>
-        {timeLeft === 0 && effectiveTimerDuration !== null ? <Text style={[styles.timeUp, { color: theme.danger }]}>{sessionIntent === 'earn' ? 'Challenge time ended. This attempt is no longer reward-eligible.' : 'Time is up. Start a new session to practise again.'}</Text> : null}
+        {timeLeft === 0 && effectiveTimerDuration !== null ? <Text style={[styles.timeUp, { color: theme.danger }]}>Time is up. Start a new session to practise again.</Text> : null}
       </Card>
     </> : null}
 
@@ -165,40 +137,30 @@ function SelectionChip({ icon, label }: { icon: ReactNode; label: string }) {
   return <View style={[styles.selectionChip, { backgroundColor: theme.surface, borderColor: theme.line }]}>{icon}<Text numberOfLines={1} style={[styles.selectionChipText, { color: theme.muted }]}>{label}</Text></View>;
 }
 
-function PracticeFilterSheet({ visible, source, subjectId, topicId, year, collection, mode, sessionIntent, timerDuration, onClose, onChooseSubject, onChooseTopic, onChooseYear, onChooseCollection, onChooseMode, onChooseSessionIntent, onChangeTimer }: { visible: boolean; source: PracticeSource; subjectId: string; topicId: string; year: string; collection: PaperCollection; mode: PracticeMode; sessionIntent: SessionIntent; timerDuration: number | null; onClose: () => void; onChooseSubject: (id: string) => void; onChooseTopic: (id: string) => void; onChooseYear: (year: string) => void; onChooseCollection: (collection: PaperCollection) => void; onChooseMode: (mode: PracticeMode) => void; onChooseSessionIntent: (intent: SessionIntent) => void; onChangeTimer: (seconds: number | null) => void }) {
+function PracticeFilterSheet({ visible, source, subjectId, topicId, year, mode, timerDuration, onClose, onChooseSubject, onChooseTopic, onChooseYear, onChooseMode, onChangeTimer }: { visible: boolean; source: PracticeSource; subjectId: string; topicId: string; year: string; mode: PracticeMode; timerDuration: number | null; onClose: () => void; onChooseSubject: (id: string) => void; onChooseTopic: (id: string) => void; onChooseYear: (year: string) => void; onChooseMode: (mode: PracticeMode) => void; onChangeTimer: (seconds: number | null) => void }) {
   const { theme } = useAppTheme();
   const subject = practiceSubjects.find((item) => item.id === subjectId) ?? practiceSubjects[0];
   const selectedTopic = subject.topics.find((item) => item.id === topicId) ?? subject.topics[0];
-  const challengeDuration = Math.max(5 * 60, selectedTopic.questions.length * 90);
-  const challengePoints = selectedTopic.questions.length * 5;
   const showYear = source === 'archive';
   return <Modal transparent visible={visible} animationType="none" statusBarTranslucent onRequestClose={onClose}>
     <View style={styles.filterModal}><Pressable accessibilityRole="button" accessibilityLabel="Close practice filters" onPress={onClose} style={styles.filterScrim} />
       <SafeAreaView edges={['bottom']} style={[styles.filterSheet, { backgroundColor: theme.surface, borderColor: theme.lineStrong }]}>
         <View style={[styles.filterHandle, { backgroundColor: theme.lineStrong }]} />
-        <View style={styles.filterHeader}><View style={[styles.filterHeaderIcon, { backgroundColor: theme.goldSoft }]}>{source === 'archive' ? <Archive size={19} color={theme.goldStrong} /> : <BookOpenCheck size={19} color={theme.goldStrong} />}</View><View style={styles.filterHeaderCopy}><Text style={[styles.filterHeaderEyebrow, { color: theme.goldStrong }]}>{source === 'archive' ? 'FREE PYQ ARCHIVE' : 'PURCHASED QUESTION BANK'}</Text><Text style={[styles.filterHeaderTitle, { color: theme.fg }]}>Refine your practice set</Text><Text style={[styles.filterHeaderHint, { color: theme.muted }]}>Only the choices relevant to this source are shown.</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close filters" onPress={onClose} style={[styles.filterClose, { backgroundColor: theme.sunken }]}><X size={18} color={theme.muted} /></Pressable></View>
+        <View style={styles.filterHeader}><View style={[styles.filterHeaderIcon, { backgroundColor: theme.goldSoft }]}><Archive size={19} color={theme.goldStrong} /></View><View style={styles.filterHeaderCopy}><Text style={[styles.filterHeaderEyebrow, { color: theme.goldStrong }]}>FREE COURSE PRACTICE</Text><Text style={[styles.filterHeaderTitle, { color: theme.fg }]}>Refine your practice set</Text><Text style={[styles.filterHeaderHint, { color: theme.muted }]}>Use the taxonomy supplied with Admin-uploaded questions.</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close filters" onPress={onClose} style={[styles.filterClose, { backgroundColor: theme.sunken }]}><X size={18} color={theme.muted} /></Pressable></View>
 
         <ScrollView contentContainerStyle={styles.filterContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <FilterSection number="01" title="Subject"><ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRail}>{practiceSubjects.map((item) => <FilterPill key={item.id} active={item.id === subjectId} label={item.title} icon={<BookOpen size={14} color={item.id === subjectId ? '#171108' : theme.muted} />} onPress={() => onChooseSubject(item.id)} />)}</ScrollView></FilterSection>
 
           <FilterSection number="02" title="Chapter"><ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRail}>{subject.topics.map((item) => <FilterPill key={item.id} active={item.id === topicId} label={item.title} suffix={`${item.questions.length} Q`} onPress={() => onChooseTopic(item.id)} />)}</ScrollView></FilterSection>
 
-          {source === 'question-bank' ? <FilterSection number="03" title="Collection"><View style={styles.collectionGrid}>{([['past-year', 'Past year', CalendarDays], ['rtp', 'Revision · RTP', RotateCcw], ['mtp', 'Mock test · MTP', FileStack]] as const).map(([value, label, Icon]) => { const active = collection === value; return <Pressable key={value} accessibilityRole="radio" accessibilityState={{ selected: active }} onPress={() => onChooseCollection(value)} style={({ pressed }) => [styles.collectionChoice, { backgroundColor: active ? theme.goldSoft : theme.sunken, borderColor: active ? theme.goldStrong : theme.line }, pressed && styles.pressed]}><Icon size={17} color={active ? theme.goldStrong : theme.muted} /><Text style={[styles.collectionText, { color: active ? theme.goldStrong : theme.muted }]}>{label}</Text>{active ? <Check size={13} color={theme.goldStrong} strokeWidth={3} /> : null}</Pressable>; })}</View></FilterSection> : null}
-
-          {showYear ? <FilterSection number={source === 'archive' ? '03' : '04'} title="Year"><ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRail}>{archiveYears.map((item) => <FilterPill key={item} active={item === year} label={item} icon={<CalendarDays size={13} color={item === year ? '#171108' : theme.muted} />} onPress={() => onChooseYear(item)} />)}</ScrollView></FilterSection> : null}
+          {showYear ? <FilterSection number="03" title="Year"><ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRail}>{archiveYears.map((item) => <FilterPill key={item} active={item === year} label={item} icon={<CalendarDays size={13} color={item === year ? '#171108' : theme.muted} />} onPress={() => onChooseYear(item)} />)}</ScrollView></FilterSection> : null}
 
           <FilterSection number="04" title="Answer format"><View style={styles.formatGrid}><FormatChoice active={mode === 'mcq'} title="MCQ" detail="Choose an option" icon={<CircleHelp size={17} color={mode === 'mcq' ? theme.goldStrong : theme.muted} />} onPress={() => onChooseMode('mcq')} /><FormatChoice active={mode === 'written'} title="Descriptive" detail="Write an answer" icon={<PenLine size={17} color={mode === 'written' ? theme.goldStrong : theme.muted} />} onPress={() => onChooseMode('written')} /><FormatChoice active={mode === 'case-study'} title="Case study" detail="Analyse a scenario" icon={<FileStack size={17} color={mode === 'case-study' ? theme.goldStrong : theme.muted} />} onPress={() => onChooseMode('case-study')} /></View></FilterSection>
 
-          {mode === 'mcq' ? <FilterSection number="05" title="Session setup">
-            <View style={styles.intentGrid}>
-              <SessionIntentChoice active={sessionIntent === 'standard'} icon={<TimerReset size={18} color={sessionIntent === 'standard' ? theme.goldStrong : theme.muted} />} title="Practice with timer" detail="Choose your own countdown or switch it off." onPress={() => onChooseSessionIntent('standard')} />
-              <SessionIntentChoice active={sessionIntent === 'earn'} icon={<Trophy size={18} color={theme.goldStrong} />} title="Solve & Earn" detail={`${selectedTopic.questions.length} questions · ${formatCountdown(challengeDuration)} · +${challengePoints} points`} onPress={() => onChooseSessionIntent('earn')} />
-            </View>
-            {sessionIntent === 'standard' ? <CustomTimer duration={timerDuration} onChange={onChangeTimer} /> : <RewardChallenge questionCount={selectedTopic.questions.length} duration={challengeDuration} points={challengePoints} />}
-          </FilterSection> : <View style={[styles.composedTimingNote, { backgroundColor: theme.sunken, borderColor: theme.line }]}><Clock3 size={17} color={theme.muted} /><View style={styles.composedTimingCopy}><Text style={[styles.composedTimingTitle, { color: theme.fg }]}>Open writing session</Text><Text style={[styles.composedTimingText, { color: theme.muted }]}>Descriptive and case-study responses remain untimed. Solve & Earn is available for MCQ sets.</Text></View></View>}
+          {mode === 'mcq' ? <FilterSection number="05" title="Timer"><CustomTimer duration={timerDuration} onChange={onChangeTimer} /></FilterSection> : <View style={[styles.composedTimingNote, { backgroundColor: theme.sunken, borderColor: theme.line }]}><Clock3 size={17} color={theme.muted} /><View style={styles.composedTimingCopy}><Text style={[styles.composedTimingTitle, { color: theme.fg }]}>Open writing session</Text><Text style={[styles.composedTimingText, { color: theme.muted }]}>Descriptive and case-study responses remain untimed.</Text></View></View>}
         </ScrollView>
 
-        <View style={[styles.filterFooter, { borderTopColor: theme.line }]}><View style={styles.filterFooterCopy}><Text style={[styles.filterFooterLabel, { color: theme.muted }]}>{sessionIntent === 'earn' && mode === 'mcq' ? `REWARD TARGET · +${challengePoints} POINTS` : 'READY TO BUILD'}</Text><Text numberOfLines={1} style={[styles.filterFooterValue, { color: theme.fg }]}>{subject.title} · {selectedTopic.title}</Text></View><Pressable accessibilityRole="button" onPress={onClose} style={({ pressed }) => [styles.filterDone, { backgroundColor: theme.goldStrong }, pressed && styles.pressed]}><Text style={[styles.filterDoneText, { color: '#171108' }]}>Use filters</Text><ArrowRight size={16} color="#171108" /></Pressable></View>
+        <View style={[styles.filterFooter, { borderTopColor: theme.line }]}><View style={styles.filterFooterCopy}><Text style={[styles.filterFooterLabel, { color: theme.muted }]}>READY TO BUILD</Text><Text numberOfLines={1} style={[styles.filterFooterValue, { color: theme.fg }]}>{subject.title} · {selectedTopic.title}</Text></View><Pressable accessibilityRole="button" onPress={onClose} style={({ pressed }) => [styles.filterDone, { backgroundColor: theme.goldStrong }, pressed && styles.pressed]}><Text style={[styles.filterDoneText, { color: '#171108' }]}>Use filters</Text><ArrowRight size={16} color="#171108" /></Pressable></View>
       </SafeAreaView>
     </View>
   </Modal>;
@@ -217,47 +179,6 @@ function FilterPill({ active, label, suffix, icon, onPress }: { active: boolean;
 function FormatChoice({ active, title, detail, icon, onPress }: { active: boolean; title: string; detail: string; icon: ReactNode; onPress: () => void }) {
   const { theme } = useAppTheme();
   return <Pressable accessibilityRole="radio" accessibilityState={{ selected: active }} onPress={onPress} style={({ pressed }) => [styles.formatChoice, { backgroundColor: active ? theme.goldSoft : theme.sunken, borderColor: active ? theme.goldStrong : theme.line }, pressed && styles.pressed]}><View style={styles.formatChoiceTop}>{icon}{active ? <Check size={13} color={theme.goldStrong} strokeWidth={3} /> : null}</View><Text style={[styles.formatChoiceTitle, { color: active ? theme.goldStrong : theme.fg }]}>{title}</Text><Text style={[styles.formatChoiceDetail, { color: theme.muted }]}>{detail}</Text></Pressable>;
-}
-
-function SessionIntentChoice({ active, icon, title, detail, onPress }: { active: boolean; icon: ReactNode; title: string; detail: string; onPress: () => void }) {
-  const { theme } = useAppTheme();
-  const activeColor = theme.goldStrong;
-  return <Pressable accessibilityRole="radio" accessibilityState={{ selected: active }} onPress={onPress} style={({ pressed }) => [styles.intentChoice, { backgroundColor: active ? theme.goldSoft : theme.sunken, borderColor: active ? activeColor : theme.line }, pressed && styles.pressed]}>
-    <View style={styles.intentChoiceTop}><View style={[styles.intentChoiceIcon, { backgroundColor: active ? theme.surface : 'transparent', borderColor: active ? activeColor : theme.line }]}>{icon}</View>{active ? <View style={[styles.intentCheck, { backgroundColor: activeColor }]}><Check size={10} color="#171108" strokeWidth={3} /></View> : null}</View>
-    <Text style={[styles.intentChoiceTitle, { color: active ? activeColor : theme.fg }]}>{title}</Text><Text style={[styles.intentChoiceDetail, { color: theme.muted }]}>{detail}</Text>
-  </Pressable>;
-}
-
-function RewardChallenge({ questionCount, duration, points }: { questionCount: number; duration: number; points: number }) {
-  const { theme } = useAppTheme();
-  const [pulse] = useState(() => new Animated.Value(0));
-  useEffect(() => {
-    const loop = Animated.loop(Animated.sequence([
-      Animated.timing(pulse, { toValue: 1, duration: 1200, easing: Easing.inOut(Easing.sin), useNativeDriver: nativeDriver }),
-      Animated.timing(pulse, { toValue: 0, duration: 1200, easing: Easing.inOut(Easing.sin), useNativeDriver: nativeDriver }),
-    ]));
-    loop.start();
-    return () => loop.stop();
-  }, [pulse]);
-  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.1] });
-  const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [.34, .08] });
-  return <View style={[styles.rewardChallenge, { backgroundColor: theme.sunken, borderColor: theme.goldStrong }]}>
-    <View style={styles.rewardChallengeTop}><View style={styles.rewardEmblem}><Animated.View pointerEvents="none" style={[styles.rewardPulse, { borderColor: theme.goldStrong, opacity, transform: [{ scale }] }]} /><View style={[styles.rewardCore, { backgroundColor: theme.goldSoft }]}><Award size={21} color={theme.goldStrong} /></View></View><View style={styles.rewardChallengeCopy}><Text style={[styles.rewardEyebrow, { color: theme.goldStrong }]}>CHAPTER SPRINT</Text><Text style={[styles.rewardTitle, { color: theme.fg }]}>Beat the chapter target</Text><Text style={[styles.rewardHint, { color: theme.muted }]}>Complete the set before time runs out to qualify for the reward.</Text></View></View>
-    <View style={styles.rewardMetrics}><RewardMetric value={`${questionCount}`} label="Questions" /><RewardMetric value={formatCountdown(duration)} label="Time limit" /><RewardMetric value={`+${points}`} label="Points" accent /></View>
-  </View>;
-}
-
-function RewardMetric({ value, label, accent = false }: { value: string; label: string; accent?: boolean }) {
-  const { theme } = useAppTheme();
-  return <View style={[styles.rewardMetric, { backgroundColor: theme.surface, borderColor: theme.line }]}><Text numberOfLines={1} adjustsFontSizeToFit style={[styles.rewardMetricValue, { color: accent ? theme.goldStrong : theme.fg }]}>{value}</Text><Text style={[styles.rewardMetricLabel, { color: theme.muted }]}>{label}</Text></View>;
-}
-
-function RewardResult({ points, alreadyEarned }: { points: number; alreadyEarned: boolean }) {
-  const { theme } = useAppTheme();
-  const [entrance] = useState(() => new Animated.Value(0));
-  useEffect(() => { Animated.spring(entrance, { toValue: 1, damping: 13, stiffness: 125, mass: .8, useNativeDriver: nativeDriver }).start(); }, [entrance]);
-  const translateY = entrance.interpolate({ inputRange: [0, 1], outputRange: [16, 0] });
-  return <Animated.View style={[styles.rewardResult, { backgroundColor: theme.goldSoft, borderColor: theme.goldStrong, opacity: entrance, transform: [{ translateY }] }]}><View style={[styles.rewardResultIcon, { backgroundColor: theme.goldStrong }]}><Trophy size={20} color="#171108" /></View><View style={styles.rewardResultCopy}><Text style={[styles.rewardResultEyebrow, { color: theme.goldStrong }]}>{alreadyEarned ? 'CHALLENGE COMPLETE' : 'REWARD SECURED'}</Text><Text style={[styles.rewardResultTitle, { color: theme.fg }]}>{alreadyEarned ? 'Chapter sprint finished again' : `+${points} points added`}</Text><Text style={[styles.rewardResultHint, { color: theme.muted }]}>{alreadyEarned ? 'This chapter reward was already collected in the UI demo.' : 'You completed every question before the countdown ended.'}</Text></View><CheckCircle2 size={19} color={theme.goldStrong} /></Animated.View>;
 }
 
 function PracticeTrackerShortcut({ onPress }: { onPress: () => void }) {
@@ -279,16 +200,16 @@ function PracticeTrackerShortcut({ onPress }: { onPress: () => void }) {
   </Pressable>;
 }
 
-function SessionSummary({ subject, topic, source, mode, intent, points, timer, answered, total, reviewCount, words, writtenSubmitted, onChange }: { subject: string; topic: string; source: string; mode: PracticeMode; intent: SessionIntent; points: number; timer: string; answered: number; total: number; reviewCount: number; words: number; writtenSubmitted: boolean; onChange: () => void }) {
+function SessionSummary({ subject, topic, source, mode, timer, answered, total, reviewCount, words, writtenSubmitted, onChange }: { subject: string; topic: string; source: string; mode: PracticeMode; timer: string; answered: number; total: number; reviewCount: number; words: number; writtenSubmitted: boolean; onChange: () => void }) {
   const { theme } = useAppTheme();
   const composed = mode !== 'mcq';
   const modeLabel = mode === 'mcq' ? `${total}-question MCQ` : mode === 'written' ? 'Descriptive response' : 'Case-study response';
   return <Card style={styles.sessionSummary}>
-    <View style={styles.sessionTop}><View style={styles.sessionContext}><View style={[styles.livePill, { backgroundColor: intent === 'earn' && mode === 'mcq' ? theme.goldSoft : theme.successSoft }]}>{intent === 'earn' && mode === 'mcq' ? <Trophy size={10} color={theme.goldStrong} /> : <View style={[styles.liveDot, { backgroundColor: theme.success }]} />}<Text style={[styles.liveText, { color: intent === 'earn' && mode === 'mcq' ? theme.goldStrong : theme.success }]}>{intent === 'earn' && mode === 'mcq' ? 'REWARD SPRINT LIVE' : 'SESSION LIVE'}</Text></View><Text style={[styles.sessionSubject, { color: theme.fg }]}>{subject}</Text><Text numberOfLines={1} style={[styles.sessionTopic, { color: theme.muted }]}>{topic} · {source} · {modeLabel}</Text></View><Pressable accessibilityRole="button" onPress={onChange} style={({ pressed }) => [styles.changeCompact, { backgroundColor: theme.sunken, borderColor: theme.line }, pressed && styles.pressed]}><RotateCcw size={15} color={theme.primaryStrong} /><Text style={[styles.changeCompactText, { color: theme.primaryStrong }]}>Change</Text></Pressable></View>
+    <View style={styles.sessionTop}><View style={styles.sessionContext}><View style={[styles.livePill, { backgroundColor: theme.successSoft }]}><View style={[styles.liveDot, { backgroundColor: theme.success }]} /><Text style={[styles.liveText, { color: theme.success }]}>SESSION LIVE</Text></View><Text style={[styles.sessionSubject, { color: theme.fg }]}>{subject}</Text><Text numberOfLines={1} style={[styles.sessionTopic, { color: theme.muted }]}>{topic} · {source} · {modeLabel}</Text></View><Pressable accessibilityRole="button" onPress={onChange} style={({ pressed }) => [styles.changeCompact, { backgroundColor: theme.sunken, borderColor: theme.line }, pressed && styles.pressed]}><RotateCcw size={15} color={theme.primaryStrong} /><Text style={[styles.changeCompactText, { color: theme.primaryStrong }]}>Change</Text></Pressable></View>
     <View style={styles.sessionMetrics}>
       <View style={[styles.sessionMetric, { backgroundColor: theme.sunken }]}><Clock3 size={17} color={theme.primaryStrong} /><Text numberOfLines={1} adjustsFontSizeToFit style={[styles.sessionMetricValue, { color: theme.fg }]}>{timer}</Text><Text style={[styles.sessionMetricLabel, { color: theme.muted }]}>Time left</Text></View>
       <View style={[styles.sessionMetric, { backgroundColor: theme.sunken }]}><CheckCircle2 size={17} color={theme.success} /><Text style={[styles.sessionMetricValue, { color: theme.fg }]}>{composed ? words : `${answered}/${total}`}</Text><Text style={[styles.sessionMetricLabel, { color: theme.muted }]}>{composed ? 'Words' : 'Answered'}</Text></View>
-      <View style={[styles.sessionMetric, { backgroundColor: theme.sunken }]}>{intent === 'earn' && !composed ? <Trophy size={17} color={theme.goldStrong} /> : <Flag size={17} color={theme.goldStrong} />}<Text style={[styles.sessionMetricValue, { color: intent === 'earn' && !composed ? theme.goldStrong : theme.fg }]}>{composed ? (writtenSubmitted ? 'Done' : 'Draft') : intent === 'earn' ? `+${points}` : reviewCount}</Text><Text style={[styles.sessionMetricLabel, { color: theme.muted }]}>{composed ? 'Status' : intent === 'earn' ? 'Reward target' : 'For review'}</Text></View>
+      <View style={[styles.sessionMetric, { backgroundColor: theme.sunken }]}><Flag size={17} color={theme.goldStrong} /><Text style={[styles.sessionMetricValue, { color: theme.fg }]}>{composed ? (writtenSubmitted ? 'Done' : 'Draft') : reviewCount}</Text><Text style={[styles.sessionMetricLabel, { color: theme.muted }]}>{composed ? 'Status' : 'For review'}</Text></View>
     </View>
   </Card>;
 }

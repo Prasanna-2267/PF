@@ -10,10 +10,18 @@ import { PaidResourceValidity } from '@/components/paid-resource-validity';
 import { font, radius, spacing, themes } from '@/constants/theme';
 import { orders, ownedLessons } from '@/lib/demo-commerce';
 import { useAppTheme } from '@/providers/app-providers';
+import { useAuthStore } from '@/lib/auth-store';
+import { isDemoSession } from '@/lib/student-session';
+import { RemoteLibraryScreen } from '@/components/remote-library';
 
 type LibraryView = 'lessons' | 'orders';
 
 export default function LibraryScreen() {
+  const demo = useAuthStore((state) => isDemoSession(state.accessToken, state.user?.id));
+  return demo ? <DemoLibraryScreen /> : <RemoteLibraryScreen />;
+}
+
+function DemoLibraryScreen() {
   const { theme } = useAppTheme();
   const dark = theme.canvas === themes.dark.canvas;
   const router = useRouter();
