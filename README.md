@@ -1,52 +1,56 @@
-# Parallax Flow
+# Welcome to your Expo app 👋
 
-A secure, India-first learning platform for competitive-exam students (CA, NEET, JEE, and more — fully admin-customizable). Students study from heavily DRM-protected PDF notes and official government links (ISM), track their progress and study habits, and practice from an AI-graded question bank.
+This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
-## Tech stack
+## Get started
 
-| Layer | Choice |
-|-------|--------|
-| Frontend | React + Vite + TypeScript + Tailwind CSS + PDF.js |
-| Backend | Node.js + Express + TypeScript + Mongoose |
-| Database | MongoDB (local for dev, Atlas for prod) |
-| Sessions / OTP | MongoDB (TTL indexes); Redis added later at scale |
-| Object storage | Cloudflare R2 (private) |
-| Auth | JWT (access + refresh), Google OAuth, email OTP |
-| Realtime | Socket.io (single-device enforcement) |
-| Payments | Razorpay (INR) |
-| AI grading | OpenAI GPT (short/long answers) |
+1. Install dependencies
 
-## Repository layout
+   ```bash
+   npm install
+   ```
 
+2. Start the app
+
+   ```bash
+   npx expo start
+   ```
+
+In the output, you'll find options to open the app in a
+
+- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
+- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
+- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
+- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+
+You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+
+## Get a fresh project
+
+When you're ready, run:
+
+```bash
+npm run reset-project
 ```
-Parallax-Flow/
-├── client/   # React + Vite + TypeScript SPA
-├── server/   # Express + TypeScript API
-└── docs/     # Architecture, security model, roadmap (source of truth)
-```
 
-> There is no `shared/` package by design — the server is the single source of truth for validation; the client validates independently. See `docs/ARCHITECTURE.md`.
+This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
 
-## Getting started
+### Other setup steps
 
-See per-package READMEs in `client/` and `server/`. Start with `docs/ROADMAP.md` for the build plan and current phase.
+- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
+- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
+- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
 
-## Environments (dev & prod)
+## Learn more
 
-Both apps are environment-aware via `NODE_ENV` / Vite mode.
+To learn more about developing your project with Expo, look at the following resources:
 
-| | Dev | Prod |
-|---|---|---|
-| **Server** | `npm run dev` (tsx watch, localhost defaults) | `npm run build` → `npm run start:prod` (compiled `dist/`) |
-| **Client** | `npm run dev` (Vite, proxies `/api` → server) | `npm run build` → static assets in `dist/` |
-| **Config** | `.env` / `.env.development` (server), Vite proxy (client) | host env vars / `.env.production` (server), `VITE_API_BASE_URL` at build (client) |
+- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
+- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
 
-Env files are git-ignored except `*.example` templates. Copy `server/.env.example`
-and `client/.env.example` and fill values per phase. See each package's README for
-the layered env-loading order and full details.
+## Join the community
 
-## Documentation
+Join our community of developers creating universal apps.
 
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — system design, data model, modules
-- [`docs/SECURITY.md`](docs/SECURITY.md) — auth, single-device, and the PDF anti-piracy model
-- [`docs/ROADMAP.md`](docs/ROADMAP.md) — phased delivery plan
+- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
+- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
