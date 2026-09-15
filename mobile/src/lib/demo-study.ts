@@ -29,19 +29,23 @@ export const demoStudy = {
 };
 
 export function useDemoStudyClock() {
-  const state = useStudyStore();
+  // Primitive selectors keep React 19's external-store snapshot stable.
+  const checkedIn = useStudyStore((state) => state.checkedIn);
+  const startedAt = useStudyStore((state) => state.startedAt);
+  const todayBaseMinutes = useStudyStore((state) => state.todayBaseMinutes);
+  const toggleSession = useStudyStore((state) => state.toggleSession);
   const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
-    if (!state.checkedIn) return;
+    if (!checkedIn) return;
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
-  }, [state.checkedIn]);
+  }, [checkedIn]);
   return useMemo(() => {
-    const currentNow = now ?? state.startedAt ?? 0;
-    const sessionSeconds = state.checkedIn && state.startedAt ? Math.max(0, Math.floor((currentNow - state.startedAt) / 1000)) : 0;
-    const todayMinutes = state.todayBaseMinutes + Math.floor(sessionSeconds / 60);
-    return { ...state, sessionSeconds, todayMinutes, targetPercent: Math.min(100, Math.round((todayMinutes / demoStudy.targetMinutes) * 100)) };
-  }, [now, state]);
+    const currentNow = now ?? startedAt ?? 0;
+    const sessionSeconds = checkedIn && startedAt ? Math.max(0, Math.floor((currentNow - startedAt) / 1000)) : 0;
+    const todayMinutes = todayBaseMinutes + Math.floor(sessionSeconds / 60);
+    return { checkedIn, startedAt, todayBaseMinutes, toggleSession, sessionSeconds, todayMinutes, targetPercent: Math.min(100, Math.round((todayMinutes / demoStudy.targetMinutes) * 100)) };
+  }, [checkedIn, now, startedAt, todayBaseMinutes, toggleSession]);
 }
 
 export function formatDuration(totalSeconds: number) {

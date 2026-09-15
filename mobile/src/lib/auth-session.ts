@@ -1,4 +1,5 @@
 import { isAxiosError } from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 
@@ -15,6 +16,8 @@ import { clearUserScopedCache } from '@/lib/user-cache';
 import { learnerProfileFromPreference, type LearnerPreferenceDto } from '@/lib/learner-preferences';
 import { useLearnerProfileStore } from '@/lib/learner-profile-store';
 import { useThemePreferenceStore } from '@/lib/theme-preference-store';
+import { queryClient } from '@/lib/query-client';
+import { nativeDeviceIdentityHeaders } from '@/lib/device-identity';
 
 type ServerUser = {
   id: string;
@@ -22,6 +25,7 @@ type ServerUser = {
   fullName: string;
   role: string;
   permissions: string[];
+  isFirstLogin?: boolean;
 };
 
 type AuthResult = {
@@ -51,14 +55,14 @@ type StudentBootstrapResult = {
     planLabel: 'FREE' | 'PAID';
     activeEntitlementCount: number;
   };
+  activeAcademy: { id: string; name: string; slug: string } | null;
   preference: LearnerPreferenceDto | null;
 };
   type ApiErrorBody = { error?: { code?: string; message?: string; fieldErrors?: Record<string, string[]> } };
-export type RegistrationChannel = 'email' | 'mobile';
+export type RegistrationChannel = 'email';
 export type RegistrationChallengeResult = {
   registrationId: string;
   email: { masked: string; status: 'PENDING'; resendAfter: string };
-  phone: { masked: string; status: 'PENDING' };
   expiresAt: string;
   developmentCode?: string;
 };
@@ -66,14 +70,54 @@ export type RegistrationOtpResult = {
   channel: RegistrationChannel;
   status: 'PENDING' | 'VERIFIED';
   resendAfter?: string;
-  nextStep?: 'VERIFY_MOBILE' | 'COMPLETE';
+  nextStep?: 'COMPLETE';
   developmentCode?: string;
+};
+export type AcademyAdmissionPreview = {
+  academy: { id: string; name: string; slug: string; description: string; logoUrl: string | null; city: string; state: string };
+  admissionProof: string;
+  expiresAt: string;
 };
 
 let refreshPromise: Promise<StoredAuthSession> | null = null;
 let restorePromise: Promise<void> | null = null;
+let clearPromise: Promise<void> | null = null;
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
-const toAuthUser = (user: ServerUser, previous?: AuthUser | null): AuthUser => ({
+const REFRESH_EARLY_MS = 30_000;
+const REFRESH_RETRY_MS = 15_000;
+
+function scheduleSessionRefresh(session: StoredAuthSession, delayOverride?: number): void {
+  if (refreshTimer) clearTimeout(refreshTimer);
+  const delay = delayOverride ?? Math.max(1_000, session.accessTokenExpiresAt - Date.now() - REFRESH_EARLY_MS);
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null;
+    void refreshSession().catch(() => {
+      // A transient network failure keeps the refresh credential intact. Retry
+      // while this same learner is still authenticated; definitive rejection
+      // clears the auth store and therefore does not schedule another attempt.
+      const auth = useAuthStore.getState();
+      if (auth.status === 'authenticated' && auth.user?.id === session.user.id) {
+        scheduleSessionRefresh(session, REFRESH_RETRY_MS);
+      }
+    });
+  }, delay);
+}
+
+const WELCOME_QUOTE_COUNT = 28;
+const welcomeQuoteKey = (userId: string) => `parallax-flow.welcome-quote.${userId}`;
+
+async function nextWelcomeQuoteIndex(userId: string): Promise<number> {
+  const stored = Number(await AsyncStorage.getItem(welcomeQuoteKey(userId)));
+  const previous = Number.isInteger(stored) && stored >= 0 && stored < WELCOME_QUOTE_COUNT ? stored : null;
+  const randomRange = previous === null ? WELCOME_QUOTE_COUNT : WELCOME_QUOTE_COUNT - 1;
+  let next = Math.floor(Math.random() * randomRange);
+  if (previous !== null && next >= previous) next += 1;
+  await AsyncStorage.setItem(welcomeQuoteKey(userId), String(next));
+  return next;
+}
+
+const toAuthUser = (user: ServerUser, previous?: AuthUser | null, welcomeQuoteIndex = previous?.welcomeQuoteIndex ?? 0): AuthUser => ({
   id: user.id,
   name: user.fullName,
   email: user.email,
@@ -83,6 +127,9 @@ const toAuthUser = (user: ServerUser, previous?: AuthUser | null): AuthUser => (
   emailVerified: true,
   activeStageId: previous?.id === user.id ? previous.activeStageId : null,
   avatarUrl: previous?.id === user.id ? previous.avatarUrl : null,
+  academyId: previous?.id === user.id ? previous.academyId : null,
+  isFirstLogin: previous?.id === user.id ? previous.isFirstLogin : Boolean(user.isFirstLogin),
+  welcomeQuoteIndex,
 });
 
 const clientPlatform = (): 'ANDROID' | 'IOS' | 'WEB' => {
@@ -91,9 +138,10 @@ const clientPlatform = (): 'ANDROID' | 'IOS' | 'WEB' => {
   return 'WEB';
 };
 
-const authRequestHeaders = () => ({
+const authRequestHeaders = async () => ({
   'x-client-platform': clientPlatform(),
   ...(Device.deviceName ? { 'x-device-name': Device.deviceName } : {}),
+  ...(await nativeDeviceIdentityHeaders()),
 });
 
 const toBootstrapUser = (result: StudentBootstrapResult, previous: AuthUser): AuthUser => ({
@@ -109,6 +157,9 @@ const toBootstrapUser = (result: StudentBootstrapResult, previous: AuthUser): Au
   // course-scoped API correctly rejects the account with COURSE_NOT_SELECTED.
   activeStageId: result.preference?.selectedCourseId ?? null,
   avatarUrl: result.user.avatarStoragePath,
+  academyId: result.activeAcademy?.id ?? null,
+  isFirstLogin: previous.isFirstLogin,
+  welcomeQuoteIndex: previous.welcomeQuoteIndex,
 });
 
 const hydrateStudentBootstrap = async (session: StoredAuthSession): Promise<StoredAuthSession> => {
@@ -152,20 +203,43 @@ const assertStudent = async (result: AuthResult): Promise<void> => {
 const acceptAuthResult = async (result: AuthResult, previous?: AuthUser | null): Promise<StoredAuthSession> => {
   await assertStudent(result);
   if (!previous || previous.id !== result.user.id) await clearUserScopedCache();
+  const existingUser = previous?.id === result.user.id ? previous : null;
+  const welcomeQuoteIndex = existingUser?.welcomeQuoteIndex ?? await nextWelcomeQuoteIndex(result.user.id);
   const session: StoredAuthSession = {
     accessToken: result.accessToken,
     refreshToken: result.refreshToken,
     accessTokenExpiresAt: Date.now() + result.expiresIn * 1_000,
-    user: toAuthUser(result.user, previous),
+    user: toAuthUser(result.user, existingUser, welcomeQuoteIndex),
   };
   await writeStoredSession(session);
   useAuthStore.getState().setAuth(session.user, session.accessToken);
+  scheduleSessionRefresh(session);
   return session;
 };
 
 export async function clearLocalSession(): Promise<void> {
-  await Promise.allSettled([deleteStoredSession(), clearUserScopedCache()]);
-  useAuthStore.getState().clear();
+  if (clearPromise) return clearPromise;
+
+  clearPromise = (async () => {
+    // Unmount authenticated screens before touching their active observers.
+    // Query data is cleared at the next login, when protected screens are not
+    // mounted; clearing it here can make active queries subscribe and refetch.
+    const auth = useAuthStore.getState();
+    if (refreshTimer) {
+      clearTimeout(refreshTimer);
+      refreshTimer = null;
+    }
+    if (auth.status !== 'unauthenticated' || auth.user || auth.accessToken) auth.clear();
+    await queryClient.cancelQueries();
+    await Promise.allSettled([
+      deleteStoredSession(),
+      clearUserScopedCache({ clearQueries: false }),
+    ]);
+  })().finally(() => {
+    clearPromise = null;
+  });
+
+  return clearPromise;
 }
 
 export function refreshSession(): Promise<StoredAuthSession> {
@@ -173,18 +247,25 @@ export function refreshSession(): Promise<StoredAuthSession> {
 
   refreshPromise = (async () => {
     const stored = await readStoredSession();
-    if (!stored?.refreshToken) throw new Error('No refresh credential is available.');
+    if (!stored?.refreshToken) {
+      await clearLocalSession();
+      throw new Error('No refresh credential is available.');
+    }
 
     try {
       const response = await authHttp.post<AuthResult>('/auth/refresh', {
         refreshToken: stored.refreshToken,
       }, {
-        headers: authRequestHeaders(),
+        headers: await authRequestHeaders(),
       });
       const session = await acceptAuthResult(response.data, stored.user);
       return await hydrateStudentBootstrapWhenAvailable(session);
     } catch (error) {
-      await clearLocalSession();
+      // Losing connectivity while refreshing must not sign the learner out.
+      // The next protected request can safely retry the same refresh token.
+      // Only a definitive server rejection invalidates local credentials.
+      const status = isAxiosError(error) ? error.response?.status : undefined;
+      if (status === 400 || status === 401 || status === 403) await clearLocalSession();
       throw error;
     }
   })().finally(() => {
@@ -205,7 +286,9 @@ export function restoreSession(): Promise<void> {
       return;
     }
 
-    useAuthStore.getState().setAuth(stored.user, stored.accessToken);
+    // Keep protected routes unmounted until the persisted credentials have
+    // been validated or refreshed. Publishing an unverified stored token as
+    // authenticated causes every student query to fire and fail with 401.
     try {
       if (stored.accessTokenExpiresAt <= Date.now() + 10_000) {
         await refreshSession();
@@ -219,6 +302,7 @@ export function restoreSession(): Promise<void> {
       const next = { ...stored, user };
       await writeStoredSession(next);
       useAuthStore.getState().setAuth(user, stored.accessToken);
+      scheduleSessionRefresh(next);
       await hydrateStudentBootstrapWhenAvailable(next);
     } catch (error) {
       if (isAxiosError(error) && error.response?.status === 401) {
@@ -227,6 +311,14 @@ export function restoreSession(): Promise<void> {
         } catch {
           // Refresh already clears invalid local credentials and user caches.
         }
+        return;
+      }
+      if (isAxiosError(error) && !error.response) {
+        // Do not destroy a valid persisted login merely because the app was
+        // reopened offline or the network changed. Protected requests will
+        // recover through the normal refresh path when connectivity returns.
+        useAuthStore.getState().setAuth(stored.user, stored.accessToken);
+        scheduleSessionRefresh(stored, REFRESH_RETRY_MS);
         return;
       }
       await clearLocalSession();
@@ -240,41 +332,67 @@ export function restoreSession(): Promise<void> {
 
 export async function loginWithPassword(email: string, password: string): Promise<AuthUser> {
   const response = await authHttp.post<AuthResult>('/auth/login', { email, password }, {
-    headers: authRequestHeaders(),
+    headers: await authRequestHeaders(),
   });
   const session = await acceptAuthResult(response.data);
   const hydrated = await hydrateStudentBootstrapWhenAvailable(session);
   return hydrated.user;
 }
 
-export async function beginStudentRegistration(input: { fullName: string; phone: string; email: string; password: string }): Promise<RegistrationChallengeResult> {
+export async function beginStudentRegistration(input: { fullName: string; phone: string; email: string; password: string; devicePolicyAccepted: true }): Promise<RegistrationChallengeResult> {
   const response = await authHttp.post<RegistrationChallengeResult>('/auth/registrations', input, {
-    headers: authRequestHeaders(),
+    headers: await authRequestHeaders(),
   });
   return response.data;
 }
 
 export async function sendStudentRegistrationOtp(registrationId: string, channel: RegistrationChannel): Promise<RegistrationOtpResult> {
   const response = await authHttp.post<RegistrationOtpResult>(`/auth/registrations/${registrationId}/${channel}/send`, undefined, {
-    headers: authRequestHeaders(),
+    headers: await authRequestHeaders(),
   });
   return response.data;
 }
 
 export async function verifyStudentRegistrationOtp(registrationId: string, channel: RegistrationChannel, code: string): Promise<RegistrationOtpResult> {
   const response = await authHttp.post<RegistrationOtpResult>(`/auth/registrations/${registrationId}/${channel}/verify`, { code }, {
-    headers: authRequestHeaders(),
+    headers: await authRequestHeaders(),
   });
   return response.data;
 }
 
-export async function completeStudentRegistration(registrationId: string): Promise<AuthUser> {
-  const response = await authHttp.post<AuthResult>(`/auth/registrations/${registrationId}/complete`, undefined, {
-    headers: authRequestHeaders(),
+export async function completeStudentRegistration(registrationId: string, admissionProof?: string): Promise<AuthUser> {
+  const response = await authHttp.post<AuthResult>(`/auth/registrations/${registrationId}/complete`, admissionProof ? { admissionProof } : {}, {
+    headers: await authRequestHeaders(),
   });
   const session = await acceptAuthResult(response.data);
   const hydrated = await hydrateStudentBootstrapWhenAvailable(session);
   return hydrated.user;
+}
+
+export async function validateAcademyQr(qrToken: string): Promise<AcademyAdmissionPreview> {
+  const response = await authHttp.post<AcademyAdmissionPreview>('/auth/admissions/qr/validate', { qrToken }, { headers: await authRequestHeaders() });
+  return response.data;
+}
+
+export async function validateAcademyCode(code: string): Promise<AcademyAdmissionPreview> {
+  const response = await authHttp.post<AcademyAdmissionPreview>('/auth/admissions/code/validate', { code }, { headers: await authRequestHeaders() });
+  return response.data;
+}
+
+export async function claimAcademyQr(qrToken: string) {
+  const accessToken = useAuthStore.getState().accessToken;
+  if (!accessToken) throw new Error('Sign in before joining an Academy.');
+  const response = await authHttp.post('/student/admissions/qr/claim', { qrToken }, { headers: { ...(await authRequestHeaders()), Authorization: `Bearer ${accessToken}` } });
+  queryClient.invalidateQueries();
+  return response.data;
+}
+
+export async function claimAcademyCode(code: string) {
+  const accessToken = useAuthStore.getState().accessToken;
+  if (!accessToken) throw new Error('Sign in before joining an Academy.');
+  const response = await authHttp.post('/student/admissions/codes/claim', { code }, { headers: { ...(await authRequestHeaders()), Authorization: `Bearer ${accessToken}` } });
+  queryClient.invalidateQueries();
+  return response.data;
 }
 
 export async function logoutSession(): Promise<void> {

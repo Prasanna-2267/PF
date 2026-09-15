@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BookOpen, ChevronRight, CreditCard, FileCheck2, FileText, Gift, ReceiptText, ShieldCheck } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,11 +13,14 @@ import { useAppTheme } from '@/providers/app-providers';
 import { useAuthStore } from '@/lib/auth-store';
 import { isDemoSession } from '@/lib/student-session';
 import { RemoteLibraryScreen } from '@/components/remote-library';
+import { ProfileShortcut } from '@/components/profile-shortcut';
 
 type LibraryView = 'lessons' | 'orders';
 
 export default function LibraryScreen() {
+  const academyStudent = useAuthStore((state) => Boolean(state.user?.academyId));
   const demo = useAuthStore((state) => isDemoSession(state.accessToken, state.user?.id));
+  if (academyStudent) return <Redirect href="/notes" />;
   return demo ? <DemoLibraryScreen /> : <RemoteLibraryScreen />;
 }
 
@@ -34,9 +37,12 @@ function DemoLibraryScreen() {
     <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safe, { backgroundColor: theme.canvas }]}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.heading}>
-          <Text style={[styles.eyebrow, { color: theme.primary }]}>YOUR COLLECTION</Text>
-          <Text style={[styles.title, { color: theme.fg }]}>Library</Text>
-          <Text style={[styles.description, { color: theme.muted }]}>Your protected notes, progress and purchase history.</Text>
+          <View style={styles.headingCopy}>
+            <Text style={[styles.eyebrow, { color: theme.primary }]}>YOUR COLLECTION</Text>
+            <Text style={[styles.title, { color: theme.fg }]}>Library</Text>
+            <Text style={[styles.description, { color: theme.muted }]}>Your protected notes, progress and purchase history.</Text>
+          </View>
+          <ProfileShortcut />
         </View>
 
         <LinearGradient colors={dark ? ['#1A2442', '#11172A', '#14171B'] : ['#34438F', '#4654A3', '#26346F']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
@@ -100,7 +106,7 @@ function DemoLibraryScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 }, content: { width: '100%', maxWidth: 680, alignSelf: 'center', paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: 112, gap: spacing.lg },
-  heading: { paddingHorizontal: 2 }, eyebrow: { fontFamily: font.bold, fontSize: 10, letterSpacing: 1.5 }, title: { marginTop: 3, fontFamily: font.extraBold, fontSize: 30, letterSpacing: -0.9 }, description: { marginTop: 3, maxWidth: 330, fontFamily: font.regular, fontSize: 13, lineHeight: 19 },
+  heading: { paddingHorizontal: 2, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }, headingCopy: { flex: 1, minWidth: 0 }, eyebrow: { fontFamily: font.bold, fontSize: 10, letterSpacing: 1.5 }, title: { marginTop: 3, fontFamily: font.extraBold, fontSize: 30, letterSpacing: -0.9 }, description: { marginTop: 3, maxWidth: 330, fontFamily: font.regular, fontSize: 13, lineHeight: 19 },
   hero: { minHeight: 236, overflow: 'hidden', borderRadius: 24, padding: spacing.xl, justifyContent: 'space-between' }, heroOrbitLarge: { position: 'absolute', width: 190, height: 190, borderRadius: 95, borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)', right: -74, top: -78 }, heroOrbitSmall: { position: 'absolute', width: 90, height: 90, borderRadius: 45, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', right: 20, top: -28 },
   heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, heroIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.09)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' }, securePill: { minHeight: 28, paddingHorizontal: 10, borderRadius: radius.pill, backgroundColor: 'rgba(5,10,9,0.24)', flexDirection: 'row', alignItems: 'center', gap: 6 }, secureDot: { width: 5, height: 5, borderRadius: 3 }, secureText: { color: '#D8E5E1', fontFamily: font.bold, fontSize: 8, letterSpacing: 1 },
   heroTitle: { marginTop: spacing.lg, color: '#FFFFFF', fontFamily: font.extraBold, fontSize: 25, lineHeight: 31, letterSpacing: -0.7 }, heroDescription: { marginTop: spacing.sm, maxWidth: 330, color: 'rgba(255,255,255,0.68)', fontFamily: font.regular, fontSize: 12, lineHeight: 18 }, heroFooter: { marginTop: spacing.xl, flexDirection: 'row', alignItems: 'center', gap: spacing.xl }, heroNumber: { color: '#FFFFFF', fontFamily: font.extraBold, fontSize: 21 }, heroLabel: { marginTop: 2, color: 'rgba(255,255,255,0.52)', fontFamily: font.bold, fontSize: 8, letterSpacing: 1 }, heroDivider: { width: 1, height: 33, backgroundColor: 'rgba(255,255,255,0.14)' },

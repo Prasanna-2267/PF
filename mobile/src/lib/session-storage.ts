@@ -17,11 +17,16 @@ let webMemorySession: StoredAuthSession | null = null;
 const isStoredSession = (value: unknown): value is StoredAuthSession => {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Partial<StoredAuthSession>;
-  return typeof candidate.accessToken === 'string'
+  const accessToken = candidate.accessToken;
+  const userId = candidate.user?.id;
+  return typeof accessToken === 'string'
+    && !accessToken.startsWith('ui-only-')
     && typeof candidate.refreshToken === 'string'
     && typeof candidate.accessTokenExpiresAt === 'number'
     && Boolean(candidate.user)
-    && typeof candidate.user?.id === 'string';
+    && typeof userId === 'string'
+    && !userId.startsWith('demo-')
+    && !userId.startsWith('student-');
 };
 
 export async function readStoredSession(): Promise<StoredAuthSession | null> {

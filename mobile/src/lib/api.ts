@@ -1,5 +1,5 @@
 import axios, { isAxiosError, type InternalAxiosRequestConfig } from 'axios';
-import { clearLocalSession, refreshSession } from '@/lib/auth-session';
+import { refreshSession } from '@/lib/auth-session';
 import { useAuthStore } from '@/lib/auth-store';
 import { API_BASE_URL } from '@/lib/env';
 
@@ -9,7 +9,6 @@ const isAuthenticationAttempt = (url?: string): boolean => Boolean(url && (
   url.includes('/auth/registrations') || [
     '/auth/login',
     '/auth/register',
-    '/auth/google',
     '/auth/refresh',
   ].some((path) => url.endsWith(path))
 ));
@@ -32,9 +31,11 @@ api.interceptors.response.use(
       const session = await refreshSession();
       request.headers.Authorization = `Bearer ${session.accessToken}`;
       return await api.request(request);
-    } catch {
-      await clearLocalSession();
-      throw error;
+    } catch (refreshError) {
+      // refreshSession is the single owner of credential invalidation. Clearing
+      // here made every concurrent 401 clear active React Query observers again,
+      // which caused protected queries to remount in a request/render loop.
+      throw refreshError;
     }
   },
 );

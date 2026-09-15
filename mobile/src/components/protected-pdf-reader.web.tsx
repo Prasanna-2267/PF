@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 type ProtectedPdfReaderProps = {
   source?: { uri: string; headers?: Record<string, string> };
@@ -13,6 +13,13 @@ export function ProtectedPdfReader({ source, onLoadComplete, onError }: Protecte
   const [pageWidth, setPageWidth] = useState(360);
   const [documentPages, setDocumentPages] = useState(0);
   const [pdfComponents, setPdfComponents] = useState<PdfComponents | null>(null);
+  const sourceUri = source?.uri;
+  const sourceHeadersKey = JSON.stringify(Object.entries(source?.headers ?? {}).sort(([a], [b]) => a.localeCompare(b)));
+  const documentFile = useMemo(() => {
+    if (!sourceUri) return sampleFivePagePdf;
+    const httpHeaders = sourceHeadersKey ? Object.fromEntries(JSON.parse(sourceHeadersKey) as [string, string][]) : undefined;
+    return { url: sourceUri, httpHeaders };
+  }, [sourceHeadersKey, sourceUri]);
 
   useEffect(() => {
     const updateWidth = () => setPageWidth(Math.max(280, Math.min(window.innerWidth - 28, 720)));
@@ -37,7 +44,7 @@ export function ProtectedPdfReader({ source, onLoadComplete, onError }: Protecte
 
   return <div style={styles.viewer} data-protected-pdf="true">
     <Document
-      file={source ? { url: source.uri, httpHeaders: source.headers } : sampleFivePagePdf}
+      file={documentFile}
       loading={<div style={styles.status}>Opening protected PDF…</div>}
       error={<div style={styles.status}>Unable to open the sample PDF.</div>}
       onLoadSuccess={({ numPages }) => { setDocumentPages(numPages); onLoadComplete(numPages); }}

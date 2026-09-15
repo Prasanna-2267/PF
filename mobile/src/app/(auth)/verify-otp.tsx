@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Easing, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Check, LockKeyhole, LockOpen, Mail, ShieldCheck, Smartphone } from 'lucide-react-native';
+import { ArrowLeft, Check, LockKeyhole, LockOpen, Mail, ShieldCheck } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
 import { LearnerOnboardingModal } from '@/components/learner-onboarding-modal';
 import { font, spacing } from '@/constants/theme';
-import { useAuthStore, type StudentSignupIdentity } from '@/lib/auth-store';
 import { completeStudentRegistration, getAuthErrorMessage, sendStudentRegistrationOtp, verifyStudentRegistrationOtp } from '@/lib/auth-session';
 import { useRocketLaunch } from '@/providers/rocket-launch-provider';
+import { useResendCountdown } from '@/lib/use-resend-countdown';
 
-type OtpChannel = 'email' | 'mobile';
+type OtpChannel = 'email';
 type OtpStatus = 'idle' | 'verifying' | 'verified';
 
 const palette = {
@@ -25,107 +25,65 @@ export default function VerifyOtpScreen() {
   const router = useRouter();
   const { launchTo } = useRocketLaunch();
   const scrollRef = useRef<ScrollView>(null);
-  const params = useLocalSearchParams<{ name?: string; email?: string; phone?: string; demoRole?: string; demoMode?: string; registrationId?: string; developmentCode?: string }>();
-  const completeStudentSignup = useAuthStore((state) => state.completeStudentSignup);
-  const beginAdminDemoSession = useAuthStore((state) => state.beginAdminDemoSession);
+  const params = useLocalSearchParams<{ name?: string; email?: string; registrationId?: string; developmentCode?: string; resendAfter?: string; admissionProof?: string; academyName?: string }>();
   const emailAttempt = useRef(0);
-  const mobileAttempt = useRef(0);
   const registrationCompleted = useRef(false);
-  const [activeChannel, setActiveChannel] = useState<OtpChannel>('email');
   const [emailCode, setEmailCode] = useState('');
-  const [mobileCode, setMobileCode] = useState('');
   const [emailStatus, setEmailStatus] = useState<OtpStatus>('idle');
-  const [mobileStatus, setMobileStatus] = useState<OtpStatus>('idle');
-  const [resent, setResent] = useState<OtpChannel>();
+  const [resent, setResent] = useState(false);
   const [stageVersion, setStageVersion] = useState(0);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [verificationError, setVerificationError] = useState('');
   const [developmentCode, setDevelopmentCode] = useState(param(params.developmentCode, ''));
-  const identity: StudentSignupIdentity = { name: param(params.name, 'New learner'), email: param(params.email, 'student@example.com'), phone: param(params.phone, '+91 98765 43210') };
-  const isAdminDemo = param(params.demoRole, 'student') === 'admin';
-  const isDemo = param(params.demoMode, 'false') === 'true';
+  const [resendAfter, setResendAfter] = useState(param(params.resendAfter, ''));
+  const resendCountdown = useResendCountdown(resendAfter);
+  const identity = { email: param(params.email, '') };
   const registrationId = param(params.registrationId, '');
+  const admissionProof = param(params.admissionProof, '');
 
   const finishFlow = () => {
-    if (isAdminDemo) {
-      beginAdminDemoSession();
-      router.replace('/admin' as never);
-      return;
-    }
     setShowOnboarding(true);
   };
 
   const completePersonalisation = () => {
-    if (!registrationCompleted.current) completeStudentSignup(identity);
+    if (!registrationCompleted.current) {
+      setVerificationError('Registration is not complete. Verify your email before continuing.');
+      return;
+    }
     setShowOnboarding(false);
     requestAnimationFrame(() => launchTo('/home'));
   };
 
-  const updateCode = (channel: OtpChannel, value: string) => {
+  const updateCode = (_channel: OtpChannel, value: string) => {
     const cleaned = value.replace(/[^0-9]/g, '').slice(0, 4);
-    const isEmail = channel === 'email';
-    const attemptRef = isEmail ? emailAttempt : mobileAttempt;
-    const setCode = isEmail ? setEmailCode : setMobileCode;
-    const setStatus = isEmail ? setEmailStatus : setMobileStatus;
-    const attempt = ++attemptRef.current;
-    setCode(cleaned);
+    const attempt = ++emailAttempt.current;
+    setEmailCode(cleaned);
     setVerificationError('');
     if (cleaned.length !== 4) {
-      setStatus('idle');
+      setEmailStatus('idle');
       return;
     }
 
     Keyboard.dismiss();
-    setStatus('verifying');
-    if (isDemo) {
-      setTimeout(() => {
-        if (attempt !== attemptRef.current) return;
-        setStatus('verified');
-        scrollRef.current?.scrollTo({ y: 0, animated: true });
-        setTimeout(() => {
-          if (attempt !== attemptRef.current) return;
-          if (isEmail) {
-            setActiveChannel('mobile');
-            setStageVersion((current) => current + 1);
-          } else finishFlow();
-        }, 1550);
-      }, 900);
-      return;
-    }
-
+    setEmailStatus('verifying');
     void (async () => {
       try {
         if (!registrationId) throw new Error('This registration session is missing. Return to signup and try again.');
-        await verifyStudentRegistrationOtp(registrationId, channel, cleaned);
-        if (attempt !== attemptRef.current) return;
-
-        if (isEmail) {
-          try {
-            const mobileDelivery = await sendStudentRegistrationOtp(registrationId, 'mobile');
-            setDevelopmentCode(mobileDelivery.developmentCode ?? '');
-          } catch (error) {
-            setDevelopmentCode('');
-            setVerificationError(`Email verified. ${getAuthErrorMessage(error)}`);
-          }
-        } else {
-          await completeStudentRegistration(registrationId);
-          registrationCompleted.current = true;
-        }
-
-        if (attempt !== attemptRef.current) return;
-        setStatus('verified');
+        await verifyStudentRegistrationOtp(registrationId, 'email', cleaned);
+        if (attempt !== emailAttempt.current) return;
+        await completeStudentRegistration(registrationId, admissionProof || undefined);
+        registrationCompleted.current = true;
+        if (attempt !== emailAttempt.current) return;
+        setEmailStatus('verified');
         scrollRef.current?.scrollTo({ y: 0, animated: true });
         setTimeout(() => {
-          if (attempt !== attemptRef.current) return;
-          if (isEmail) {
-            setActiveChannel('mobile');
-            setStageVersion((current) => current + 1);
-          } else finishFlow();
+          if (attempt !== emailAttempt.current) return;
+          finishFlow();
         }, 1550);
       } catch (error) {
-        if (attempt !== attemptRef.current) return;
-        setStatus('idle');
-        setCode('');
+        if (attempt !== emailAttempt.current) return;
+        setEmailStatus('idle');
+        setEmailCode('');
         setVerificationError(getAuthErrorMessage(error));
         setStageVersion((current) => current + 1);
       }
@@ -133,34 +91,28 @@ export default function VerifyOtpScreen() {
   };
 
   const resendCode = async () => {
-    const isEmail = activeChannel === 'email';
-    if (isEmail) {
-      emailAttempt.current += 1;
-      setEmailCode('');
-      setEmailStatus('idle');
-    } else {
-      mobileAttempt.current += 1;
-      setMobileCode('');
-      setMobileStatus('idle');
-    }
+    if (!resendCountdown.canResend || emailStatus === 'verifying') return;
+    emailAttempt.current += 1;
+    setEmailCode('');
+    setEmailStatus('idle');
     setVerificationError('');
-    setResent(activeChannel);
     setStageVersion((current) => current + 1);
-    setTimeout(() => setResent((current) => current === activeChannel ? undefined : current), 2200);
-    if (isDemo) return;
     try {
       if (!registrationId) throw new Error('This registration session is missing. Return to signup and try again.');
-      const delivery = await sendStudentRegistrationOtp(registrationId, activeChannel);
+      const delivery = await sendStudentRegistrationOtp(registrationId, 'email');
       setDevelopmentCode(delivery.developmentCode ?? '');
+      setResendAfter(delivery.resendAfter ?? new Date(Date.now() + 30_000).toISOString());
+      setResent(true);
+      setTimeout(() => setResent(false), 2200);
     } catch (error) {
-      setResent(undefined);
+      setResent(false);
       setVerificationError(getAuthErrorMessage(error));
     }
   };
 
-  const code = activeChannel === 'email' ? emailCode : mobileCode;
-  const status = activeChannel === 'email' ? emailStatus : mobileStatus;
-  const destination = activeChannel === 'email' ? identity.email : identity.phone ?? '';
+  const code = emailCode;
+  const status = emailStatus;
+  const destination = identity.email;
 
   return <SafeAreaView style={styles.safe}>
     <StatusBar style="light" />
@@ -168,22 +120,22 @@ export default function VerifyOtpScreen() {
       <ScrollView ref={scrollRef} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets showsVerticalScrollIndicator={false}>
         <View style={styles.pageHeading}>
           <Pressable accessibilityRole="button" accessibilityLabel="Back to account details" onPress={() => router.back()} style={({ pressed }) => [styles.back, pressed && styles.pressed]}><ArrowLeft size={19} color={palette.fg} /></Pressable>
-          <View style={styles.headingCopy}><Text style={styles.pageTitle}>OTP verification</Text><Text style={styles.pageStep}>{activeChannel === 'email' ? 'EMAIL · 1 OF 2' : 'MOBILE · 2 OF 2'}</Text></View>
+          <View style={styles.headingCopy}><Text style={styles.pageTitle}>OTP verification</Text><Text style={styles.pageStep}>EMAIL VERIFICATION</Text></View>
           <View style={styles.secureMark}><ShieldCheck size={17} color={palette.cyan} /></View>
         </View>
 
-        <ReferenceOtpCard key={`${activeChannel}-${stageVersion}`} channel={activeChannel} destination={destination} code={code} status={status} resent={resent === activeChannel} onInputFocus={() => setTimeout(() => scrollRef.current?.scrollTo({ y: 235, animated: true }), 120)} onChange={(value) => updateCode(activeChannel, value)} onResend={resendCode} />
+        <ReferenceOtpCard key={`email-${stageVersion}`} channel="email" destination={destination} code={code} status={status} resent={resent} resendLabel={resendCountdown.label} canResend={resendCountdown.canResend} onInputFocus={() => setTimeout(() => scrollRef.current?.scrollTo({ y: 235, animated: true }), 120)} onChange={(value) => updateCode('email', value)} onResend={resendCode} />
 
-        <View style={styles.progressDots}><View style={[styles.progressDot, { backgroundColor: emailStatus === 'verified' ? palette.green : activeChannel === 'email' ? palette.orange : palette.faint }]} /><View style={[styles.progressLine, { backgroundColor: emailStatus === 'verified' ? palette.green : palette.cardLine }]} /><View style={[styles.progressDot, { backgroundColor: mobileStatus === 'verified' ? palette.green : activeChannel === 'mobile' ? palette.orange : palette.faint }]} /></View>
+        <View style={styles.progressDots}><View style={[styles.progressDot, { backgroundColor: emailStatus === 'verified' ? palette.green : palette.orange }]} /></View>
         {verificationError ? <Text accessibilityLiveRegion="polite" style={styles.verificationError}>{verificationError}</Text> : null}
-        <Text style={styles.demoHint}>{isDemo ? 'Demo: enter any four digits. Verification starts automatically.' : __DEV__ && developmentCode ? `Development verification code: ${developmentCode}` : 'Verification starts automatically after the fourth digit.'}</Text>
+        <Text style={styles.demoHint}>{__DEV__ && developmentCode ? `Development verification code: ${developmentCode}` : 'Verification starts automatically after the fourth digit.'}</Text>
       </ScrollView>
     </KeyboardAvoidingView>
     <LearnerOnboardingModal visible={showOnboarding} onComplete={completePersonalisation} />
   </SafeAreaView>;
 }
 
-function ReferenceOtpCard({ channel, destination, code, status, resent, onInputFocus, onChange, onResend }: { channel: OtpChannel; destination: string; code: string; status: OtpStatus; resent: boolean; onInputFocus: () => void; onChange: (value: string) => void; onResend: () => void | Promise<void> }) {
+function ReferenceOtpCard({ channel, destination, code, status, resent, resendLabel, canResend, onInputFocus, onChange, onResend }: { channel: OtpChannel; destination: string; code: string; status: OtpStatus; resent: boolean; resendLabel: string; canResend: boolean; onInputFocus: () => void; onChange: (value: string) => void; onResend: () => void | Promise<void> }) {
   const inputRefs = useRef<(TextInput | null)[]>([]);
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [entrance] = useState(() => new Animated.Value(0));
@@ -259,7 +211,7 @@ function ReferenceOtpCard({ channel, destination, code, status, resent, onInputF
   const verified = status === 'verified';
   const verifying = status === 'verifying';
   const accent = verified ? palette.green : verifying ? palette.active : palette.orange;
-  const ChannelIcon = channel === 'email' ? Mail : Smartphone;
+  const ChannelIcon = Mail;
 
   return <Animated.View style={[styles.card, { opacity: entrance, transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }, { scale: entrance.interpolate({ inputRange: [0, 1], outputRange: [.975, 1] }) }] }]}>
     <View style={styles.illustration}>
@@ -272,18 +224,18 @@ function ReferenceOtpCard({ channel, destination, code, status, resent, onInputF
         <View style={[styles.phoneButton, { backgroundColor: verified ? palette.green : palette.orange }]}><Text style={styles.phoneButtonText}>{verified ? 'Verified ✓' : verifying ? 'Verifying…' : 'Verify'}</Text></View>
         <View style={styles.homeIndicator} />
       </Animated.View>
-      <View style={[styles.floatingChannel, styles.floatingLeft, { backgroundColor: channel === 'email' ? '#FFFFFF' : '#173A59' }]}><ChannelIcon size={22} color={channel === 'email' ? '#E4434D' : '#61B7FF'} /></View>
+      <View style={[styles.floatingChannel, styles.floatingLeft, { backgroundColor: '#FFFFFF' }]}><ChannelIcon size={22} color="#E4434D" /></View>
       <View style={styles.floatingShield}><ShieldCheck size={29} color={palette.cyan} /></View>
     </View>
 
     <Animated.View style={[styles.message, verified && { opacity: success, transform: [{ translateY: success.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }]}>
-      <Text accessibilityLiveRegion="polite" style={[styles.cardTitle, verified && { color: palette.green }]}>{verified ? channel === 'email' ? 'Email Verified!' : 'Number Verified!' : verifying ? 'Verifying code…' : channel === 'email' ? "Let's verify your email" : "Let's verify your number"}</Text>
-      <Text style={[styles.cardDescription, verified && { color: palette.green }]}>{verified ? `Your ${channel === 'email' ? 'email address' : 'number'} has been verified` : `We've sent a 4-digit code to your ${channel === 'email' ? 'email' : 'phone'}.\nIt'll auto-verify once entered.`}</Text>
+      <Text accessibilityLiveRegion="polite" style={[styles.cardTitle, verified && { color: palette.green }]}>{verified ? 'Email Verified!' : verifying ? 'Verifying code…' : "Let's verify your email"}</Text>
+      <Text style={[styles.cardDescription, verified && { color: palette.green }]}>{verified ? 'Your email address has been verified' : "We've sent a 4-digit code to your email.\nIt'll auto-verify once entered."}</Text>
     </Animated.View>
 
-    {verified ? <Animated.View style={[styles.successLoader, { opacity: success }]}>{showFinalTick ? <Animated.View style={[styles.finalTick, { transform: [{ scale: tickPop.interpolate({ inputRange: [0, 1], outputRange: [.35, 1] }) }, { rotate: tickPop.interpolate({ inputRange: [0, 1], outputRange: ['-18deg', '0deg'] }) }] }]}><Check size={29} color="#07170F" strokeWidth={3.5} /></Animated.View> : <ActivityIndicator size="large" color={palette.green} />}<Text style={[styles.successStatus, { opacity: showFinalTick ? 1 : 0 }]}>{channel === 'email' ? 'Email confirmed' : 'Mobile confirmed'}</Text></Animated.View> : <>
+    {verified ? <Animated.View style={[styles.successLoader, { opacity: success }]}>{showFinalTick ? <Animated.View style={[styles.finalTick, { transform: [{ scale: tickPop.interpolate({ inputRange: [0, 1], outputRange: [.35, 1] }) }, { rotate: tickPop.interpolate({ inputRange: [0, 1], outputRange: ['-18deg', '0deg'] }) }] }]}><Check size={29} color="#07170F" strokeWidth={3.5} /></Animated.View> : <ActivityIndicator size="large" color={palette.green} />}<Text style={[styles.successStatus, { opacity: showFinalTick ? 1 : 0 }]}>Email confirmed</Text></Animated.View> : <>
       <View style={styles.codeRow}>{digits.map((digit, index) => <Animated.View key={index} style={{ flex: 1, transform: [{ scale: digitScales[index] }] }}><TextInput ref={(node) => { inputRefs.current[index] = node; }} value={digit} editable={!verifying} onFocus={() => { setFocusedIndex(index); onInputFocus(); }} onChangeText={(value) => changeDigit(index, value)} onKeyPress={({ nativeEvent }) => { if (nativeEvent.key === 'Backspace') backspace(index); }} keyboardType="number-pad" textContentType={index === 0 ? 'oneTimeCode' : 'none'} autoComplete={index === 0 ? 'sms-otp' : 'off'} maxLength={4} selectTextOnFocus style={[styles.codeInput, (focusedIndex === index || digit) && { borderColor: palette.active }, focusedIndex === index && styles.codeInputActive]} /></Animated.View>)}</View>
-      <View style={styles.resendRow}><Text style={styles.resendQuestion}>{"Didn't receive the code?"}</Text><Pressable accessibilityRole="button" onPress={() => void onResend()} hitSlop={9} style={({ pressed }) => pressed && styles.pressed}><Text style={[styles.resendText, resent && { color: palette.green }]}>{resent ? 'Code sent ✓' : 'Resend'}</Text></Pressable></View>
+      <View style={styles.resendRow}><Text style={styles.resendQuestion}>{"Didn't receive the code?"}</Text><Pressable accessibilityRole="button" accessibilityState={{ disabled: !canResend }} disabled={!canResend} onPress={() => void onResend()} hitSlop={9} style={({ pressed }) => pressed && styles.pressed}><Text style={[styles.resendText, !canResend && styles.resendTextDisabled, resent && { color: palette.green }]}>{resendLabel}</Text></Pressable></View>
     </>}
   </Animated.View>;
 }
@@ -297,6 +249,6 @@ const styles = StyleSheet.create({
   floatingChannel: { position: 'absolute', width: 42, height: 42, borderRadius: 13, alignItems: 'center', justifyContent: 'center', shadowColor: '#000000', shadowOpacity: .35, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 4 }, floatingLeft: { left: '13%', bottom: 63 }, floatingShield: { position: 'absolute', right: '11%', top: 61 },
   message: { minHeight: 92, alignItems: 'center', justifyContent: 'center' }, cardTitle: { color: palette.fg, fontFamily: font.extraBold, fontSize: 20, letterSpacing: -.45, textAlign: 'center' }, cardDescription: { maxWidth: 285, marginTop: 10, color: palette.muted, fontFamily: font.regular, fontSize: 10, lineHeight: 16, textAlign: 'center' },
   codeRow: { width: '100%', marginTop: 15, flexDirection: 'row', gap: 10 }, codeInput: { width: '100%', height: 58, borderWidth: 1, borderColor: palette.fieldLine, borderRadius: 14, backgroundColor: palette.field, color: palette.fg, fontFamily: font.extraBold, fontSize: 21, textAlign: 'center' }, codeInputActive: { shadowColor: palette.active, shadowOpacity: .55, shadowRadius: 10, shadowOffset: { width: 0, height: 0 }, elevation: 5 },
-  resendRow: { minHeight: 52, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', gap: 8 }, resendQuestion: { color: palette.faint, fontFamily: font.medium, fontSize: 9 }, resendText: { color: palette.fg, fontFamily: font.bold, fontSize: 10 }, successLoader: { height: 100, alignItems: 'center', justifyContent: 'center', gap: 7 }, finalTick: { width: 52, height: 52, borderRadius: 26, backgroundColor: palette.green, alignItems: 'center', justifyContent: 'center', shadowColor: palette.green, shadowOpacity: .48, shadowRadius: 14, shadowOffset: { width: 0, height: 0 }, elevation: 6 }, successStatus: { color: palette.green, fontFamily: font.bold, fontSize: 8, letterSpacing: .45 },
+  resendRow: { minHeight: 52, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', gap: 8 }, resendQuestion: { color: palette.faint, fontFamily: font.medium, fontSize: 9 }, resendText: { color: palette.fg, fontFamily: font.bold, fontSize: 10 }, resendTextDisabled: { color: palette.faint }, successLoader: { height: 100, alignItems: 'center', justifyContent: 'center', gap: 7 }, finalTick: { width: 52, height: 52, borderRadius: 26, backgroundColor: palette.green, alignItems: 'center', justifyContent: 'center', shadowColor: palette.green, shadowOpacity: .48, shadowRadius: 14, shadowOffset: { width: 0, height: 0 }, elevation: 6 }, successStatus: { color: palette.green, fontFamily: font.bold, fontSize: 8, letterSpacing: .45 },
   progressDots: { width: 90, height: 20, alignSelf: 'center', flexDirection: 'row', alignItems: 'center' }, progressDot: { width: 7, height: 7, borderRadius: 4 }, progressLine: { flex: 1, height: 1, marginHorizontal: 7 }, verificationError: { maxWidth: 330, alignSelf: 'center', marginBottom: 6, color: '#FF7A80', fontFamily: font.semibold, fontSize: 9, lineHeight: 14, textAlign: 'center' }, demoHint: { color: palette.faint, fontFamily: font.medium, fontSize: 7.5, textAlign: 'center' }, pressed: { opacity: .68, transform: [{ scale: .98 }] },
 });

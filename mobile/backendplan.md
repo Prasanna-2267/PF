@@ -1,5 +1,31 @@
 # Parallax Flow Mobile Backend Plan
 
+## Authoritative first-class Question Bank architecture — 2026-08-30
+
+This section is the latest approved model and supersedes every conflicting statement below that describes a Question Bank only as a PDF/package or says that all Practice questions are universally free.
+
+- A **Question Bank** is a first-class product/container. It is not an Excel file, a single Question, or a Content File.
+- **Excel** is only an Admin import mechanism. Normal-MCQ and Case-MCQ workbooks are validated server-side and committed atomically into normalized Question records.
+- A **Question** is an individual normalized record with one optional direct `questionBankId` owner. A Question belongs to at most one Question Bank. Reusing the same wording in another bank requires a separate Question record. The independent many-to-many `QuestionContentLink` relationship is retained for file/access context.
+- A **Content File** provides taxonomy and access-control context. Multiple linked files use OR access semantics; the learner must currently be authorized for at least one linked file.
+- A **Purchase** is the website commerce transaction. Mobile never performs checkout.
+- An **Entitlement** is the server-side access grant produced by a verified purchase or an authorized grant. Paid Question Banks require the exact active package/content entitlement; free published banks remain available within the learner's selected course.
+- Admin, Super Admin and Academy Admin create, import, publish, archive and inspect Question Banks within their RBAC and tenant scope. Student Practice only returns published, course-matching and currently authorized banks/questions.
+- Practice sessions persist the selected `questionBankId`, question snapshot, timer/deadline, attempts, review state and result. Incorrect attempts feed weak-area analytics and study-plan signals; concept names remain private from learner question payloads.
+- Implemented additively in Prisma migrations `20260830153000_add_first_class_question_banks` and `20260830193000_enforce_single_question_bank_ownership`; no destructive database operation is permitted.
+
+## Finalized Practice Studio correction — 2026-08-29
+
+This section supersedes the 26 August Practice correction and every conflicting Practice/Question Bank/Solve & Earn statement below.
+
+- Practice has exactly four modes: MCQ, Case Study, Question Bank and Wrong Answers. There is no Solve & Earn or descriptive grading workflow.
+- Regular MCQ/Case Study records are Admin-authored, published and linked to course files; any currently accessible linked file unlocks the question.
+- Question Bank practice uses Admin-authored `QUESTION_BANK` questions linked to paid files and requires an active direct-content or package entitlement. Nested package folders expand to their published descendants. Course-only entitlement does not unlock a bank.
+- Wrong Answers comes from persisted incorrect attempts and is filtered again through current course, tenant, publication and entitlement access.
+- Question selection/count, timer/deadline, evaluation, retry/explanation policy, navigator state, attempts and results are server-authoritative.
+- Implemented Student endpoints: `/student/practice/modes`, `/search`, `/question-banks`, `/filters`, `/sets/preview`, `/sessions`, `/sessions/resume`, `/sessions/{id}`, `/sessions/{id}/questions`, attempt/review/complete, `/sessions/{id}/result`, `/wrong-answers`, and `/tracker`.
+- Additive migration: `20260829230000_add_complete_practice_modes`. Shared DB was updated only through `prisma migrate deploy`.
+
 ## Authoritative product correction — 2026-08-26
 
 This correction supersedes older references in this document to Question Bank Practice sources or Solve & Earn:
@@ -570,12 +596,15 @@ Recommended first schedule is configurable spaced return stages (for example 1, 
 
 | Method | Endpoint | Access | Purpose |
 | --- | --- | --- | --- |
-| GET | `/api/student/reports/monthly` | Paid | Live current-month report plus immutable completed-month archive, newest first |
-| GET | `/api/student/reports/monthly/{yearMonth}` | Paid | Live current month or immutable completed snapshot with weekly study bars, activity breakdown, goal/streak days, notes, revisions, plan tasks and syllabus progress |
+| GET | `/api/student/reports/monthly` | Authenticated | Returns the exact Monthly Report product/lock state and the entitled learner's completed-month archive |
+| GET | `/api/student/reports/monthly/{yearMonth}` | Purchased | Returns learner-owned report metadata and generation state for one completed `YYYY-MM` period |
+| POST | `/api/student/reports/monthly/{yearMonth}/generate` | Purchased | Idempotently queues generation or controlled regeneration for one completed learner-local month |
+| POST | `/api/student/reports/monthly/{reportId}/viewer-sessions` | Purchased owner | Creates a short-lived protected viewer capability for a READY report |
+| DELETE | `/api/student/reports/monthly/viewer-sessions/{viewerSessionId}` | Session owner | Closes the report viewer capability and invalidates further use |
 
-Subject drill-down and Practice-derived questions, accuracy and weak concepts are deferred until their underlying data contracts are resumed and verified.
+Monthly Report is a dedicated ₹99 paid Store content product for each active course. It uses the existing website checkout, fake-payment test transition, Order, Payment and exact ContentItem Entitlement flow. Purchase schedules completed months idempotently; the phone never grants access or selects a price. Reports aggregate real persisted practice attempts, question difficulty/taxonomy, MTP sessions, learner activity, streak history, note progress, revisions and study-plan completion using the learner timezone and exact month boundaries. Missing history produces explicit insufficient/no-comparison states; rank is never fabricated.
 
-Generate one snapshot after each learner-local month closes. Do not rebuild old reports from mutable live aggregates on every request. Plan expiry blocks access to the archive but does not delete snapshots; restored Paid access reveals them again according to product policy.
+The authoritative PDF is generated server-side as a deterministic professional 10-section report, stored through the existing private object-storage abstraction and represented in PostgreSQL by metadata, source snapshot/hash, checksum, byte size, version and generation status. Opening does not recalculate lifetime history. Raw storage keys and credentials are never returned. Viewer creation rechecks authenticated ownership and the exact active Monthly Report entitlement, then serves only short-lived ticketed PDF content. Student A cannot open Student B's report.
 
 ## 17. Admin mobile API
 
@@ -869,7 +898,7 @@ Errors should include safe remediation data such as `purchaseResourceId`, `recov
 | Practice tracker | `/me/practice/*`, Paid weak concepts |
 | Tracker | tracker summary/consistency/calendar/activity plus shared focus/streak endpoints |
 | Revision tracker | `/me/revisions/*` |
-| Monthly reports | `/me/reports/monthly*` |
+| Monthly reports | `/api/student/reports/monthly*` including protected viewer sessions |
 | Admin overview | `/admin/dashboard`, Admin analytics |
 | Admin students/detail | `/admin/students*`, access grants, learner orders/activity |
 | Admin orders/receipt | `/admin/orders*` |
@@ -903,6 +932,22 @@ The backend is not complete merely when endpoints return demo-shaped JSON. It is
 
 This file is the canonical backend implementation plan for the current `mobile/` application. Any future mobile UI feature must update this document with its endpoint, data ownership, entitlement rule, background work, security rule, and acceptance test before backend implementation.
 
+## 30. Production governance, device and question-system checkpoint
+
+The shared backend now implements the production contracts requested by the Student governance and question-system audit:
+
+- Super Admin may view, enable, disable, permanently remove or approve a one-use device change for any Student. Academy Admin receives the same Student-only controls, constrained to the authenticated Academy tenant.
+- Student deletion removes identity and learning data while retaining only anonymised financial and audit records required for integrity. Disablement preserves data and revokes access.
+- Mobile authentication supplies a securely persisted installation identifier and secret. The server stores only hashes, enforces one bound device, versions bindings, invalidates stale sessions and consumes expiring reset approvals transactionally.
+- Normal and Case MCQs persist Exam, Chapter Name and private Concept Name, support two to four options, many-to-many linked content, atomic server-validated Excel import and the finalized Correct Explanation columns.
+- Student question access uses server-side OR entitlement rules. Accessible free Question Bank files remain usable whether standalone or packaged; paid Question Bank files require the exact active content entitlement. Concept names are never returned in Student question payloads.
+- Persisted attempts drive real performance summaries, weak-concept signals and deduplicated generated study-plan work. Wrong Answers is a projection of incorrect attempts, not a separate uncontrolled question store.
+- Academy announcements and contact submissions now have supported, escaped SMTP templates using the shared Parallax Flow / NeuralWeb Labs transactional branding.
+
+Database migration `20260830230000_add_device_binding_and_question_classification` is additive and deployed. The configured PostgreSQL database reports 38 recognized migrations and no pending migration. The database was not reset, truncated or destructively seeded.
+
+Verification: backend TypeScript and production build pass; Prisma validates and generates; 73 backend tests pass; website TypeScript and 134 tests pass with one intentional skip; mobile TypeScript and Expo lint pass. The guarded write-heavy integration suites remain opt-in and must only run against their matching disposable test database flags.
+
 ## 29. Implemented test commerce contract
 
 The website-only test purchase flow uses the shared backend and shared PostgreSQL source of truth:
@@ -930,12 +975,13 @@ The Admin team's existing platform Broadcast Create, Schedule and Publish UI/API
 
 ## Batch 12 implementation checkpoint — Paid monthly reports
 
-Implemented in the shared backend as additive Student-only functionality. No Admin route, Admin service, Admin UI, or existing Admin contract was changed.
+Superseded by the production paid-product pipeline implemented on 2026-08-30. The report is no longer unlocked by any generic paid entitlement: access requires the exact course Monthly Report ContentItem entitlement created by the normal Store order/payment flow.
 
-- Added an immutable `LearnerMonthlyReport` snapshot per learner and calendar month, with learner timezone, selected-course snapshot, weekly study totals, focus/reading/practice/revision time, active and goal days, streak/protected days, notes completed, revision events, completed study-plan tasks, and syllabus completion.
-- The current learner month is computed live and is never frozen. Completed Paid months are created idempotently and existing snapshots are never updated.
-- Report access follows the existing mobile plan rule: at least one currently active, non-expired entitlement is required. Requests before the learner's first entitlement month and future months are rejected.
-- Practice question count, accuracy, and weak-area metrics are deliberately unavailable while Practice development is paused. Persisted practice time remains part of total study time so recorded activity is not discarded.
-- Added `GET /api/student/reports/monthly` and `GET /api/student/reports/monthly/:yearMonth`.
-- Real authenticated mobile users consume the new API. Named demo accounts retain isolated report fixtures, and Free users retain the Paid lock presentation.
-- Added migration `20260827090000_add_paid_monthly_reports`. It has not been applied to the shared database.
+- `LearnerMonthlyReport` now tracks product, entitlement and order provenance, generation status, immutable aggregate snapshot, source hash, private storage key, SHA-256 checksum, byte size, version and controlled failure state.
+- `MonthlyReportViewerSession` provides learner/session-bound, expiring report capabilities.
+- `ContentEntityType.MONTHLY_REPORT` and `LearningResourceType.MONTHLY_REPORT` distinguish the product from Notes, Packages and Library resources.
+- Migration `20260830190000_add_monthly_report_product_pipeline` was applied with `prisma migrate deploy`; the shared local database reports all 37 migrations applied. No reset, drop, truncate or destructive seed was used.
+- Existing active courses were seeded with one active ₹99 paid Monthly Report product; newly created active courses receive the same product through the course service.
+- The generated PDF contains the finalized ten sections: Overall Summary, MCQ Performance Trend, Accuracy Trend, Subject-wise Performance, Concept Completion, Strengths/Weak Areas, Practice Distribution, Study Consistency, Test Performance and Overall Progress.
+- Mobile exposes locked/purchase-on-website and owned archive states, generation polling/retry, and the existing protected continuous-scroll/pinch-zoom PDF reader with fresh-session retry.
+- Real shared-database integration verifies lock → checkout → fake paid confirmation → exact entitlement → generation/storage → authorized viewer, and rejects a second learner. Unit, type, lint and production build verification is recorded in root `plan.md`.

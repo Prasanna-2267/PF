@@ -1,38 +1,73 @@
 import { api } from '@/lib/api';
+import { API_BASE_URL } from '@/lib/env';
 
-export type MonthlyReport = {
-  id: string | null;
+export type MonthlyReportStatus = 'PENDING' | 'GENERATING' | 'READY' | 'FAILED';
+
+export type MonthlyReportProduct = {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  currency: 'INR';
+  storePath: string;
+};
+
+export type MonthlyReportItem = {
+  id: string;
   yearMonth: string;
-  state: 'LIVE' | 'FROZEN';
-  timezone: string;
-  course: { id: string; code: string; name: string };
-  study: {
-    totalSeconds: number;
-    focusSeconds: number;
-    readingSeconds: number;
-    practiceSeconds: number;
-    revisionSeconds: number;
-    weeklySeconds: number[];
-    activeDays: number;
-    goalDays: number;
-  };
-  streak: { qualifiedDays: number; protectedDays: number };
-  learning: {
-    notesCompleted: number;
-    revisionsCompleted: number;
-    studyTasksCompleted: number;
-    totalNotes: number;
-    syllabusCompleted: number;
-    syllabusPercent: number;
-  };
-  capabilities: { practiceAnalytics: false; practiceAnalyticsReason: 'PRACTICE_BACKEND_PAUSED' };
+  label: string;
+  status: MonthlyReportStatus;
+  scheduledFor: string;
+  isScheduled: boolean;
   generatedAt: string | null;
+  updatedAt: string;
+  version: number;
+  failureCode: string | null;
+  sizeBytes: number | null;
+  canView: boolean;
+};
+
+export type MonthlyReportArchive = {
+  access: {
+    owned: boolean;
+    entitlementId?: string;
+    grantedAt?: string;
+    expiresAt?: string | null;
+    product: MonthlyReportProduct;
+  };
+  items: MonthlyReportItem[];
+  serverTime: string;
+};
+
+export type MonthlyReportViewerSession = {
+  viewerSessionId: string;
+  status: 'allowed';
+  expiresAt: string;
+  contentUrl: string;
+  report: { id: string; title: string; mimeType: 'application/pdf' };
 };
 
 export async function listMonthlyReports() {
-  return (await api.get<{ items: MonthlyReport[]; serverTime: string }>('/student/reports/monthly')).data;
+  return (await api.get<MonthlyReportArchive>('/student/reports/monthly')).data;
 }
 
 export async function getMonthlyReport(yearMonth: string) {
-  return (await api.get<MonthlyReport>(`/student/reports/monthly/${yearMonth}`)).data;
+  return (await api.get<MonthlyReportItem & { course: { id: string; code: string; name: string }; hasSnapshot: boolean }>(`/student/reports/monthly/${yearMonth}`)).data;
+}
+
+export async function generateMonthlyReport(yearMonth: string) {
+  return (await api.post<MonthlyReportItem & { queued?: boolean }>(`/student/reports/monthly/${yearMonth}/generate`)).data;
+}
+
+export async function createMonthlyReportViewerSession(reportId: string) {
+  return (await api.post<MonthlyReportViewerSession>(`/student/reports/monthly/${reportId}/viewer-sessions`)).data;
+}
+
+export async function closeMonthlyReportViewerSession(viewerSessionId: string) {
+  await api.delete(`/student/reports/monthly/viewer-sessions/${viewerSessionId}`);
+}
+
+export function monthlyReportContentSource(contentUrl: string) {
+  const apiOrigin = API_BASE_URL.replace(/\/api\/?$/, '');
+  return { uri: `${apiOrigin}${contentUrl}` };
 }

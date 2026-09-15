@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowRight, Building2, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, GraduationCap } from 'lucide-react-native';
+import { ArrowRight, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, GraduationCap } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { font, spacing } from '@/constants/theme';
@@ -59,13 +59,13 @@ export function LearnerOnboardingModal({ visible, onComplete }: LearnerOnboardin
   const [selectedDay, setSelectedDay] = useState(1);
   const [exactDaySelected, setExactDaySelected] = useState(false);
   const [showYearPicker, setShowYearPicker] = useState(false);
-  const [academyId, setAcademyId] = useState('');
   const [dailyTargetMinutes, setDailyTargetMinutes] = useState(120);
+  const [customTargetHours, setCustomTargetHours] = useState('');
+  const [customTargetMinutes, setCustomTargetMinutes] = useState('');
   const [serverCourses, setServerCourses] = useState<PreferenceCourse[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [requestError, setRequestError] = useState('');
   const [submitted, setSubmitted] = useState(false);
-  const [focusedInput, setFocusedInput] = useState<'academy' | null>(null);
 
   const hasServerSession = Boolean(accessToken && !accessToken.startsWith('ui-only-'));
   const loadingCourses = hasServerSession && serverCourses === null;
@@ -82,6 +82,15 @@ export function LearnerOnboardingModal({ visible, onComplete }: LearnerOnboardin
   const canMoveBack = calendarYear > today.getFullYear() || calendarMonth > today.getMonth();
   const canMoveForward = calendarYear < years[years.length - 1]! || calendarMonth < 11;
   const ready = Boolean(course);
+
+  const applyCustomTarget = () => {
+    const hours = customTargetHours.trim() ? Number(customTargetHours) : 0;
+    const minutes = customTargetMinutes.trim() ? Number(customTargetMinutes) : 0;
+    if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours < 0 || minutes < 0 || minutes > 59) { setRequestError('Enter whole hours and 0 to 59 minutes.'); return; }
+    const total = hours * 60 + minutes;
+    if (total < 15 || total > 720) { setRequestError('Daily study time must be between 15 minutes and 12 hours.'); return; }
+    setDailyTargetMinutes(total); setRequestError('');
+  };
 
   const moveMonth = (direction: -1 | 1) => {
     if ((direction === -1 && !canMoveBack) || (direction === 1 && !canMoveForward)) return;
@@ -116,7 +125,6 @@ export function LearnerOnboardingModal({ visible, onComplete }: LearnerOnboardin
           examMonth: calendarMonth + 1,
           examYear: calendarYear,
           ...(exactDaySelected ? { examDay: selectedDay } : {}),
-          academyReference: academyId.trim() || undefined,
           dailyTargetMinutes,
           timezone: savedProfile.timezone.trim() || deviceTimezone(),
           language: savedProfile.language.trim() || 'English',
@@ -130,7 +138,6 @@ export function LearnerOnboardingModal({ visible, onComplete }: LearnerOnboardin
           examName: course.name,
           category: course.code,
           examDate,
-          academyId: academyId.trim(),
           dailyTarget: dailyTargetMinutes % 60 === 0 ? `${dailyTargetMinutes / 60} ${dailyTargetMinutes === 60 ? 'hour' : 'hours'}` : `${Math.floor(dailyTargetMinutes / 60)}h ${dailyTargetMinutes % 60}m`,
         });
         if (user) setUser({ ...user, activeStageId: course.id });
@@ -207,8 +214,9 @@ export function LearnerOnboardingModal({ visible, onComplete }: LearnerOnboardin
                     const selected = calendarYear === entry;
                     return <Pressable key={entry} accessibilityRole="radio" accessibilityState={{ selected }} onPress={() => {
                       setCalendarYear(entry);
-                      setSelectedDay(1);
-                      setExactDaySelected(false);
+                      const currentMonth = entry === today.getFullYear() && calendarMonth === today.getMonth();
+                      setSelectedDay(currentMonth ? today.getDate() : 1);
+                      setExactDaySelected(currentMonth && today.getDate() > 1);
                       setShowYearPicker(false);
                       setRequestError('');
                     }} style={[styles.calendarYearChoice, selected && styles.calendarYearSelected]}>
@@ -242,17 +250,11 @@ export function LearnerOnboardingModal({ visible, onComplete }: LearnerOnboardin
                 <View style={styles.targetRail}>{[60, 90, 120, 180].map((minutes) => {
                   const selected = dailyTargetMinutes === minutes;
                   const targetLabel = minutes % 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : `${minutes / 60}h`;
-                  return <Pressable key={minutes} accessibilityRole="radio" accessibilityState={{ selected }} onPress={() => setDailyTargetMinutes(minutes)} style={[styles.targetChoice, selected && styles.choiceSelected]}><Clock3 size={14} color={selected ? palette.gold : palette.faint} /><Text style={[styles.yearText, selected && styles.choiceTextSelected]}>{targetLabel}</Text></Pressable>;
+                  return <Pressable key={minutes} accessibilityRole="radio" accessibilityState={{ selected }} onPress={() => { setDailyTargetMinutes(minutes); setCustomTargetHours(''); setCustomTargetMinutes(''); setRequestError(''); }} style={[styles.targetChoice, selected && styles.choiceSelected]}><Clock3 size={14} color={selected ? palette.gold : palette.faint} /><Text style={[styles.yearText, selected && styles.choiceTextSelected]}>{targetLabel}</Text></Pressable>;
                 })}</View>
+                <View style={styles.customTargetBlock}><View style={styles.customTargetHeading}><Text style={styles.customTargetLabel}>CUSTOM STUDY TIME</Text><Text style={styles.customTargetSelected}>Selected · {Math.floor(dailyTargetMinutes / 60) ? `${Math.floor(dailyTargetMinutes / 60)}h ` : ''}{dailyTargetMinutes % 60 ? `${dailyTargetMinutes % 60}m` : ''}</Text></View><View style={styles.customTargetRow}><TextInput accessibilityLabel="Custom daily study hours" keyboardType="number-pad" value={customTargetHours} onChangeText={setCustomTargetHours} onSubmitEditing={applyCustomTarget} placeholder="Hours" placeholderTextColor={palette.faint} style={styles.customTargetInput} /><TextInput accessibilityLabel="Custom daily study minutes" keyboardType="number-pad" value={customTargetMinutes} onChangeText={setCustomTargetMinutes} onSubmitEditing={applyCustomTarget} placeholder="Minutes" placeholderTextColor={palette.faint} style={styles.customTargetInput} /><Pressable accessibilityRole="button" onPress={applyCustomTarget} style={styles.customTargetButton}><Text style={styles.customTargetButtonText}>Set</Text></Pressable></View></View>
               </View>
 
-              <View style={styles.section}>
-                <View style={styles.sectionHeading}><Text style={styles.sectionNumber}>04</Text><View><Text style={styles.label}>Academy ID</Text><Text style={styles.labelHint}>Optional · only if your institute provided one</Text></View></View>
-                <View style={[styles.inputShell, focusedInput === 'academy' && styles.inputFocused]}>
-                  <Building2 size={17} color={focusedInput === 'academy' ? palette.gold : palette.faint} />
-                  <View style={styles.inputCopy}><Text style={styles.inputLabel}>ACADEMY OR INSTITUTE CODE</Text><TextInput value={academyId} onChangeText={setAcademyId} onFocus={() => setFocusedInput('academy')} onBlur={() => setFocusedInput(null)} placeholder="Enter your academy ID" placeholderTextColor={palette.faint} autoCapitalize="characters" returnKeyType="done" style={styles.input} /></View>
-                </View>
-              </View>
             </ScrollView>
 
             <View style={styles.actions}>
@@ -290,7 +292,7 @@ const styles = StyleSheet.create({
   calendarYearGrid: { marginTop: 14, flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, calendarYearChoice: { flexGrow: 1, flexBasis: '46%', minHeight: 44, borderRadius: 13, borderWidth: 1, borderColor: palette.line, backgroundColor: '#101217', alignItems: 'center', justifyContent: 'center' }, calendarYearSelected: { borderColor: palette.gold, backgroundColor: '#231A0D' }, calendarYearText: { color: palette.muted, fontFamily: font.bold, fontSize: 11 }, calendarYearTextSelected: { color: palette.gold },
   selectedDateRow: { minHeight: 56, marginTop: 12, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 12, flexDirection: 'row', alignItems: 'center', gap: 10 }, selectedDateIcon: { width: 30, height: 30, borderRadius: 10, backgroundColor: palette.gold, alignItems: 'center', justifyContent: 'center' }, selectedDateCopy: { flex: 1 }, selectedDateLabel: { color: palette.faint, fontFamily: font.bold, fontSize: 7, letterSpacing: 0.9 }, selectedDateValue: { marginTop: 2, color: palette.text, fontFamily: font.extraBold, fontSize: 12 }, selectedDateMeta: { color: palette.gold, fontFamily: font.bold, fontSize: 8 },
   yearText: { color: palette.muted, fontFamily: font.bold, fontSize: 9 }, choiceSelected: { borderColor: palette.gold, backgroundColor: '#231A0D' }, choiceTextSelected: { color: palette.gold },
-  targetRail: { marginTop: 11, flexDirection: 'row', flexWrap: 'wrap', gap: 7 }, targetChoice: { flexGrow: 1, minWidth: 74, minHeight: 40, paddingHorizontal: 11, borderWidth: 1, borderColor: palette.line, borderRadius: 12, backgroundColor: palette.panel, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  inputShell: { minHeight: 53, marginTop: 11, paddingHorizontal: 12, borderWidth: 1, borderColor: palette.line, borderRadius: 14, backgroundColor: palette.panel, flexDirection: 'row', alignItems: 'center', gap: 10 }, inputFocused: { borderColor: palette.gold, backgroundColor: palette.panelRaised }, inputError: { borderColor: palette.danger }, inputCopy: { flex: 1, minWidth: 0, paddingVertical: 7 }, inputLabel: { color: palette.faint, fontFamily: font.bold, fontSize: 7, letterSpacing: 0.75 }, input: { minHeight: 29, paddingVertical: 0, color: palette.text, fontFamily: font.semibold, fontSize: 11 }, error: { marginTop: 6, color: palette.danger, fontFamily: font.semibold, fontSize: 9 },
+  targetRail: { marginTop: 11, flexDirection: 'row', flexWrap: 'wrap', gap: 7 }, targetChoice: { flexGrow: 1, minWidth: 74, minHeight: 40, paddingHorizontal: 11, borderWidth: 1, borderColor: palette.line, borderRadius: 12, backgroundColor: palette.panel, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }, customTargetBlock: { marginTop: 10, gap: 6 }, customTargetHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }, customTargetLabel: { color: palette.faint, fontFamily: font.bold, fontSize: 7, letterSpacing: 1 }, customTargetSelected: { color: palette.gold, fontFamily: font.bold, fontSize: 8 }, customTargetRow: { flexDirection: 'row', alignItems: 'center', gap: 7 }, customTargetInput: { flex: 1, minWidth: 0, height: 42, borderWidth: 1, borderColor: palette.line, borderRadius: 12, backgroundColor: palette.panel, color: palette.text, paddingHorizontal: 11, fontFamily: font.medium, fontSize: 10 }, customTargetButton: { height: 42, borderRadius: 12, backgroundColor: palette.gold, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' }, customTargetButtonText: { color: '#17120B', fontFamily: font.extraBold, fontSize: 10 },
+  error: { marginTop: 6, color: palette.danger, fontFamily: font.semibold, fontSize: 9 },
   actions: { paddingHorizontal: spacing.lg, paddingTop: 10, paddingBottom: 14, borderTopWidth: 1, borderTopColor: palette.line, backgroundColor: 'rgba(6,7,10,0.96)' }, requestError: { marginBottom: 8, color: palette.danger, fontFamily: font.semibold, fontSize: 9, lineHeight: 13, textAlign: 'center' }, finishShell: { borderRadius: 15, shadowColor: '#FF9A3D', shadowOpacity: 0.2, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 5 }, finish: { minHeight: 52, borderRadius: 15, paddingLeft: 17, paddingRight: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, finishText: { color: '#17120B', fontFamily: font.extraBold, fontSize: 13 }, arrowWell: { width: 38, height: 38, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.35)', alignItems: 'center', justifyContent: 'center' }, disabled: { opacity: 0.55 }, pressed: { opacity: 0.8, transform: [{ scale: 0.99 }] },
 });

@@ -8,13 +8,14 @@ import { font, themes } from '@/constants/theme';
 import { findLesson } from '@/lib/demo-catalog';
 import { getAuthErrorMessage } from '@/lib/auth-session';
 import { useAuthStore } from '@/lib/auth-store';
-import { closeNoteViewerSession, createNoteViewerSession, heartbeatNoteViewerSession, loadNoteViewerManifest, protectedContentSource, updateNoteViewerProgress, type NoteViewerSession } from '@/lib/note-viewer-api';
+import { closeNoteViewerSession, createNoteViewerSession, heartbeatNoteViewerSession, loadNoteViewerManifest, protectedContentSource, updateNoteViewerProgress, type ContentAttachedLink, type NoteViewerSession } from '@/lib/note-viewer-api';
 import { ProtectedPdfReader } from '@/components/protected-pdf-reader';
 import { ProtectedImageReader } from '@/components/protected-image-reader';
 import { ProtectedFileReader } from '@/components/protected-file-reader';
 import { useAppTheme } from '@/providers/app-providers';
 import { queryClient } from '@/lib/query-client';
 import { noteKeys } from '@/lib/student-content-api';
+import { ContentAttachedLinks } from '@/components/content-attached-links';
 
 const captureProtectionKey = 'protected-lesson';
 const allowDemoScreenShare = process.env.EXPO_PUBLIC_ALLOW_SCREEN_CAPTURE === 'true';
@@ -38,10 +39,12 @@ export default function LessonScreen() {
   const [pages, setPages] = useState(5);
   const [readerError, setReaderError] = useState<{ routeId: string; message: string } | null>(null);
   const [viewerState, setViewerState] = useState<{ routeId: string; session?: NoteViewerSession; error?: string } | null>(null);
+  const [attachedLinkState, setAttachedLinkState] = useState<{ routeId: string; links: ContentAttachedLink[] } | null>(null);
   const routeId = Array.isArray(id) ? id[0] : id;
   const hasServerSession = Boolean(accessToken && !accessToken.startsWith('ui-only-'));
   const shouldOpenProtectedViewer = Boolean(hasServerSession && routeId && uuidPattern.test(routeId));
   const viewerSession = viewerState?.routeId === routeId ? viewerState.session ?? null : null;
+  const attachedLinks = attachedLinkState?.routeId === routeId ? attachedLinkState.links : [];
   const error = readerError?.routeId === routeId ? readerError.message : viewerState?.routeId === routeId ? viewerState.error ?? null : null;
   const opening = shouldOpenProtectedViewer && viewerState?.routeId !== routeId;
   const viewerSource = viewerSession ? protectedContentSource(viewerSession.contentUrl) : undefined;
@@ -75,6 +78,7 @@ export default function LessonScreen() {
         const manifest = await loadNoteViewerManifest(created.viewerSessionId);
         if (!active) { await closeNoteViewerSession(created.viewerSessionId).catch(() => undefined); return; }
         if (manifest.pageCount) setPages(manifest.pageCount);
+        setAttachedLinkState({ routeId, links: manifest.attachedLinks ?? [] });
         setViewerState({ routeId, session: created });
         heartbeat = setInterval(() => { void heartbeatNoteViewerSession(created.viewerSessionId).catch(() => undefined); }, 5 * 60_000);
       })
@@ -119,6 +123,7 @@ export default function LessonScreen() {
       <PdfWatermarks email={email} />
       {error ? <View style={[styles.error, { backgroundColor: theme.canvas }]}><Text style={[styles.errorTitle, { color: theme.fg }]}>Unable to open this note</Text><Text style={[styles.errorCopy, { color: theme.muted }]}>{error}</Text></View> : null}
     </View>
+    <ContentAttachedLinks links={attachedLinks} />
   </SafeAreaView>;
 }
 

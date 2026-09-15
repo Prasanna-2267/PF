@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { GlassView } from 'expo-glass-effect';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
 import { BookOpen, ChartLine, CircleDot, House, Library } from 'lucide-react-native';
 import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions, type GestureResponderEvent, type LayoutChangeEvent, type ViewStyle } from 'react-native';
 
@@ -37,10 +36,8 @@ export function LiquidTabBar({ state, navigation }: LiquidTabBarProps) {
   const { theme } = useAppTheme();
   const { width: viewportWidth } = useWindowDimensions();
   const dark = theme.canvas === themes.dark.canvas;
-  const router = useRouter();
-  const name = useAuthStore((store) => store.user?.name ?? 'Parallax User');
-  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
-  const visibleRoutes = state.routes.filter((route) => route.name in icons);
+  const academyStudent = useAuthStore((store) => Boolean(store.user?.academyId));
+  const visibleRoutes = state.routes.filter((route) => route.name in icons && (!academyStudent || route.name !== 'library'));
   const activeName = (state.routes[state.index]?.name in icons ? state.routes[state.index].name : 'home') as TabName;
   const activeIndex = Math.max(0, visibleRoutes.findIndex((route) => route.name === activeName));
   const [previewIndex, setPreviewIndex] = useState(activeIndex);
@@ -57,7 +54,7 @@ export function LiquidTabBar({ state, navigation }: LiquidTabBarProps) {
   const livePosition = useRef(activeIndex);
   const dragOrigin = useRef(activeIndex);
   const dragStartX = useRef(0);
-  const totalItems = visibleRoutes.length + 1;
+  const totalItems = visibleRoutes.length;
   const cellWidth = railWidth > railPadding * 2 ? (railWidth - railPadding * 2) / totalItems : 0;
   const appWidth = Math.min(viewportWidth, layout.studentAppMaxWidth);
   const responsiveRailWidth = Math.max(0, Math.min(appWidth - 28, layout.studentNavMaxWidth));
@@ -163,7 +160,6 @@ export function LiquidTabBar({ state, navigation }: LiquidTabBarProps) {
             {focused ? <View style={styles.activeAnchor}><Text numberOfLines={1} style={[styles.activeLabel, { color: accent.light }]}>{labels[routeName]}</Text></View> : <View style={styles.inactiveIcon}><Icon size={19} color={theme.muted} strokeWidth={1.8} /></View>}
           </Pressable>;
         })}
-        <Pressable accessibilityRole="button" accessibilityLabel="Open profile" onPress={() => router.push('/account')} style={({ pressed }) => [styles.item, pressed && styles.pressed]}><View style={[styles.profileMark, { borderColor: theme.lineStrong }]}><Text style={[styles.profileInitials, { color: theme.muted }]}>{initials}</Text></View></Pressable>
       </View>
     </View>
 
@@ -184,7 +180,5 @@ const styles = StyleSheet.create({
   activeOrbFill: { flex: 1, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
   activeGlow: { position: 'absolute', top: 32, width: glowWidth, height: 28, borderRadius: 31, zIndex: 0 },
   motionTrail: { position: 'absolute', top: 13, width: orbSize + 16, height: orbSize - 8, borderRadius: orbSize / 2, zIndex: 2 },
-  profileMark: { width: 31, height: 31, borderRadius: 16, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  profileInitials: { fontFamily: font.bold, fontSize: 8 },
   pressed: { opacity: .72, transform: [{ scale: .94 }] },
 });

@@ -11,6 +11,7 @@ import { practiceSubjects } from '@/lib/demo-practice';
 import { usePracticeProgressStore } from '@/lib/practice-progress-store';
 import { isDemoSession } from '@/lib/student-session';
 import { RemotePracticeScreen } from '@/components/remote-practice';
+import { ProfileShortcut } from '@/components/profile-shortcut';
 import { useAppTheme } from '@/providers/app-providers';
 
 type PracticeMode = 'mcq' | 'written' | 'case-study';
@@ -98,7 +99,7 @@ function DemoPracticeScreen() {
   };
 
   return <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safe, { backgroundColor: theme.canvas }]}><ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-    <View style={styles.practiceHeading}><View style={styles.practiceHeadingCopy}><View style={styles.eyebrowRow}><Text style={[styles.eyebrow, { color: theme.primary }]}>FOCUSED PRACTICE</Text><View style={[styles.planPill, { backgroundColor: paid ? theme.goldSoft : theme.sunken }]}>{paid ? <Crown size={10} color={theme.goldStrong} /> : null}<Text style={[styles.planText, { color: paid ? theme.goldStrong : theme.muted }]}>{paid ? 'PAID' : 'FREE'}</Text></View></View><Text style={[styles.title, { color: theme.fg }]}>Practice</Text><Text style={[styles.description, { color: theme.muted }]}>Every published question for your selected course is free. Refine the set by subject, chapter, year and answer format.</Text></View><PracticeTrackerShortcut onPress={() => router.push('/practice-tracker' as never)} /></View>
+    <View style={styles.practiceHeading}><View style={styles.practiceHeadingCopy}><View style={styles.eyebrowRow}><Text style={[styles.eyebrow, { color: theme.primary }]}>FOCUSED PRACTICE</Text><View style={[styles.planPill, { backgroundColor: paid ? theme.goldSoft : theme.sunken }]}>{paid ? <Crown size={10} color={theme.goldStrong} /> : null}<Text style={[styles.planText, { color: paid ? theme.goldStrong : theme.muted }]}>{paid ? 'PAID' : 'FREE'}</Text></View></View><Text style={[styles.title, { color: theme.fg }]}>Practice</Text><Text style={[styles.description, { color: theme.muted }]}>Every published question for your selected course is free. Refine the set by subject, chapter, year and answer format.</Text></View><View style={{ alignItems: 'flex-end', gap: 10 }}><ProfileShortcut /><PracticeTrackerShortcut onPress={() => router.push('/practice-tracker' as never)} /></View></View>
 
     {!started ? <Card style={styles.builderCard}>
       <View style={styles.builderHeading}><View style={[styles.builderIcon, { backgroundColor: theme.primarySoft }]}><Layers3 size={20} color={theme.primaryStrong} /></View><View style={styles.builderCopy}><Text style={[styles.builderTitle, { color: theme.fg }]}>Choose how you want to practise</Text><Text style={[styles.builderHint, { color: theme.muted }]}>Pick a source, then refine only when needed.</Text></View></View>

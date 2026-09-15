@@ -1,5 +1,27 @@
 # Parallax Flow backend integration backlog
 
+## First-class Question Bank completion checkpoint — 2026-08-30
+
+This is the latest approved model and supersedes every conflicting historical item below that treats a Question Bank only as a PDF/package or makes every Practice question universally free.
+
+- Complete: normalized `QuestionBank` container and direct single-owner `Question.questionBankId` relation, separate from Excel imports, linked Content Files, website Purchases and Entitlements. The same wording in another bank is a distinct Question record.
+- Complete: Admin, Super Admin and Academy Admin CRUD/lifecycle and Normal-MCQ or Case-MCQ manual/Excel authoring under existing RBAC, course and tenant boundaries.
+- Complete: atomic Case-MCQ Excel validation/import with the finalized `Correct Explanation` column and persisted correct/wrong explanations plus file links.
+- Complete: Student discovery, filter, preview, session, attempt, result and analytics paths enforce publication, selected course, tenant, linked-file access and exact paid entitlement. Free published banks remain course-accessible.
+- Complete: Practice sessions persist `questionBankId`; unauthorized, expired, foreign-course and foreign-tenant bank questions remain hidden.
+- Complete verification: Prisma validate/generate/migration status, server/web/mobile typechecks, server and website tests, builds, mobile lint, and an isolated real-PostgreSQL Question Bank integration path.
+- Deferred scalability only: add pre-aggregated analytics/materialized views when real data volume demonstrates the need. This is not a functional blocker.
+
+## Finalized Practice Studio checkpoint — 2026-08-29
+
+This checkpoint supersedes the 26 August Practice correction and every conflicting Practice/Question Bank/Solve & Earn item below.
+
+- Complete: MCQ, Case Study, entitled Question Bank and Wrong Answers modes across Prisma, API, Admin authoring and the authenticated mobile Practice screen.
+- Complete: multi-file OR authorization, actual-data search, nested package entitlement expansion, locked/owned bank state, persisted multi-material sessions, server timer/evaluation, retries/explanations, navigator, resume and results.
+- Complete: Admin manual/Excel Question Bank authoring using the existing question/file relationship and tenant/RBAC boundaries.
+- Excluded: Solve & Earn and descriptive-answer grading.
+- Remaining acceptance only: run the guarded data-mutating integration suite against a dedicated disposable local test database when desired; do not point it at shared developer or production data.
+
 ## Authoritative practice correction — 2026-08-26
 
 This section supersedes every older Practice, Question Bank and Solve & Earn item later in this file.

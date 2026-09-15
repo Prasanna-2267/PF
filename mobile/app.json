@@ -36,6 +36,13 @@
       ],
       "expo-secure-store",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Parallax Flow to scan your Academy admission QR code.",
+          "barcodeScannerEnabled": true
+        }
+      ],
+      [
         "expo-notifications",
         {
           "color": "#FFB547",

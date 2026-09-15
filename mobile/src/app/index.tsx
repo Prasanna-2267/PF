@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Redirect, useRouter } from 'expo-router';
 import { ArrowRight, BookOpenCheck, ShieldCheck, Sparkles } from 'lucide-react-native';
@@ -17,7 +17,7 @@ export default function WelcomeScreen() {
     <SafeAreaView style={styles.safe}>
       <View style={styles.phone}>
         <LinearGradient colors={['#D79435', '#8D4A22', '#2A1713', '#080A0E', '#050609']} locations={[0, .25, .47, .66, 1]} style={StyleSheet.absoluteFill} />
-        <View pointerEvents="none" style={styles.artwork}>
+        <View style={styles.artwork}>
           <View style={styles.warmGlow} />
           <View style={[styles.glassTile, styles.tileOne]} />
           <View style={[styles.glassTile, styles.tileTwo]} />
@@ -46,10 +46,10 @@ export default function WelcomeScreen() {
             <View style={styles.valueItem}><Sparkles size={13} color="#F5C96A" /><Text style={styles.valueText}>Visible progress</Text></View>
           </View>
 
-          <Pressable accessibilityRole="button" onPress={() => router.push('/signup')} style={({ pressed }) => [styles.primaryShell, pressed && styles.pressed]}>
+          <Pressable accessibilityRole="button" onPress={() => router.push('/login')} style={({ pressed }) => [styles.primaryShell, pressed && styles.pressed]}>
             <LinearGradient colors={['#FF6B35', '#FFB14A', '#F8E85A']} start={{ x: 0, y: .5 }} end={{ x: 1, y: .5 }} style={styles.primaryButton}><Text style={styles.primaryText}>Start learning</Text><View style={styles.arrowWell}><ArrowRight size={17} color="#18120B" /></View></LinearGradient>
           </Pressable>
-          <Pressable accessibilityRole="button" onPress={() => router.push('/login')} style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}><Text style={styles.secondaryText}>I already have an account</Text></Pressable>
+          <Pressable accessibilityRole="button" onPress={() => router.push('/signup')} style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}><Text style={styles.secondaryText}>Create new account</Text></Pressable>
           <Text style={styles.legal}>Private by design · Built for consistent learners</Text>
         </View>
       </View>
@@ -59,7 +59,7 @@ export default function WelcomeScreen() {
 
 const styles = StyleSheet.create({
   canvas: { flex: 1, backgroundColor: '#08090C' }, safe: { flex: 1 }, phone: { flex: 1, width: '100%', maxWidth: 520, alignSelf: 'center', overflow: 'hidden' },
-  artwork: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, overflow: 'hidden' }, warmGlow: { position: 'absolute', width: 360, height: 360, borderRadius: 180, top: -130, left: -95, backgroundColor: 'rgba(255,196,76,.18)' },
+  artwork: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, overflow: 'hidden', pointerEvents: 'none' }, warmGlow: { position: 'absolute', width: 360, height: 360, borderRadius: 180, top: -130, left: -95, backgroundColor: 'rgba(255,196,76,.18)' },
   glassTile: { position: 'absolute', borderWidth: 2, borderColor: 'rgba(44,19,14,.24)', backgroundColor: 'rgba(255,203,106,.035)', borderRadius: 35 }, tileOne: { width: 290, height: 178, top: -60, left: -78, transform: [{ rotate: '-20deg' }] }, tileTwo: { width: 270, height: 190, top: 46, right: -112, transform: [{ rotate: '24deg' }] }, tileThree: { width: 260, height: 150, top: 198, left: 34, transform: [{ rotate: '12deg' }] },
   horizonOne: { position: 'absolute', width: 660, height: 210, borderRadius: 330, borderWidth: 1, borderColor: 'rgba(238,177,77,.12)', left: -120, top: 285, transform: [{ rotate: '-4deg' }] }, horizonTwo: { position: 'absolute', width: 570, height: 175, borderRadius: 285, borderWidth: 1, borderColor: 'rgba(255,255,255,.055)', left: -75, top: 324 },
   starField: { position: 'absolute', top: 284, right: 56 }, star: { width: 3, height: 3, borderRadius: 2, backgroundColor: '#F8D47D' }, starTwo: { position: 'absolute', top: 51, right: 42, opacity: .45 }, starThree: { position: 'absolute', top: 105, right: -8, opacity: .28 },
@@ -68,6 +68,6 @@ const styles = StyleSheet.create({
   logoMark: { width: 45, height: 38, marginBottom: 14, justifyContent: 'center' }, logoOrbit: { width: 37, height: 23, borderWidth: 4, borderColor: '#FFFFFF', borderRadius: 19, alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-9deg' }] }, logoPupil: { width: 9, height: 9, borderRadius: 5, backgroundColor: '#F4C762' }, logoSlash: { position: 'absolute', width: 8, height: 34, borderRadius: 5, backgroundColor: '#FFFFFF', right: 5, transform: [{ rotate: '36deg' }] },
   eyebrow: { color: '#F4C762', fontFamily: font.bold, fontSize: 8, letterSpacing: 1.4 }, title: { marginTop: 8, color: '#FFFFFF', fontFamily: font.extraBold, fontSize: 31, lineHeight: 37, letterSpacing: -1 }, description: { maxWidth: 390, marginTop: 10, color: '#ADB2BC', fontFamily: font.regular, fontSize: 12, lineHeight: 19 },
   valueRow: { minHeight: 39, marginTop: 12, flexDirection: 'row', alignItems: 'center', gap: 9 }, valueItem: { flexDirection: 'row', alignItems: 'center', gap: 5 }, valueText: { color: '#D6D8DD', fontFamily: font.semibold, fontSize: 8 }, valueDot: { width: 3, height: 3, borderRadius: 2, backgroundColor: '#5E6169' },
-  primaryShell: { marginTop: 12, borderRadius: 16, shadowColor: '#FF9A3D', shadowOpacity: .24, shadowRadius: 18, shadowOffset: { width: 0, height: 7 }, elevation: 6 }, primaryButton: { minHeight: 55, borderRadius: 16, paddingLeft: 18, paddingRight: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, primaryText: { color: '#17120B', fontFamily: font.extraBold, fontSize: 13 }, arrowWell: { width: 39, height: 39, borderRadius: 13, backgroundColor: 'rgba(255,255,255,.38)', alignItems: 'center', justifyContent: 'center' },
+  primaryShell: { marginTop: 12, borderRadius: 16, ...Platform.select({ web: { boxShadow: '0 7px 18px rgba(255, 154, 61, 0.24)' }, default: { shadowColor: '#FF9A3D', shadowOpacity: .24, shadowRadius: 18, shadowOffset: { width: 0, height: 7 }, elevation: 6 } }) }, primaryButton: { minHeight: 55, borderRadius: 16, paddingLeft: 18, paddingRight: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, primaryText: { color: '#17120B', fontFamily: font.extraBold, fontSize: 13 }, arrowWell: { width: 39, height: 39, borderRadius: 13, backgroundColor: 'rgba(255,255,255,.38)', alignItems: 'center', justifyContent: 'center' },
   secondaryButton: { minHeight: 49, marginTop: 9, borderWidth: 1, borderColor: 'rgba(255,255,255,.1)', borderRadius: 15, backgroundColor: 'rgba(9,10,13,.58)', alignItems: 'center', justifyContent: 'center' }, secondaryText: { color: '#D5D7DC', fontFamily: font.bold, fontSize: 11 }, legal: { marginTop: 11, color: '#666B74', fontFamily: font.medium, fontSize: 7.5, textAlign: 'center' }, pressed: { opacity: .82, transform: [{ scale: .99 }] },
 });

@@ -14,16 +14,14 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, LockKeyhole, Mail, Phone, UserRound } from 'lucide-react-native';
+import { ArrowLeft, ArrowRight, Building2, Check, CheckCircle2, Eye, EyeOff, LockKeyhole, Mail, Phone, QrCode, UserRound } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { LearnerOnboardingModal } from '@/components/learner-onboarding-modal';
 import { font, spacing } from '@/constants/theme';
-import { type StudentSignupIdentity, useAuthStore } from '@/lib/auth-store';
-import { beginStudentRegistration, getAuthErrorMessage } from '@/lib/auth-session';
-import { useRocketLaunch } from '@/providers/rocket-launch-provider';
+import { beginStudentRegistration, getAuthErrorMessage, validateAcademyCode } from '@/lib/auth-session';
+import { useSignupDraftStore } from '@/lib/signup-draft-store';
 
-type FormErrors = Partial<Record<'name' | 'phone' | 'email' | 'password', string>>;
+type FormErrors = Partial<Record<'name' | 'phone' | 'email' | 'password' | 'devicePolicy', string>>;
 type SignupFieldProps = TextInputProps & {
   label: string;
   error?: string;
@@ -34,7 +32,6 @@ type SignupFieldProps = TextInputProps & {
   trailing?: React.ReactNode;
 };
 
-const googleDemoEmail = 'student@gmail.com';
 const palette = {
   canvas: '#06070A',
   panel: '#0D0E12',
@@ -50,48 +47,70 @@ const palette = {
 
 export default function SignupScreen() {
   const router = useRouter();
-  const { launchTo } = useRocketLaunch();
-  const completeStudentSignup = useAuthStore((state) => state.completeStudentSignup);
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const name = useSignupDraftStore((state) => state.name);
+  const phone = useSignupDraftStore((state) => state.phone);
+  const email = useSignupDraftStore((state) => state.email);
+  const password = useSignupDraftStore((state) => state.password);
+  const admissionCode = useSignupDraftStore((state) => state.admissionCode);
+  const admissionProof = useSignupDraftStore((state) => state.admissionProof);
+  const academyName = useSignupDraftStore((state) => state.academyName);
+  const devicePolicyAccepted = useSignupDraftStore((state) => state.devicePolicyAccepted);
+  const updateDraft = useSignupDraftStore((state) => state.update);
+  const setName = (value: string) => updateDraft({ name: value });
+  const setPhone = (value: string) => updateDraft({ phone: value });
+  const setEmail = (value: string) => updateDraft({ email: value });
+  const setPassword = (value: string) => updateDraft({ password: value });
+  const setAdmissionCode = (value: string) => updateDraft({ admissionCode: value });
+  const setAdmissionProof = (value: string) => updateDraft({ admissionProof: value });
+  const setAcademyName = (value: string) => updateDraft({ academyName: value });
+  const setDevicePolicyAccepted = (next: boolean | ((value: boolean) => boolean)) =>
+    updateDraft({ devicePolicyAccepted: typeof next === 'function' ? next(devicePolicyAccepted) : next });
   const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
-  const [showOnboarding, setShowOnboarding] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [validatingAcademy, setValidatingAcademy] = useState(false);
+
+  const goBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
+  };
+
+  const applyAdmissionCode = async () => {
+    if (validatingAcademy || admissionCode.trim().length !== 8) return;
+    setSubmitError(''); setValidatingAcademy(true);
+    try { const result = await validateAcademyCode(admissionCode); updateDraft({ admissionProof: result.admissionProof, academyName: result.academy.name, academyId: result.academy.id }); }
+    catch (error) { updateDraft({ admissionProof: '', academyName: '', academyId: '' }); setSubmitError(getAuthErrorMessage(error)); }
+    finally { setValidatingAcademy(false); }
+  };
 
   const submitSignup = async () => {
     if (submitting) return;
     setSubmitError('');
-    const demoHandle = name.trim().toLowerCase();
-    if (demoHandle === 'mockuser' || demoHandle === 'mockadmin') {
-      router.push({ pathname: '/verify-otp', params: { name: demoHandle, email: demoHandle === 'mockadmin' ? 'admin@parallaxflow.demo' : 'student@parallaxflow.demo', phone: demoHandle === 'mockadmin' ? '+91 90000 00002' : '+91 90000 00001', demoRole: demoHandle === 'mockadmin' ? 'admin' : 'student', demoMode: 'true' } });
-      return;
-    }
-
     const nextErrors: FormErrors = {};
     if (name.trim().length < 2) nextErrors.name = 'Enter your full name.';
     if (phone.replace(/[^0-9]/g, '').length < 10) nextErrors.phone = 'Enter a valid mobile number.';
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) nextErrors.email = 'Enter a valid email address.';
     if (password.length < 8) nextErrors.password = 'Use at least 8 characters.';
+    if (!devicePolicyAccepted) nextErrors.devicePolicy = 'Confirm the device access policy to continue.';
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
     try {
       setSubmitting(true);
-      const registration = await beginStudentRegistration({ fullName: name.trim(), phone: phone.trim(), email: email.trim().toLowerCase(), password });
+      const registration = await beginStudentRegistration({ fullName: name.trim(), phone: phone.trim(), email: email.trim().toLowerCase(), password, devicePolicyAccepted: true });
       router.push({
         pathname: '/verify-otp',
         params: {
           registrationId: registration.registrationId,
           name: name.trim(),
           email: email.trim().toLowerCase(),
-          phone: phone.trim(),
           demoRole: 'student',
           ...(registration.developmentCode ? { developmentCode: registration.developmentCode } : {}),
+          resendAfter: registration.email.resendAfter,
+          ...(admissionProof ? { admissionProof } : {}),
+          ...(academyName ? { academyName } : {}),
         },
       });
     } catch (error) {
@@ -101,19 +120,10 @@ export default function SignupScreen() {
     }
   };
 
-  const googleIdentity: StudentSignupIdentity = { name: name.trim() || 'Google learner', email: googleDemoEmail, phone: null };
-  const signupWithGoogle = () => { setErrors({}); setShowOnboarding(true); };
-  const enterDashboard = (identity: StudentSignupIdentity) => {
-    completeStudentSignup(identity);
-    setShowOnboarding(false);
-    requestAnimationFrame(() => launchTo('/home'));
-  };
-
-  return <>
-    <View style={styles.canvas}>
+  return <View style={styles.canvas}>
       <StatusBar style="light" />
       <LinearGradient colors={['#D99535', '#9D5427', '#44241C', '#111014', '#06070A']} locations={[0, 0.14, 0.28, 0.43, 0.63]} style={StyleSheet.absoluteFill} />
-      <View pointerEvents="none" style={styles.artwork}>
+      <View style={styles.artwork}>
         <View style={styles.warmGlow} />
         <View style={[styles.glassTile, styles.tileOne]} />
         <View style={[styles.glassTile, styles.tileTwo]} />
@@ -126,7 +136,7 @@ export default function SignupScreen() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <View style={styles.topBar}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Go back" hitSlop={8} onPress={() => router.back()} style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Go back" hitSlop={8} onPress={goBack} style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
                 <ArrowLeft size={18} color={palette.text} />
               </Pressable>
               <View style={styles.brandLockup}>
@@ -160,6 +170,19 @@ export default function SignupScreen() {
 
               <PasswordStrength length={password.length} />
 
+              <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: devicePolicyAccepted }} onPress={() => { setDevicePolicyAccepted((value) => !value); setErrors((current) => ({ ...current, devicePolicy: undefined })); }} style={[styles.devicePolicy, errors.devicePolicy && styles.devicePolicyError]}>
+                <View style={[styles.policyCheck, devicePolicyAccepted && styles.policyCheckActive]}>{devicePolicyAccepted ? <Check size={14} color="#17120B" strokeWidth={3} /> : null}</View>
+                <View style={styles.policyCopy}><Text style={styles.policyTitle}>Use this account on this device</Text><Text style={styles.policyText}>For content security, this student account is permanently linked to this device. An administrator must approve a future device change.</Text></View>
+              </Pressable>
+              {errors.devicePolicy ? <Text style={styles.errorText}>{errors.devicePolicy}</Text> : null}
+
+              <View style={styles.academyBlock}>
+                <View style={styles.academyHeading}><Building2 size={15} color={palette.gold} /><View style={styles.academyCopy}><Text style={styles.academyTitle}>Join an Academy</Text><Text style={styles.academyHint}>Optional · enter the code supplied by your Academy</Text></View></View>
+                {academyName ? <View style={styles.academyVerified}><CheckCircle2 size={18} color={palette.success} /><View style={styles.academyCopy}><Text style={styles.academyVerifiedTitle}>{academyName}</Text><Text style={styles.academyVerifiedText}>Verified · membership activates after OTP verification</Text></View><Pressable onPress={() => { setAcademyName(''); setAdmissionProof(''); setAdmissionCode(''); }}><Text style={styles.changeAcademy}>Change</Text></Pressable></View>
+                  : <View style={styles.academyCodeRow}><TextInput value={admissionCode} onChangeText={(value) => setAdmissionCode(value.toUpperCase().replace(/[^ABCDEFGHJKLMNPQRSTUVWXYZ23456789]/g, '').slice(0, 8))} autoCapitalize="characters" autoCorrect={false} placeholder="8-character code" placeholderTextColor={palette.faint} style={styles.academyInput} /><Pressable disabled={admissionCode.length !== 8 || validatingAcademy} onPress={() => void applyAdmissionCode()} style={[styles.applyCode, (admissionCode.length !== 8 || validatingAcademy) && styles.applyDisabled]}>{validatingAcademy ? <ActivityIndicator size="small" color="#17120B" /> : <Text style={styles.applyCodeText}>Apply</Text>}</Pressable></View>}
+                {!academyName ? <Pressable accessibilityRole="button" accessibilityLabel="Scan Academy QR code" onPress={() => router.push('/academy-qr')} style={({ pressed }) => [styles.scanAcademy, pressed && styles.pressed]}><View style={styles.scanAcademyIcon}><QrCode size={23} color={palette.gold} /></View><View style={styles.scanAcademyCopy}><Text style={styles.scanAcademyText}>Scan Academy QR</Text><Text style={styles.scanAcademyHint}>Use your camera to join an Academy</Text></View><ArrowRight size={18} color={palette.gold} /></Pressable> : null}
+              </View>
+
               {submitError ? <Text accessibilityLiveRegion="polite" style={styles.submitError}>{submitError}</Text> : null}
 
               <Pressable accessibilityRole="button" disabled={submitting} onPress={() => void submitSignup()} style={({ pressed }) => [styles.primaryShell, (pressed || submitting) && styles.pressed]}>
@@ -169,22 +192,13 @@ export default function SignupScreen() {
                 </LinearGradient>
               </Pressable>
 
-              <View style={styles.divider}><View style={styles.dividerLine} /><Text style={styles.dividerText}>OR</Text><View style={styles.dividerLine} /></View>
-
-              <Pressable accessibilityRole="button" onPress={signupWithGoogle} style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]}>
-                <View style={styles.googleMark}><Text style={styles.googleLetter}>G</Text></View>
-                <Text style={styles.googleText}>Sign up with Google</Text>
-                <ArrowRight size={16} color={palette.faint} />
-              </Pressable>
             </View>
 
             <View style={styles.signinRow}><Text style={styles.signinText}>Already have an account?</Text><Pressable accessibilityRole="button" hitSlop={8} onPress={() => router.push('/login')}><Text style={styles.signinLink}>Sign in</Text></Pressable></View>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </View>
-    <LearnerOnboardingModal visible={showOnboarding} onComplete={() => enterDashboard(googleIdentity)} />
-  </>;
+    </View>;
 }
 
 function SignupField({ label, error, icon: Icon, fieldKey, focusedField, setFocusedField, trailing, ...props }: SignupFieldProps) {
@@ -213,7 +227,7 @@ function PasswordStrength({ length }: { length: number }) {
 const styles = StyleSheet.create({
   canvas: { flex: 1, backgroundColor: palette.canvas }, safe: { flex: 1 }, flex: { flex: 1 },
   content: { flexGrow: 1, width: '100%', maxWidth: 480, alignSelf: 'center', paddingHorizontal: spacing.xl, paddingBottom: spacing.xl },
-  artwork: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, overflow: 'hidden' },
+  artwork: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, overflow: 'hidden', pointerEvents: 'none' },
   warmGlow: { position: 'absolute', width: 330, height: 330, borderRadius: 165, top: -150, left: -85, backgroundColor: 'rgba(255,211,113,0.16)' },
   glassTile: { position: 'absolute', borderWidth: 1.5, borderColor: 'rgba(55,25,18,0.24)', backgroundColor: 'rgba(255,221,151,0.025)', borderRadius: 38 },
   tileOne: { width: 280, height: 160, top: -62, left: -65, transform: [{ rotate: '-18deg' }] },
@@ -241,9 +255,10 @@ const styles = StyleSheet.create({
   input: { flex: 1, minWidth: 0, paddingVertical: 12, color: palette.text, fontFamily: font.regular, fontSize: 13 }, errorText: { color: palette.danger, fontFamily: font.medium, fontSize: 9 },
   submitError: { marginTop: 13, color: palette.danger, fontFamily: font.semibold, fontSize: 10, lineHeight: 15, textAlign: 'center' },
   strength: { marginTop: 9, flexDirection: 'row', alignItems: 'center', gap: 8 }, strengthBars: { flex: 1, flexDirection: 'row', gap: 4 }, strengthBar: { flex: 1, height: 3, borderRadius: 2 }, strengthStatus: { flexDirection: 'row', alignItems: 'center', gap: 3 }, strengthText: { fontFamily: font.semibold, fontSize: 8 },
-  primaryShell: { marginTop: 16, borderRadius: 15, shadowColor: '#FF9A3D', shadowOpacity: 0.22, shadowRadius: 16, shadowOffset: { width: 0, height: 7 }, elevation: 5 },
+  devicePolicy: { marginTop: 15, padding: 13, borderWidth: 1, borderColor: 'rgba(244,197,93,.24)', borderRadius: 15, backgroundColor: 'rgba(13,14,18,.9)', flexDirection: 'row', alignItems: 'flex-start', gap: 11 },
+  devicePolicyError: { borderColor: palette.danger }, policyCheck: { width: 23, height: 23, borderRadius: 7, borderWidth: 1, borderColor: 'rgba(244,197,93,.5)', alignItems: 'center', justifyContent: 'center' }, policyCheckActive: { backgroundColor: palette.gold, borderColor: palette.gold }, policyCopy: { flex: 1, minWidth: 0 }, policyTitle: { color: palette.text, fontFamily: font.bold, fontSize: 10.5 }, policyText: { marginTop: 4, color: palette.muted, fontFamily: font.regular, fontSize: 8.5, lineHeight: 13 },
+  academyBlock: { marginTop: 15, padding: 13, borderWidth: 1, borderColor: 'rgba(244,197,93,.22)', borderRadius: 15, backgroundColor: 'rgba(13,14,18,.88)' }, academyHeading: { flexDirection: 'row', alignItems: 'center', gap: 9 }, academyCopy: { flex: 1, minWidth: 0 }, academyTitle: { color: palette.text, fontFamily: font.bold, fontSize: 11 }, academyHint: { marginTop: 2, color: palette.faint, fontFamily: font.regular, fontSize: 8.5 }, academyCodeRow: { marginTop: 11, flexDirection: 'row', gap: 8 }, academyInput: { flex: 1, minHeight: 43, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: palette.line, color: palette.text, fontFamily: font.bold, fontSize: 11, letterSpacing: 1.1 }, applyCode: { minWidth: 72, borderRadius: 12, backgroundColor: palette.gold, alignItems: 'center', justifyContent: 'center' }, applyCodeText: { color: '#17120B', fontFamily: font.extraBold, fontSize: 10 }, applyDisabled: { opacity: .38 }, scanAcademy: { minHeight: 62, marginTop: 12, paddingHorizontal: 11, borderWidth: 1, borderColor: 'rgba(244,197,93,.28)', borderRadius: 14, backgroundColor: 'rgba(244,197,93,.07)', flexDirection: 'row', alignItems: 'center', gap: 10 }, scanAcademyIcon: { width: 42, height: 42, borderRadius: 13, backgroundColor: 'rgba(244,197,93,.12)', alignItems: 'center', justifyContent: 'center' }, scanAcademyCopy: { flex: 1, minWidth: 0 }, scanAcademyText: { color: palette.text, fontFamily: font.bold, fontSize: 11 }, scanAcademyHint: { marginTop: 3, color: palette.muted, fontFamily: font.regular, fontSize: 8.5 }, academyVerified: { minHeight: 52, marginTop: 10, paddingHorizontal: 10, borderRadius: 12, backgroundColor: 'rgba(121,214,169,.08)', flexDirection: 'row', alignItems: 'center', gap: 9 }, academyVerifiedTitle: { color: palette.text, fontFamily: font.bold, fontSize: 11 }, academyVerifiedText: { marginTop: 2, color: palette.success, fontFamily: font.regular, fontSize: 8 }, changeAcademy: { color: palette.gold, fontFamily: font.bold, fontSize: 9 },
+  primaryShell: { marginTop: 16, borderRadius: 15, ...Platform.select({ web: { boxShadow: '0 7px 16px rgba(255, 154, 61, 0.22)' }, default: { shadowColor: '#FF9A3D', shadowOpacity: 0.22, shadowRadius: 16, shadowOffset: { width: 0, height: 7 }, elevation: 5 } }) },
   primaryButton: { minHeight: 53, borderRadius: 15, paddingLeft: 17, paddingRight: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, primaryText: { color: '#17120B', fontFamily: font.extraBold, fontSize: 13 }, arrowWell: { width: 39, height: 39, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.36)', alignItems: 'center', justifyContent: 'center' },
-  divider: { marginVertical: 14, flexDirection: 'row', alignItems: 'center', gap: 10 }, dividerLine: { flex: 1, height: 1, backgroundColor: palette.line }, dividerText: { color: palette.faint, fontFamily: font.bold, fontSize: 7, letterSpacing: 1 },
-  googleButton: { minHeight: 49, paddingHorizontal: 12, borderWidth: 1, borderColor: palette.line, borderRadius: 14, backgroundColor: '#0B0C10', flexDirection: 'row', alignItems: 'center', gap: 10 }, googleMark: { width: 27, height: 27, borderRadius: 14, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' }, googleLetter: { color: '#4285F4', fontFamily: font.extraBold, fontSize: 14 }, googleText: { flex: 1, color: palette.text, fontFamily: font.bold, fontSize: 11, textAlign: 'center' },
   signinRow: { minHeight: 49, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 6 }, signinText: { color: palette.muted, fontFamily: font.regular, fontSize: 10 }, signinLink: { color: palette.gold, fontFamily: font.bold, fontSize: 10 }, pressed: { opacity: 0.82, transform: [{ scale: 0.99 }] },
 });

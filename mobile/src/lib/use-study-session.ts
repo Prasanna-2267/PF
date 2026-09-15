@@ -38,6 +38,7 @@ export function useStudySession(source: Extract<FocusSource, 'HOME' | 'TRACKER'>
       queryClient.invalidateQueries({ queryKey: focusKeys.streak }),
       queryClient.invalidateQueries({ queryKey: focusKeys.recovery }),
       queryClient.invalidateQueries({ queryKey: ['student', 'streak', 'calendar'] }),
+      queryClient.invalidateQueries({ queryKey: ['student', 'tracker'] }),
     ]);
   };
 

@@ -1,8 +1,10 @@
 import { Redirect, Slot } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LearnerOnboardingModal } from '@/components/learner-onboarding-modal';
+import { ProfileShortcut } from '@/components/profile-shortcut';
 import { layout } from '@/constants/theme';
 import { useAuthStore } from '@/lib/auth-store';
 import { useAppTheme } from '@/providers/app-providers';
@@ -13,6 +15,7 @@ export default function StudentLayout() {
   const queryClient = useQueryClient();
   const { theme } = useAppTheme();
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   if (status === 'loading') return null;
   if (status !== 'authenticated') return <Redirect href="/login" />;
   const framed = width > layout.studentAppMaxWidth;
@@ -37,4 +40,5 @@ const styles = StyleSheet.create({
     minWidth: 0,
     alignSelf: 'center',
   },
+  profileRail: { position: 'absolute', right: 16, zIndex: 60, elevation: 20 },
 });

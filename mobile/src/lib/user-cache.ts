@@ -14,8 +14,8 @@ const USER_SCOPED_ASYNC_STORAGE_KEYS = [
   'parallax-flow-rewards',
 ] as const;
 
-export async function clearUserScopedCache(): Promise<void> {
-  queryClient.clear();
+export async function clearUserScopedCache(options: { clearQueries?: boolean } = {}): Promise<void> {
+  if (options.clearQueries !== false) queryClient.clear();
   useHomeTodoStore.setState({ dateKey: homeTodoDateKey(), todos: [] });
   usePracticeProgressStore.setState({ byQuestionId: {} });
   useRewardStore.setState({

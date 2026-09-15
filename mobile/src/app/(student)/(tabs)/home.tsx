@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Animated, Easing, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View, useWindowDimensions, type ViewStyle } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowUpRight, Award, CalendarDays, CheckCircle2, Coins, Eye, Flame, Gift, Heart, Share2, ShieldCheck, Sparkles, Target, X } from 'lucide-react-native';
+import { ArrowUpRight, Award, CalendarDays, CheckCircle2, ChevronRight, Coins, Eye, Flame, Gift, Heart, Megaphone, Share2, ShieldCheck, Sparkles, Target, X } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GrandSessionControl, ProgressBar } from '@/components/study-ui';
@@ -11,17 +11,48 @@ import { font, layout, radius, spacing, themes } from '@/constants/theme';
 import { useAuthStore } from '@/lib/auth-store';
 import { demoStudy, formatDuration, formatMinutes } from '@/lib/demo-study';
 import { useLearnerProfileStore } from '@/lib/learner-profile-store';
+import { parseDailyTarget } from '@/lib/learner-preferences';
 import { monthlyHeartLimit } from '@/lib/reward-store';
 import { useStudySession } from '@/lib/use-study-session';
+import { getNotificationFeed, markNotificationRead, type LearnerNotification } from '@/lib/notification-api';
+import { ProfileShortcut } from '@/components/profile-shortcut';
 import { useAppTheme } from '@/providers/app-providers';
 
 const nativeDriver = Platform.OS !== 'web';
 const dayMs = 86_400_000;
+const welcomeQuotes = [
+  'Small steps today create big results tomorrow.',
+  'Progress matters more than perfect preparation.',
+  'One chapter closer to your dream.',
+  'Keep going; your future self will thank you.',
+  'Consistency turns effort into achievement.',
+  'Every study session moves you forward.',
+  'Learn today, lead tomorrow.',
+  'Your progress is building something powerful.',
+  'You are more capable than you think.',
+  'Trust your preparation, trust yourself.',
+  'You’ve got this. Keep moving forward.',
+  'Confidence grows every time you try.',
+  'Your hard work will speak someday.',
+  'Believe first, achieve next.',
+  'One good session can change everything.',
+  'Study smart, smile often, keep growing.',
+  'Today looks better with a little progress.',
+  'You showed up. That already matters.',
+  'Future you is cheering for today’s you.',
+  'Make today’s effort tomorrow’s confidence.',
+  'Every revision makes you harder to beat.',
+  'Your preparation is becoming your advantage.',
+  'Master the concepts, conquer the exam.',
+  'One question at a time, keep winning.',
+  'Your rank begins with today’s discipline.',
+  'Don’t chase hours; chase understanding.',
+  'Prepare calmly, perform confidently.',
+  'The goal is closer than yesterday.',
+] as const;
 
 function targetMinutesFrom(value: string) {
-  const amount = Number(value.match(/[\d.]+/)?.[0] ?? 0);
-  if (!amount) return demoStudy.targetMinutes;
-  return /hour/i.test(value) ? Math.round(amount * 60) : Math.round(amount);
+  return parseDailyTarget(value) ?? demoStudy.targetMinutes;
 }
 
 function Surface({ children, style }: { children: ReactNode; style?: ViewStyle }) {
@@ -38,12 +69,16 @@ export default function HomeScreen() {
   const profile = useLearnerProfileStore((state) => state.profile);
   const fallbackTargetMinutes = targetMinutesFrom(profile.dailyTarget);
   const study = useStudySession('HOME', fallbackTargetMinutes);
-  const userName = useAuthStore((state) => state.user?.name?.split(' ')[0] ?? 'Learner');
+  const isFirstLogin = useAuthStore((state) => Boolean(state.user?.isFirstLogin));
+  const welcomeQuoteIndex = useAuthStore((state) => state.user?.welcomeQuoteIndex ?? 0);
+  const welcomeTitle = isFirstLogin ? 'Welcome' : 'Welcome back';
+  const welcomeQuote = welcomeQuotes[welcomeQuoteIndex % welcomeQuotes.length];
   const [currentDate] = useState(() => new Date());
   const [showCelebration, setShowCelebration] = useState(false);
   const [showRewards, setShowRewards] = useState(false);
   const [completedSeconds, setCompletedSeconds] = useState(0);
   const [earnedPoints, setEarnedPoints] = useState(0);
+  const [announcement, setAnnouncement] = useState<LearnerNotification | null>(null);
   const dailyTargetMinutes = study.targetMinutes;
   const remaining = Math.max(0, dailyTargetMinutes - study.todayMinutes);
   const planPercent = Math.min(100, Math.round((study.todayMinutes / dailyTargetMinutes) * 100));
@@ -62,15 +97,41 @@ export default function HomeScreen() {
     setShowCelebration(true);
   };
 
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    void getNotificationFeed({ limit: 10, unreadOnly: true })
+      .then((feed) => {
+        if (active) setAnnouncement(feed.data.find((item) => item.category === 'BROADCAST') ?? null);
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, []));
+
+  const dismissAnnouncement = useCallback(() => {
+    const current = announcement;
+    if (!current) return;
+    setAnnouncement(null);
+    void markNotificationRead(current.id).catch(() => setAnnouncement(current));
+  }, [announcement]);
+
+  const openAnnouncement = useCallback(() => {
+    const current = announcement;
+    if (!current) return;
+    const url = typeof current.data?.url === 'string' ? current.data.url : null;
+    dismissAnnouncement();
+    if (url && url !== '/(student)/(tabs)/home') router.push(url as never);
+  }, [announcement, dismissAnnouncement, router]);
+
   return <><SafeAreaView edges={['top', 'left', 'right']} style={[styles.safe, { backgroundColor: theme.canvas }]}><ScrollView contentContainerStyle={[styles.content, wide && styles.contentWide]} showsVerticalScrollIndicator={false}>
     <RewardHeader points={study.points} hearts={study.hearts} streak={study.streak} onPress={() => setShowRewards(true)} />
+    {announcement ? <Pressable accessibilityLabel={`Announcement: ${announcement.title}`} onPress={openAnnouncement} style={({ pressed }) => [styles.announcement, { backgroundColor: theme.primarySoft, borderColor: theme.primary }, pressed && styles.pressed]}><View style={[styles.announcementIcon, { backgroundColor: theme.primary }]}><Megaphone color={theme.primaryFg} size={18} /></View><View style={styles.announcementCopy}><Text style={[styles.announcementEyebrow, { color: theme.primaryStrong }]}>ANNOUNCEMENT</Text><Text numberOfLines={1} style={[styles.announcementTitle, { color: theme.fg }]}>{announcement.title}</Text><Text numberOfLines={2} style={[styles.announcementBody, { color: theme.muted }]}>{announcement.body}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Dismiss announcement" hitSlop={8} onPress={(event) => { event.stopPropagation(); dismissAnnouncement(); }} style={styles.announcementDismiss}><X color={theme.muted} size={16} /></Pressable><ChevronRight color={theme.primaryStrong} size={17} /></Pressable> : null}
     <View style={[styles.dashboardLead, wide && styles.dashboardLeadWide]}>
     <View style={[styles.heroColumn, wide && styles.heroColumnWide]}>
     <LinearGradient colors={dark ? ['#17213A', '#101522', '#0B0D12'] : ['#263A82', '#424A94', '#5A4D59']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, wide && styles.heroWide, { borderColor: dark ? theme.line : 'transparent' }]}>
       <HeroAmbientMotion />
       <View style={styles.heroGlowOne} /><View style={styles.heroGlowTwo} />
       <View style={styles.heroTop}><Text style={[styles.date, { color: dark ? theme.goldStrong : '#E3C27E' }]}>●  {today}</Text><View style={[styles.liveStatus, { backgroundColor: study.checkedIn ? 'rgba(217,170,87,.15)' : 'rgba(124,156,255,.14)' }]}><View style={[styles.liveStatusDot, { backgroundColor: study.checkedIn ? theme.goldStrong : theme.primary }]} /><Text style={[styles.liveStatusText, { color: study.checkedIn ? theme.goldStrong : theme.primaryStrong }]}>{study.checkedIn ? 'FOCUS LIVE' : 'READY'}</Text></View></View>
-      <Text style={styles.heroTitle}>{study.checkedIn ? 'Stay in the zone' : `Good morning, ${userName}`}</Text><Text style={[styles.heroCopy, { color: dark ? theme.muted : '#E1E5F0' }]}>{study.checkedIn ? 'Every focused minute is strengthening your consistency.' : 'Check in, protect your streak, and make today count.'}</Text>
+      <Text style={styles.heroTitle}>{welcomeTitle}</Text><Text style={[styles.heroCopy, { color: dark ? theme.muted : '#E1E5F0' }]}>{welcomeQuote}</Text>
       <View style={styles.sessionWrap}><GrandSessionControl active={study.checkedIn} seconds={study.sessionSeconds} onPress={() => { void handleSession(); }} /></View>
       {study.error ? <Text style={[styles.heroCopy, { color: theme.danger }]}>{study.error}</Text> : null}
     </LinearGradient>
@@ -147,8 +208,7 @@ function RewardHeader({ points, hearts, streak, onPress }: { points: number; hea
   const { theme } = useAppTheme();
   return <View style={styles.rewardHeader}><View style={styles.rewardHeaderCopy}><Text style={[styles.rewardHeaderEyebrow, { color: theme.primary }]}>YOUR DAY</Text><Text style={[styles.rewardHeaderTitle, { color: theme.fg }]}>Momentum</Text></View><View style={styles.balanceRow}>
     <Pressable accessibilityRole="button" accessibilityLabel={`${streak} day streak. Open rewards`} onPress={onPress} style={({ pressed }) => [styles.balancePill, { backgroundColor: theme.sunken, borderColor: theme.lineStrong }, pressed && styles.balancePressed]}><Flame size={15} fill="#A8AFB8" color="#A8AFB8" /><Text style={[styles.balanceValue, { color: theme.fg }]}>{streak}</Text></Pressable>
-    <Pressable accessibilityRole="button" accessibilityLabel={`${points} points. Open rewards`} onPress={onPress} style={({ pressed }) => [styles.balancePill, { backgroundColor: theme.sunken, borderColor: theme.lineStrong }, pressed && styles.balancePressed]}><Coins size={16} fill="#E5B84E" color="#F0C878" /><Text style={[styles.balanceValue, { color: theme.fg }]}>{points}</Text></Pressable>
-    <Pressable accessibilityRole="button" accessibilityLabel={`${hearts} recovery hearts. Open rewards`} onPress={onPress} style={({ pressed }) => [styles.balancePill, { backgroundColor: theme.sunken, borderColor: theme.lineStrong }, pressed && styles.balancePressed]}><Heart size={15} fill="#F36F94" color="#FF91AD" /><Text style={[styles.balanceValue, { color: theme.fg }]}>{hearts}</Text></Pressable>
+    <ProfileShortcut />
   </View></View>;
 }
 
@@ -348,6 +408,7 @@ const styles = StyleSheet.create({
   celebrationCopy: { width: '100%', alignItems: 'center' },
   safe: { flex: 1 }, content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: 108, maxWidth: 680, width: '100%', alignSelf: 'center' }, contentWide: { maxWidth: layout.studentContentMaxWidth, paddingHorizontal: spacing.xl }, dashboardLead: { gap: spacing.lg }, dashboardLeadWide: { flexDirection: 'row', alignItems: 'stretch' }, heroColumn: { width: '100%' }, heroColumnWide: { flex: 1.06, minWidth: 0 }, supportColumn: { width: '100%', gap: spacing.lg }, supportColumnWide: { flex: .94, minWidth: 0 }, surface: { borderWidth: 1, borderRadius: 19, padding: 14, shadowColor: '#000000', shadowOpacity: .1, shadowRadius: 15, shadowOffset: { width: 0, height: 7 }, elevation: 2 },
   rewardHeader: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10 }, rewardHeaderCopy: { flex: 1, minWidth: 58 }, rewardHeaderEyebrow: { fontFamily: font.bold, fontSize: 7, letterSpacing: 1.15 }, rewardHeaderTitle: { marginTop: 2, fontFamily: font.extraBold, fontSize: 16, letterSpacing: -.3 }, balanceRow: { flexDirection: 'row', gap: 6 }, balancePill: { minWidth: 55, height: 35, borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }, balanceValue: { fontFamily: font.extraBold, fontSize: 11 }, balancePressed: { opacity: .7, transform: [{ scale: .97 }] },
+  announcement: { minHeight: 82, borderWidth: 1, borderRadius: 18, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10, overflow: 'hidden' }, announcementIcon: { width: 42, height: 42, borderRadius: 13, alignItems: 'center', justifyContent: 'center' }, announcementCopy: { flex: 1, minWidth: 0 }, announcementEyebrow: { fontFamily: font.bold, fontSize: 7, letterSpacing: 1.15 }, announcementTitle: { marginTop: 2, fontFamily: font.extraBold, fontSize: 13, lineHeight: 18 }, announcementBody: { marginTop: 2, fontFamily: font.regular, fontSize: 9, lineHeight: 13 }, announcementDismiss: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
   walletRoot: { flex: 1, justifyContent: 'flex-end' }, walletBackdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0,0,0,.72)' }, walletSheet: { width: '100%', maxWidth: 680, alignSelf: 'center', borderWidth: 1, borderBottomWidth: 0, borderTopLeftRadius: 25, borderTopRightRadius: 25, padding: spacing.lg, paddingBottom: 28 }, walletHandle: { width: 38, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 14 }, walletHeading: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 }, walletHeadingCopy: { flex: 1, minWidth: 0 }, walletEyebrow: { fontFamily: font.bold, fontSize: 8, letterSpacing: 1.2 }, walletTitle: { marginTop: 4, fontFamily: font.extraBold, fontSize: 19, lineHeight: 25, letterSpacing: -.4 }, walletSubtitle: { marginTop: 4, maxWidth: 420, fontFamily: font.regular, fontSize: 9, lineHeight: 14 }, walletClose: { width: 35, height: 35, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }, walletBalances: { marginTop: 15, flexDirection: 'row', gap: 8 }, walletBalance: { flex: 1, minWidth: 0, minHeight: 86, borderWidth: 1, borderRadius: 15, padding: 10 }, walletBalanceValue: { marginTop: 6, fontFamily: font.extraBold, fontSize: 17, letterSpacing: -.35 }, walletBalanceLabel: { marginTop: 2, fontFamily: font.medium, fontSize: 8 }, pointsRules: { marginTop: 12, gap: 7 }, pointsRule: { minHeight: 66, borderWidth: 1, borderRadius: 14, padding: 10, flexDirection: 'row', alignItems: 'center', gap: 9 }, ruleIcon: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }, ruleCopy: { flex: 1, minWidth: 0 }, ruleTitle: { fontFamily: font.bold, fontSize: 11 }, ruleDetail: { marginTop: 2, fontFamily: font.regular, fontSize: 8, lineHeight: 12 }, rulePoints: { fontFamily: font.extraBold, fontSize: 16 }, recoveryCard: { minHeight: 76, marginTop: 12, borderWidth: 1, borderRadius: 15, padding: 11, flexDirection: 'row', alignItems: 'center', gap: 9 }, recoveryIcon: { width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center' }, recoveryCopy: { flex: 1, minWidth: 0 }, recoveryTitle: { fontFamily: font.bold, fontSize: 11 }, recoveryDetail: { marginTop: 3, fontFamily: font.regular, fontSize: 8, lineHeight: 13 }, recoverButton: { minHeight: 46, marginTop: 10, borderWidth: 1, borderRadius: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }, recoverButtonText: { fontFamily: font.bold, fontSize: 10 }, rewardDisabled: { opacity: .58 }, walletFootnote: { marginTop: 8, textAlign: 'center', fontFamily: font.regular, fontSize: 8 },
   hero: { minHeight: 455, borderWidth: 1, borderRadius: 25, padding: 17, overflow: 'hidden' }, heroWide: { flex: 1 }, heroGlowOne: { position: 'absolute', width: 250, height: 250, borderRadius: 125, right: -120, top: -110, backgroundColor: 'rgba(124,156,255,.14)' }, heroGlowTwo: { position: 'absolute', width: 220, height: 220, borderRadius: 110, left: -135, bottom: -105, borderWidth: 1, borderColor: 'rgba(217,170,87,.18)' }, heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, date: { flex: 1, fontFamily: font.bold, fontSize: 9, letterSpacing: 1.05 }, liveStatus: { minHeight: 29, borderRadius: radius.pill, paddingHorizontal: 9, flexDirection: 'row', alignItems: 'center', gap: 5 }, liveStatusDot: { width: 6, height: 6, borderRadius: 3 }, liveStatusText: { fontFamily: font.bold, fontSize: 8, letterSpacing: .75 }, heroTitle: { color: '#FFFFFF', fontFamily: font.extraBold, fontSize: 27, lineHeight: 34, letterSpacing: -.8, textAlign: 'center', marginTop: 16 }, heroCopy: { maxWidth: 310, alignSelf: 'center', fontFamily: font.regular, fontSize: 11, lineHeight: 17, textAlign: 'center', marginTop: 4 }, sessionWrap: { flex: 1, minHeight: 272, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   sessionStage: { width: 238, height: 238, alignItems: 'center', justifyContent: 'center' }, sessionHalo: { position: 'absolute', width: 224, height: 224, borderRadius: 112, borderWidth: 14 }, sessionBurst: { position: 'absolute', width: 196, height: 196, borderRadius: 98, borderWidth: 3 }, sessionOrbit: { position: 'absolute', width: 220, height: 220, borderRadius: 110, borderWidth: 1, borderStyle: 'dashed' }, orbitDot: { position: 'absolute', width: 11, height: 11, borderRadius: 6, top: -6, left: 104, shadowOpacity: .8, shadowRadius: 9, shadowOffset: { width: 0, height: 0 }, elevation: 5 }, sessionCore: { width: 184, height: 184, borderRadius: 92, borderWidth: 2, alignItems: 'center', justifyContent: 'center' }, sessionEyebrow: { fontFamily: font.bold, fontSize: 8, letterSpacing: 1.25 }, sessionActionIcon: { width: 49, height: 49, marginTop: 9, borderRadius: 25, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: .28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 4 }, sessionValue: { color: '#FFFFFF', marginTop: 8, fontFamily: font.extraBold, fontSize: 19, letterSpacing: -.35 }, sessionHint: { marginTop: 3, fontFamily: font.medium, fontSize: 8 },

@@ -10,6 +10,14 @@ export type NoteViewerSession = {
   note: { id: string; title: string; mimeType: string | null };
 };
 
+export type ContentAttachedLink = {
+  id: string;
+  url: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type NoteViewerManifest = {
   viewerSessionId: string;
   title: string;
@@ -21,6 +29,7 @@ export type NoteViewerManifest = {
   expiresAt: string;
   watermark: { displayIdentity: string; traceId: string };
   capabilities: { continuousScroll: boolean; pinchZoom: boolean; download: false; print: false };
+  attachedLinks: ContentAttachedLink[];
 };
 
 export async function createNoteViewerSession(contentItemId: string) {
