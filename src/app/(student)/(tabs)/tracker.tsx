@@ -759,9 +759,9 @@ export default function TrackerScreen() {
   const { width } = useWindowDimensions();
   const wide = width >= layout.tabletBreakpoint;
   const remaining = Math.max(0, study.targetMinutes - study.todayMinutes);
-  const examDays = trackerData?.exam.daysRemaining ?? demoStudy.exam.daysLeft;
+  const examDays = trackerData?.exam.daysRemaining ?? (demo ? demoStudy.exam.daysLeft : null);
   const examPressure =
-    trackerData?.exam.pressurePercent ?? demoStudy.exam.pressure;
+    trackerData?.exam.pressurePercent ?? (demo ? demoStudy.exam.pressure : 0);
   const examDate = trackerData?.exam.date
     ? new Date(
         `${trackerData.exam.date.slice(0, 10)}T12:00:00`,
@@ -770,7 +770,7 @@ export default function TrackerScreen() {
         month: "short",
         year: "numeric",
       })
-    : demoStudy.exam.date;
+    : demo ? demoStudy.exam.date : "Not set";
   return (
     <SafeAreaView
       edges={["top", "left", "right"]}
@@ -817,7 +817,7 @@ export default function TrackerScreen() {
                 numberOfLines={1}
                 style={[styles.examName, { color: theme.fg }]}
               >
-                {trackerData?.course.name ?? demoStudy.exam.label}
+                {trackerData?.course.name ?? (demo ? demoStudy.exam.label : "Your exam")}
               </Text>
             </View>
             <View
@@ -833,7 +833,7 @@ export default function TrackerScreen() {
           <View style={styles.examRow}>
             <View style={styles.examCountCopy}>
               <Text style={[styles.examDays, { color: theme.fg }]}>
-                {examDays}
+                {examDays ?? "—"}
                 <Text style={[styles.daysSuffix, { color: theme.muted }]}>
                   {" "}
                   days

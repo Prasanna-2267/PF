@@ -11,7 +11,7 @@ import { font, layout, radius, spacing, themes } from '@/constants/theme';
 import { useAuthStore } from '@/lib/auth-store';
 import { demoStudy, formatDuration, formatMinutes } from '@/lib/demo-study';
 import { useLearnerProfileStore } from '@/lib/learner-profile-store';
-import { parseDailyTarget } from '@/lib/learner-preferences';
+import { parseDailyTarget, parseExamDate } from '@/lib/learner-preferences';
 import { monthlyHeartLimit } from '@/lib/reward-store';
 import { useStudySession } from '@/lib/use-study-session';
 import { getNotificationFeed, markNotificationRead, type LearnerNotification } from '@/lib/notification-api';
@@ -55,6 +55,14 @@ function targetMinutesFrom(value: string) {
   return parseDailyTarget(value) ?? demoStudy.targetMinutes;
 }
 
+function daysUntilExam(value: string, now: Date): number | null {
+  const parsed = parseExamDate(value);
+  if (!parsed) return null;
+  const exam = Date.UTC(parsed.examYear, parsed.examMonth - 1, parsed.examDay ?? 1);
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.max(0, Math.round((exam - today) / dayMs));
+}
+
 function Surface({ children, style }: { children: ReactNode; style?: ViewStyle }) {
   const { theme } = useAppTheme();
   return <View style={[styles.surface, { backgroundColor: theme.surface, borderColor: theme.line }, style]}>{children}</View>;
@@ -73,7 +81,7 @@ export default function HomeScreen() {
   const welcomeQuoteIndex = useAuthStore((state) => state.user?.welcomeQuoteIndex ?? 0);
   const welcomeTitle = isFirstLogin ? 'Welcome' : 'Welcome back';
   const welcomeQuote = welcomeQuotes[welcomeQuoteIndex % welcomeQuotes.length];
-  const [currentDate] = useState(() => new Date());
+  const [currentDate, setCurrentDate] = useState(() => new Date());
   const [showCelebration, setShowCelebration] = useState(false);
   const [showRewards, setShowRewards] = useState(false);
   const [completedSeconds, setCompletedSeconds] = useState(0);
@@ -84,8 +92,8 @@ export default function HomeScreen() {
   const planPercent = Math.min(100, Math.round((study.todayMinutes / dailyTargetMinutes) * 100));
   const completedPlanSegments = Math.round((planPercent / 100) * 12);
   const momentumLabel = planPercent >= 100 ? 'Goal complete' : planPercent >= 60 ? 'Strong momentum' : planPercent >= 30 ? 'Building rhythm' : 'Start your focus';
-  const examTime = new Date(profile.examDate).getTime();
-  const examDays = Number.isNaN(examTime) ? demoStudy.exam.daysLeft : Math.max(0, Math.ceil((examTime - currentDate.getTime()) / dayMs));
+  const examDays = daysUntilExam(profile.examDate, currentDate);
+  const examPressure = examDays === null ? 0 : Math.max(0, Math.min(100, Math.round(100 - (Math.min(examDays, 365) / 365) * 100)));
   const recoveryAvailable = study.recoveryAvailable;
   const today = new Intl.DateTimeFormat('en-IN', { weekday: 'long', day: 'numeric', month: 'long' }).format(currentDate).toUpperCase();
   const handleSession = async () => {
@@ -96,6 +104,12 @@ export default function HomeScreen() {
     setEarnedPoints(result.points);
     setShowCelebration(true);
   };
+
+  useFocusEffect(useCallback(() => {
+    setCurrentDate(new Date());
+    const clock = setInterval(() => setCurrentDate(new Date()), 60_000);
+    return () => clearInterval(clock);
+  }, []));
 
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -146,7 +160,7 @@ export default function HomeScreen() {
       <View style={styles.planFooter}><View style={[styles.momentumChip, { backgroundColor: theme.primarySoft }]}><Sparkles color={theme.primaryStrong} size={13} /><Text style={[styles.momentumText, { color: theme.primaryStrong }]}>{momentumLabel}</Text></View><Pressable accessibilityRole="button" onPress={() => router.push('/tracker')} style={({ pressed }) => [styles.trackerLink, pressed && styles.pressed]}><Text style={[styles.textLink, { color: theme.primaryStrong }]}>Open tracker</Text><ArrowUpRight color={theme.primaryStrong} size={14} /></Pressable></View>
     </Surface>
 
-    <AnimatedExamCard examDays={examDays} examName={profile.examName} category={profile.category} examDate={profile.examDate} pressure={demoStudy.exam.pressure} />
+    <AnimatedExamCard examDays={examDays} examName={profile.examName} category={profile.category} examDate={profile.examDate} pressure={examPressure} />
 
     <Surface style={styles.syllabusCard}><View style={[styles.snapshotIcon, { backgroundColor: theme.primarySoft }]}><Target color={theme.primaryStrong} size={20} /></View><View style={styles.syllabusCopy}><Text style={[styles.cardEyebrow, { color: theme.primary }]}>LEARNING PROGRESS</Text><Text style={[styles.syllabusTitle, { color: theme.fg }]}>Syllabus completion</Text><Text style={[styles.snapshotLabel, { color: theme.muted }]}>Keep completing lessons to move this forward.</Text></View><Text style={[styles.syllabusValue, { color: theme.fg }]}>{demoStudy.syllabusPercent}%</Text><View style={styles.syllabusProgress}><ProgressBar value={demoStudy.syllabusPercent} /></View></Surface>
     </View>
@@ -306,26 +320,16 @@ function CheckoutCelebration({ visible, streak, seconds, pointsEarned, onClose }
   </Modal>;
 }
 
-function AnimatedExamCard({ examDays, examName, category, examDate, pressure }: { examDays: number; examName: string; category: string; examDate: string; pressure: number }) {
+function AnimatedExamCard({ examDays, examName, category, examDate, pressure }: { examDays: number | null; examName: string; category: string; examDate: string; pressure: number }) {
   const { theme } = useAppTheme();
   const dark = theme.canvas === themes.dark.canvas;
-  const [counter] = useState(() => new Animated.Value(365));
-  const [displayDays, setDisplayDays] = useState(365);
-
-  useFocusEffect(useCallback(() => {
-    const listener = counter.addListener(({ value }) => setDisplayDays(Math.max(0, Math.round(value))));
-    counter.setValue(365);
-    const animation = Animated.timing(counter, { toValue: examDays, duration: 1100, easing: Easing.linear, useNativeDriver: false });
-    animation.start();
-    return () => { animation.stop(); counter.removeListener(listener); };
-  }, [counter, examDays]));
 
   return <LinearGradient colors={dark ? ['#251D10', '#16130E', '#111316'] : ['#FFFAED', '#FFFDF7']} style={[styles.examCard, { borderColor: dark ? '#433522' : '#E8DDC4' }]}>
     <View style={styles.examAccent} />
     <View style={styles.examTop}><View style={[styles.examIcon, { backgroundColor: theme.goldSoft }]}><CalendarDays color={theme.goldStrong} size={21} /></View><View style={[styles.pressurePill, { backgroundColor: theme.goldSoft }]}><Text style={[styles.pressureText, { color: theme.goldStrong }]}>PRESSURE {pressure}/100</Text></View></View>
-    <Text style={[styles.examEyebrow, { color: theme.goldStrong }]}>{examName.toUpperCase()} · {category.toUpperCase()}</Text>
-    <View style={styles.examCountRow}><Text style={[styles.examDays, { color: theme.fg }]}>{displayDays}</Text><View><Text style={[styles.examDaysLabel, { color: theme.fg }]}>days</Text><Text style={[styles.examDaysSubLabel, { color: theme.muted }]}>remaining</Text></View></View>
-    <View style={styles.examFooter}><Text style={[styles.examDate, { color: theme.muted }]}>Exam date · {examDate}</Text><Text style={[styles.examMotionLabel, { color: theme.goldStrong }]}>365 → {examDays}</Text></View>
+    <Text style={[styles.examEyebrow, { color: theme.goldStrong }]}>{[examName, category].filter(Boolean).join(' · ').toUpperCase() || 'EXAM'}</Text>
+    <View style={styles.examCountRow}><Text style={[styles.examDays, { color: theme.fg }]}>{examDays ?? '—'}</Text><View><Text style={[styles.examDaysLabel, { color: theme.fg }]}>days</Text><Text style={[styles.examDaysSubLabel, { color: theme.muted }]}>remaining</Text></View></View>
+    <View style={styles.examFooter}><Text style={[styles.examDate, { color: theme.muted }]}>{examDate ? `Exam date · ${examDate}` : 'Exam date not set'}</Text></View>
     <View style={styles.progressGap}><ProgressBar value={pressure} color={theme.gold} /></View>
   </LinearGradient>;
 }

@@ -15,7 +15,6 @@ import {
 import { clearUserScopedCache } from '@/lib/user-cache';
 import { learnerProfileFromPreference, type LearnerPreferenceDto } from '@/lib/learner-preferences';
 import { useLearnerProfileStore } from '@/lib/learner-profile-store';
-import { useThemePreferenceStore } from '@/lib/theme-preference-store';
 import { queryClient } from '@/lib/query-client';
 import { nativeDeviceIdentityHeaders } from '@/lib/device-identity';
 
@@ -169,7 +168,6 @@ const hydrateStudentBootstrap = async (session: StoredAuthSession): Promise<Stor
   if (response.data.preference) {
     const profileStore = useLearnerProfileStore.getState();
     profileStore.updateProfile(learnerProfileFromPreference(response.data.preference, profileStore.profile));
-    await useThemePreferenceStore.getState().setPreference(response.data.preference.preferredTheme.toLowerCase() as 'light' | 'dark');
   }
   const next = { ...session, user: toBootstrapUser(response.data, session.user) };
   await writeStoredSession(next);

@@ -24,10 +24,8 @@ import {
   GraduationCap,
   LogOut,
   Mail,
-  Moon,
   Phone,
   ShieldAlert,
-  Sun,
   UserRound,
   X,
 } from "lucide-react-native";
@@ -53,7 +51,6 @@ import {
   requestEmailChange,
   requestMobileChange,
   resendEmailChange,
-  updateAccountAppearance,
   updateAccountExam,
   updateAccountName,
   updateStudyTarget,
@@ -95,7 +92,7 @@ type Editor = "name" | "email" | "mobile" | "exam" | "delete" | null;
 
 export default function AccountScreen() {
   const router = useRouter();
-  const { theme, preference, setPreference } = useAppTheme();
+  const { theme } = useAppTheme();
   const user = useAuthStore((s) => s.user);
   const token = useAuthStore((s) => s.accessToken);
   const setUser = useAuthStore((s) => s.setUser);
@@ -174,23 +171,6 @@ export default function AccountScreen() {
     } catch (e) {
       setNotifications(previous);
       Alert.alert("Could not save", getAuthErrorMessage(e));
-    }
-  };
-  const chooseTheme = async (next: "light" | "dark") => {
-    const previous = preference;
-    setPreference(next);
-    if (!live) return;
-    try {
-      const updated = await updateAccountAppearance(
-        next.toUpperCase() as "LIGHT" | "DARK",
-        pref?.version,
-      );
-      setAccount((current) =>
-        current ? { ...current, learnerPreference: updated } : current,
-      );
-    } catch (e) {
-      setPreference(previous);
-      Alert.alert("Could not save appearance", getAuthErrorMessage(e));
     }
   };
   const saveStudyTarget = async (minutes: number) => {
@@ -535,58 +515,6 @@ export default function AccountScreen() {
               last={index === all.length - 1}
             />
           ))}
-        </Section>
-
-        <Section
-          title="Appearance"
-          icon={
-            preference === "light" ? (
-              <Sun size={17} color={theme.goldStrong} />
-            ) : (
-              <Moon size={17} color={theme.primary} />
-            )
-          }
-        >
-          <View style={styles.themeRow}>
-            {(["light", "dark"] as const).map((mode) => (
-              <Pressable
-                key={mode}
-                onPress={() => void chooseTheme(mode)}
-                style={[
-                  styles.themeChoice,
-                  {
-                    borderColor:
-                      preference === mode ? theme.primary : theme.line,
-                    backgroundColor:
-                      preference === mode ? theme.primarySoft : theme.sunken,
-                  },
-                ]}
-              >
-                {mode === "light" ? (
-                  <Sun
-                    size={18}
-                    color={preference === mode ? theme.primary : theme.muted}
-                  />
-                ) : (
-                  <Moon
-                    size={18}
-                    color={preference === mode ? theme.primary : theme.muted}
-                  />
-                )}
-                <Text
-                  style={[
-                    styles.themeText,
-                    {
-                      color:
-                        preference === mode ? theme.primaryStrong : theme.muted,
-                    },
-                  ]}
-                >
-                  {mode === "light" ? "Light" : "Dark"}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
         </Section>
 
         <Section
