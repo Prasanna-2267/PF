@@ -12,7 +12,7 @@ export function ProgressBar({ value, color }: { value: number; color?: string })
 export function MetricTile({ label, value, detail, tone = 'primary' }: { label: string; value: string | number; detail: string; tone?: 'primary' | 'gold' | 'success' }) { const { theme } = useAppTheme(); const color = tone === 'gold' ? theme.gold : tone === 'success' ? theme.success : theme.primary; return <View style={[styles.metric, { backgroundColor: theme.surface, borderColor: theme.line }]}><Text style={[styles.metricLabel, { color }]}>{label}</Text><Text style={[styles.metricValue, { color: theme.fg }]}>{value}</Text><Text style={[styles.metricDetail, { color: theme.muted }]}>{detail}</Text></View>; }
 export function SessionButton({ active, seconds, onPress, size = 'compact' }: { active: boolean; seconds: number; onPress: () => void; size?: 'compact' | 'large' }) { const { theme } = useAppTheme(); const large = size === 'large'; return <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.sessionButton, large ? styles.sessionLarge : styles.sessionCompact, { borderColor: active ? theme.gold : theme.primary, backgroundColor: active ? theme.goldSoft : theme.primarySoft }, pressed && { opacity: 0.84 }]}><Text style={[styles.sessionTop, { color: active ? theme.goldStrong : theme.primary }]}>{active ? 'SESSION LIVE' : 'CHECK IN'}</Text><Text style={[styles.sessionTime, { color: theme.fg }]}>{active ? formatDuration(seconds) : 'START'}</Text><Text style={[styles.sessionBottom, { color: theme.muted }]}>{active ? 'Tap to check out' : 'Focus with intent'}</Text></Pressable>; }
 
-export function GrandSessionControl({ active, seconds, onPress }: { active: boolean; seconds: number; onPress: () => void }) {
+export function GrandSessionControl({ active, seconds, onPress, disabled = false }: { active: boolean; seconds: number; onPress: () => void; disabled?: boolean }) {
   const { theme } = useAppTheme();
   const [pulse] = useState(() => new Animated.Value(0));
   const [orbit] = useState(() => new Animated.Value(0));
@@ -43,7 +43,7 @@ export function GrandSessionControl({ active, seconds, onPress }: { active: bool
       Animated.sequence([Animated.timing(pressScale, { toValue: .94, duration: 110, useNativeDriver: nativeDriver }), Animated.spring(pressScale, { toValue: 1, speed: 19, bounciness: 8, useNativeDriver: nativeDriver })]),
       Animated.timing(burst, { toValue: 1, duration: 720, easing: Easing.out(Easing.cubic), useNativeDriver: nativeDriver }),
     ]).start();
-    onPress();
+    if (!disabled) onPress();
   };
 
   const haloScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.09] });
@@ -57,7 +57,7 @@ export function GrandSessionControl({ active, seconds, onPress }: { active: bool
     <Animated.View pointerEvents="none" style={[styles.grandSessionHalo, { borderColor: accent, opacity: haloOpacity, transform: [{ scale: haloScale }] }]} />
     <Animated.View pointerEvents="none" style={[styles.grandSessionBurst, { borderColor: accent, opacity: burstOpacity, transform: [{ scale: burstScale }] }]} />
     <Animated.View pointerEvents="none" style={[styles.grandSessionOrbit, { borderColor: active ? 'rgba(240,200,120,.42)' : 'rgba(185,199,255,.32)', transform: [{ rotate: orbitRotation }] }]}><View style={[styles.grandOrbitDot, { backgroundColor: accent, shadowColor: accent }]} /></Animated.View>
-    <Animated.View style={{ transform: [{ scale: pressScale }] }}><Pressable accessibilityRole="button" accessibilityLabel={active ? 'Check out of focus session' : 'Check in to focus session'} onPress={handlePress}>
+    <Animated.View style={{ transform: [{ scale: pressScale }] }}><Pressable accessibilityRole="button" accessibilityLabel={active ? 'Check out of focus session' : 'Check in to focus session'} accessibilityState={{ disabled }} disabled={disabled} onPress={handlePress}>
       <LinearGradient colors={active ? ['#5B411C', '#241A0D', '#111316'] : ['#25376A', '#17213D', '#10141C']} start={{ x: .15, y: 0 }} end={{ x: .85, y: 1 }} style={[styles.grandSessionCore, { borderColor: accent }]}>
         <Text style={[styles.grandSessionEyebrow, { color: accent }]}>{active ? 'SESSION LIVE' : 'FOCUS SESSION'}</Text>
         <View style={[styles.grandSessionActionIcon, { backgroundColor: active ? theme.gold : theme.primary }]}>{active ? <Square size={18} color={theme.primaryFg} fill={theme.primaryFg} /> : <Play size={20} color={theme.primaryFg} fill={theme.primaryFg} />}</View>

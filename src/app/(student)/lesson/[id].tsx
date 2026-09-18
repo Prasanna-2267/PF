@@ -24,7 +24,7 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}
 function PdfWatermarks({ email }: { email: string }) {
   const { theme } = useAppTheme();
   const entries = useMemo(() => Array.from({ length: 9 }, (_, index) => index), []);
-  return <View style={styles.watermarkLayer}>{entries.map((entry) => <Text key={entry} style={[styles.watermark, { color: `${theme.primary}2E` }]}>{email}</Text>)}</View>;
+  return <View style={styles.watermarkLayer}>{entries.map((entry) => <Text key={entry} style={[styles.watermark, { color: `${theme.primary}66` }]}>{email}</Text>)}</View>;
 }
 
 export default function LessonScreen() {
@@ -72,15 +72,27 @@ export default function LessonScreen() {
     let openedViewerId: string | null = null;
     let heartbeat: ReturnType<typeof setInterval> | undefined;
     void createNoteViewerSession(routeId)
-      .then(async (created) => {
+      .then((created) => {
         openedViewerId = created.viewerSessionId;
         void queryClient.invalidateQueries({ queryKey: noteKeys.all });
-        const manifest = await loadNoteViewerManifest(created.viewerSessionId);
-        if (!active) { await closeNoteViewerSession(created.viewerSessionId).catch(() => undefined); return; }
-        if (manifest.pageCount) setPages(manifest.pageCount);
-        setAttachedLinkState({ routeId, links: manifest.attachedLinks ?? [] });
+        if (!active) { void closeNoteViewerSession(created.viewerSessionId).catch(() => undefined); return; }
+
+        // Start the protected document request immediately. The manifest is
+        // supplementary metadata and must not sit in the critical path before
+        // the native PDF/image renderer can begin downloading the content.
         setViewerState({ routeId, session: created });
         heartbeat = setInterval(() => { void heartbeatNoteViewerSession(created.viewerSessionId).catch(() => undefined); }, 5 * 60_000);
+
+        void loadNoteViewerManifest(created.viewerSessionId)
+          .then((manifest) => {
+            if (!active) return;
+            if (manifest.pageCount) setPages(manifest.pageCount);
+            setAttachedLinkState({ routeId, links: manifest.attachedLinks ?? [] });
+          })
+          .catch(() => {
+            // The protected content request performs the same authorization
+            // checks. A transient manifest failure should not block the PDF.
+          });
       })
       .catch((viewerError: unknown) => { if (active) setViewerState({ routeId, error: getAuthErrorMessage(viewerError) }); });
     return () => {
@@ -140,7 +152,7 @@ const styles = StyleSheet.create({
   opening: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
   openingText: { fontFamily: font.medium, fontSize: 12 },
   watermarkLayer: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, pointerEvents: 'none', flexDirection: 'row', flexWrap: 'wrap', alignContent: 'space-around', justifyContent: 'space-around', paddingVertical: 28, paddingHorizontal: 10 },
-  watermark: { width: '48%', fontFamily: font.bold, fontSize: 11, textAlign: 'center', transform: [{ rotate: '-28deg' }], marginVertical: 17 },
+  watermark: { width: '48%', fontFamily: font.bold, fontSize: 12, textAlign: 'center', transform: [{ rotate: '-28deg' }], marginVertical: 17 },
   error: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center', padding: 28 },
   errorTitle: { fontFamily: font.bold, fontSize: 16, textAlign: 'center' },
   errorCopy: { fontFamily: font.regular, fontSize: 12, lineHeight: 18, marginTop: 7, textAlign: 'center' },

@@ -16,7 +16,7 @@ import { clearUserScopedCache } from '@/lib/user-cache';
 import { learnerProfileFromPreference, type LearnerPreferenceDto } from '@/lib/learner-preferences';
 import { useLearnerProfileStore } from '@/lib/learner-profile-store';
 import { queryClient } from '@/lib/query-client';
-import { nativeDeviceIdentityHeaders } from '@/lib/device-identity';
+import { isDevelopmentWebDeviceEmulation, nativeDeviceIdentityHeaders } from '@/lib/device-identity';
 
 type ServerUser = {
   id: string;
@@ -134,6 +134,10 @@ const toAuthUser = (user: ServerUser, previous?: AuthUser | null, welcomeQuoteIn
 const clientPlatform = (): 'ANDROID' | 'IOS' | 'WEB' => {
   if (Platform.OS === 'android') return 'ANDROID';
   if (Platform.OS === 'ios') return 'IOS';
+  // Expo Web is used only as a local development harness for the mobile app.
+  // Emulating a native platform here exercises the same server-side binding
+  // policy; production web builds remain WEB and cannot create mobile users.
+  if (isDevelopmentWebDeviceEmulation()) return 'ANDROID';
   return 'WEB';
 };
 

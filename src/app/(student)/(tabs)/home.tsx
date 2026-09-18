@@ -146,7 +146,7 @@ export default function HomeScreen() {
       <View style={styles.heroGlowOne} /><View style={styles.heroGlowTwo} />
       <View style={styles.heroTop}><Text style={[styles.date, { color: dark ? theme.goldStrong : '#E3C27E' }]}>●  {today}</Text><View style={[styles.liveStatus, { backgroundColor: study.checkedIn ? 'rgba(217,170,87,.15)' : 'rgba(124,156,255,.14)' }]}><View style={[styles.liveStatusDot, { backgroundColor: study.checkedIn ? theme.goldStrong : theme.primary }]} /><Text style={[styles.liveStatusText, { color: study.checkedIn ? theme.goldStrong : theme.primaryStrong }]}>{study.checkedIn ? 'FOCUS LIVE' : 'READY'}</Text></View></View>
       <Text style={styles.heroTitle}>{welcomeTitle}</Text><Text style={[styles.heroCopy, { color: dark ? theme.muted : '#E1E5F0' }]}>{welcomeQuote}</Text>
-      <View style={styles.sessionWrap}><GrandSessionControl active={study.checkedIn} seconds={study.sessionSeconds} onPress={() => { void handleSession(); }} /></View>
+      <View style={styles.sessionWrap}><GrandSessionControl active={study.checkedIn} seconds={study.sessionSeconds} disabled={study.isPending} onPress={() => { void handleSession(); }} /></View>
       {study.error ? <Text style={[styles.heroCopy, { color: theme.danger }]}>{study.error}</Text> : null}
     </LinearGradient>
     </View>

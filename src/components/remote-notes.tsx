@@ -1,11 +1,11 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet as NativeStyleSheet, Text, TextInput, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { ArrowLeft, BookOpen, Bookmark, Check, ChevronRight, FileImage, FileText, Folder, FolderOpen, Grid2X2, List, LockKeyhole, MoreHorizontal, Package, RotateCw, Search, X } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { font, spacing } from '@/constants/theme';
-import { addNoteRevision, getFavouriteNotes, getNotes, getNoteTree, getPackages, getRecentNotes, noteKeys, type Note, type NoteTreeFolder, type NoteTreeNode, updateNoteState } from '@/lib/student-content-api';
+import { addNoteRevision, getFavouriteNotes, getNotes, getNoteTree, getPackages, getRecentNotes, noteKeys, type Note, type NoteState, type NoteTreeFolder, type NoteTreeNode, updateNoteState } from '@/lib/student-content-api';
 import { useAppTheme } from '@/providers/app-providers';
 import { useAuthStore } from '@/lib/auth-store';
 import { ProfileShortcut } from '@/components/profile-shortcut';
@@ -14,6 +14,33 @@ import { ContentAttachedLinks } from '@/components/content-attached-links';
 const StyleSheet = { create: NativeStyleSheet.create, absoluteFillObject: { position: 'absolute' as const, top: 0, right: 0, bottom: 0, left: 0 } };
 
 type Filter = 'all' | 'in_progress' | 'completed';
+type NoteSnapshot = ReturnType<QueryClient['getQueriesData']>;
+
+const patchNoteCacheValue = (value: unknown, id: string, state: NoteState): unknown => {
+  if (Array.isArray(value)) {
+    let changed = false;
+    const next = value.map((entry) => { const patched = patchNoteCacheValue(entry, id, state); changed ||= patched !== entry; return patched; });
+    return changed ? next : value;
+  }
+  if (!value || typeof value !== 'object') return value;
+  const record = value as Record<string, unknown>;
+  let next = record;
+  if (record.id === id && record.state && typeof record.state === 'object') next = { ...next, state };
+  for (const key of ['items', 'roots', 'children'] as const) {
+    if (!(key in next)) continue;
+    const patched = patchNoteCacheValue(next[key], id, state);
+    if (patched !== next[key]) next = { ...next, [key]: patched };
+  }
+  return next === record ? value : next;
+};
+
+const setNoteStateInCache = (queryClient: QueryClient, id: string, state: NoteState) => {
+  queryClient.setQueriesData({ queryKey: noteKeys.all }, (current) => patchNoteCacheValue(current, id, state));
+};
+
+const restoreNoteSnapshots = (queryClient: QueryClient, snapshots: NoteSnapshot) => {
+  snapshots.forEach(([key, value]) => queryClient.setQueryData(key, value));
+};
 
 export function RemoteNotesScreen() {
   const { theme } = useAppTheme();
@@ -79,9 +106,49 @@ function packageSummary(item: { itemCount: number; noteCount?: number; questionB
 
 function FavouriteBadge() { const { theme } = useAppTheme(); return <View style={[styles.favouriteBadge, { backgroundColor: theme.goldStrong }]}><Bookmark size={9} color="#17120A" fill="#17120A" /></View>; }
 
-function FolderActions({ folder, visible, onClose }: { folder: NoteTreeFolder; visible: boolean; onClose: () => void }) { const { theme } = useAppTheme(); const qc = useQueryClient(); const mutation = useMutation({ mutationFn: () => updateNoteState(folder.id, { favourite: !folder.state.favourite }), onSuccess: async () => { await qc.invalidateQueries({ queryKey: noteKeys.all }); onClose(); } }); return <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}><Pressable style={styles.scrim} onPress={onClose} /><View style={[styles.sheet, { backgroundColor: theme.surface }]}><View style={[styles.handle, { backgroundColor: theme.line }]} /><Text numberOfLines={1} style={[styles.sheetTitle, { color: theme.fg }]}>{folder.title}</Text><Text style={[styles.sheetHint, { color: theme.muted }]}>Keep this folder close at hand from your Favourites shelf.</Text><Pressable disabled={mutation.isPending} onPress={() => mutation.mutate()} style={[styles.action, { borderColor: theme.line }]}><Bookmark size={20} color={theme.goldStrong} fill={folder.state.favourite ? theme.goldStrong : 'transparent'} /><Text style={[styles.actionText, { color: theme.fg }]}>{folder.state.favourite ? 'Remove favourite' : 'Save folder to favourites'}</Text></Pressable></View></Modal>; }
+function FolderActions({ folder, visible, onClose }: { folder: NoteTreeFolder; visible: boolean; onClose: () => void }) {
+  const { theme } = useAppTheme();
+  const qc = useQueryClient();
+  const lock = useRef(false);
+  const mutation = useMutation<NoteState, Error, void, { snapshots: NoteSnapshot }>({
+    mutationFn: () => updateNoteState(folder.id, { favourite: !folder.state.favourite }),
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: noteKeys.all });
+      const snapshots = qc.getQueriesData({ queryKey: noteKeys.all });
+      setNoteStateInCache(qc, folder.id, { ...folder.state, favourite: !folder.state.favourite });
+      return { snapshots };
+    },
+    onSuccess: (state) => { setNoteStateInCache(qc, folder.id, state); onClose(); void qc.invalidateQueries({ queryKey: noteKeys.all }); },
+    onError: (_error, _variables, context) => { if (context) restoreNoteSnapshots(qc, context.snapshots); },
+    onSettled: () => { lock.current = false; },
+  });
+  const save = () => { if (lock.current) return; lock.current = true; mutation.mutate(); };
+  return <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}><Pressable style={styles.scrim} onPress={onClose} /><View style={[styles.sheet, { backgroundColor: theme.surface }]}><View style={[styles.handle, { backgroundColor: theme.line }]} /><Text numberOfLines={1} style={[styles.sheetTitle, { color: theme.fg }]}>{folder.title}</Text><Text style={[styles.sheetHint, { color: theme.muted }]}>Keep this folder close at hand from your Favourites shelf.</Text><Pressable disabled={mutation.isPending} onPress={save} style={[styles.action, { borderColor: theme.line }]}><Bookmark size={20} color={theme.goldStrong} fill={folder.state.favourite ? theme.goldStrong : 'transparent'} /><Text style={[styles.actionText, { color: theme.fg }]}>{folder.state.favourite ? 'Remove favourite' : 'Save folder to favourites'}</Text></Pressable></View></Modal>;
+}
 
-function RemoteActions({ note, visible, onClose }: { note: Note; visible: boolean; onClose: () => void }) { const { theme } = useAppTheme(); const qc = useQueryClient(); const mutation = useMutation({ mutationFn: async (action: 'completed' | 'favourite' | 'revision') => action === 'revision' ? addNoteRevision(note.id) : updateNoteState(note.id, { [action]: !note.state[action] }), onSuccess: async () => { await qc.invalidateQueries({ queryKey: noteKeys.all }); onClose(); } }); const action = (key: 'completed' | 'favourite' | 'revision', title: string, icon: React.ReactNode) => <Pressable disabled={mutation.isPending} onPress={() => mutation.mutate(key)} style={[styles.action, { borderColor: theme.line }]}>{icon}<Text style={[styles.actionText, { color: theme.fg }]}>{title}</Text></Pressable>; return <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}><Pressable style={styles.scrim} onPress={onClose} /><View style={[styles.sheet, { backgroundColor: theme.surface }]}><View style={[styles.handle, { backgroundColor: theme.line }]} /><Text numberOfLines={1} style={[styles.sheetTitle, { color: theme.fg }]}>{note.title}</Text><Text style={[styles.sheetHint, { color: theme.muted }]}>Actions remain available even when premium reading is locked.</Text>{action('completed', note.state.completed ? 'Move to in progress' : 'Mark as completed', <Check size={20} color={theme.success} />)}{action('favourite', note.state.favourite ? 'Remove favourite' : 'Save to favourites', <Bookmark size={20} color={theme.goldStrong} fill={note.state.favourite ? theme.goldStrong : 'transparent'} />)}{action('revision', 'Log a revision', <RotateCw size={20} color={theme.primary} />)}</View></Modal>; }
+function RemoteActions({ note, visible, onClose }: { note: Note; visible: boolean; onClose: () => void }) {
+  const { theme } = useAppTheme();
+  const qc = useQueryClient();
+  const lock = useRef(false);
+  const mutation = useMutation<NoteState, Error, 'completed' | 'favourite' | 'revision', { snapshots: NoteSnapshot }>({
+    mutationFn: async (action) => action === 'revision' ? (await addNoteRevision(note.id)).state : updateNoteState(note.id, { [action]: !note.state[action] }),
+    onMutate: async (action) => {
+      await qc.cancelQueries({ queryKey: noteKeys.all });
+      const snapshots = qc.getQueriesData({ queryKey: noteKeys.all });
+      const optimistic = action === 'revision'
+        ? { ...note.state, revisionCount: note.state.revisionCount + 1, updatedAt: new Date().toISOString() }
+        : { ...note.state, [action]: !note.state[action], updatedAt: new Date().toISOString() };
+      setNoteStateInCache(qc, note.id, optimistic);
+      return { snapshots };
+    },
+    onSuccess: (state) => { setNoteStateInCache(qc, note.id, state); onClose(); void qc.invalidateQueries({ queryKey: noteKeys.all }); },
+    onError: (_error, _action, context) => { if (context) restoreNoteSnapshots(qc, context.snapshots); },
+    onSettled: () => { lock.current = false; },
+  });
+  const run = (key: 'completed' | 'favourite' | 'revision') => { if (lock.current) return; lock.current = true; mutation.mutate(key); };
+  const action = (key: 'completed' | 'favourite' | 'revision', title: string, icon: React.ReactNode) => <Pressable disabled={mutation.isPending} onPress={() => run(key)} style={[styles.action, { borderColor: theme.line }]}>{icon}<Text style={[styles.actionText, { color: theme.fg }]}>{title}</Text></Pressable>;
+  return <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}><Pressable style={styles.scrim} onPress={onClose} /><View style={[styles.sheet, { backgroundColor: theme.surface }]}><View style={[styles.handle, { backgroundColor: theme.line }]} /><Text numberOfLines={1} style={[styles.sheetTitle, { color: theme.fg }]}>{note.title}</Text><Text style={[styles.sheetHint, { color: theme.muted }]}>Actions remain available even when premium reading is locked.</Text>{action('completed', note.state.completed ? 'Move to in progress' : 'Mark as completed', <Check size={20} color={theme.success} />)}{action('favourite', note.state.favourite ? 'Remove favourite' : 'Save to favourites', <Bookmark size={20} color={theme.goldStrong} fill={note.state.favourite ? theme.goldStrong : 'transparent'} />)}{action('revision', 'Log a revision', <RotateCw size={20} color={theme.primary} />)}</View></Modal>;
+}
 
 function HorizontalNotes({ notes, onOpen, empty }: { notes: Note[]; onOpen: (note: Note) => void; empty?: string }) { const { theme } = useAppTheme(); if (!notes.length) return <Text style={[styles.empty, { color: theme.muted }]}>{empty ?? 'Open a note and it will appear here.'}</Text>; return <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontal}>{notes.map((note) => <View key={note.id} style={styles.card}><RemoteNoteRow note={note} onOpen={() => onOpen(note)} /></View>)}</ScrollView>; }
 function HorizontalFavourites({ folders, notes, onOpenFolder, onOpenNote }: { folders: NoteTreeFolder[]; notes: Note[]; onOpenFolder: (folder: NoteTreeFolder) => void; onOpenNote: (note: Note) => void }) { const { theme } = useAppTheme(); if (!folders.length && !notes.length) return <Text style={[styles.empty, { color: theme.muted }]}>Favourite a file or folder to keep it here.</Text>; return <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontal}>{folders.map((folder, index) => <View key={folder.id} style={styles.card}><RemoteFolderRow folder={folder} index={index} layout="list" onOpen={() => onOpenFolder(folder)} /></View>)}{notes.map((note) => <View key={note.id} style={styles.card}><RemoteNoteRow note={note} onOpen={() => onOpenNote(note)} /></View>)}</ScrollView>; }

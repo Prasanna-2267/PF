@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useDemoStudyClock } from '@/lib/demo-study';
-import { claimReward, checkoutFocusSession, getActiveFocusSession, getDailySummary, getEligibleRecoveries, getRewardWallet, getStreak, heartbeatFocusSession, recoverStreak, startFocusSession, type FocusSource } from '@/lib/focus-api';
+import { claimReward, checkoutFocusSession, getActiveFocusSession, getDailySummary, getEligibleRecoveries, getRewardWallet, getStreak, heartbeatFocusSession, recoverStreak, startFocusSession, type DailySummary, type FocusCheckout, type FocusSource, type StreakSnapshot } from '@/lib/focus-api';
 import { useRewardStore } from '@/lib/reward-store';
 import { isDemoSession } from '@/lib/student-session';
 
@@ -14,6 +14,12 @@ export const focusKeys = {
   recovery: ['student', 'streak', 'recovery'] as const,
 };
 
+type ToggleResult =
+  | { kind: 'started' }
+  | { kind: 'completed'; seconds: number; points: number };
+type ActiveFocusPayload = Awaited<ReturnType<typeof getActiveFocusSession>>;
+type FocusMutationContext = { previous: ActiveFocusPayload };
+
 export function useStudySession(source: Extract<FocusSource, 'HOME' | 'TRACKER'>, fallbackTargetMinutes: number) {
   const demo = isDemoSession();
   const demoStudy = useDemoStudyClock();
@@ -23,6 +29,7 @@ export function useStudySession(source: Extract<FocusSource, 'HOME' | 'TRACKER'>
   const demoAward = useRewardStore((state) => state.awardDailyStreak);
   const demoRecover = useRewardStore((state) => state.recoverStreak);
   const queryClient = useQueryClient();
+  const interactionLock = useRef(false);
   const [clock, setClock] = useState<{ sessionId: string | null; extraSeconds: number }>({ sessionId: null, extraSeconds: 0 });
   const active = useQuery({ queryKey: focusKeys.active, queryFn: getActiveFocusSession, enabled: !demo });
   const daily = useQuery({ queryKey: focusKeys.daily, queryFn: getDailySummary, enabled: !demo });
@@ -30,35 +37,98 @@ export function useStudySession(source: Extract<FocusSource, 'HOME' | 'TRACKER'>
   const streak = useQuery({ queryKey: focusKeys.streak, queryFn: getStreak, enabled: !demo });
   const recovery = useQuery({ queryKey: focusKeys.recovery, queryFn: getEligibleRecoveries, enabled: !demo });
 
-  const refresh = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: focusKeys.active }),
-      queryClient.invalidateQueries({ queryKey: focusKeys.daily }),
-      queryClient.invalidateQueries({ queryKey: focusKeys.wallet }),
-      queryClient.invalidateQueries({ queryKey: focusKeys.streak }),
-      queryClient.invalidateQueries({ queryKey: focusKeys.recovery }),
-      queryClient.invalidateQueries({ queryKey: ['student', 'streak', 'calendar'] }),
-      queryClient.invalidateQueries({ queryKey: ['student', 'tracker'] }),
-    ]);
+  const markRelatedDataStale = () => {
+    void queryClient.invalidateQueries({ queryKey: focusKeys.recovery, refetchType: 'none' });
+    void queryClient.invalidateQueries({ queryKey: ['student', 'streak', 'calendar'], refetchType: 'none' });
+    void queryClient.invalidateQueries({ queryKey: ['student', 'tracker'], refetchType: 'none' });
   };
 
-  const toggle = useMutation({
+  const applyCheckoutResult = (result: FocusCheckout) => {
+    queryClient.setQueryData(focusKeys.active, { session: null, serverTime: result.session.serverTime });
+    if (result.dailyActivity) {
+      queryClient.setQueryData<DailySummary>(focusKeys.daily, (current) => current ? {
+        ...current,
+        targetMinutes: result.dailyActivity!.targetMinutes,
+        focusSeconds: result.dailyActivity!.focusSeconds,
+        readingSeconds: result.dailyActivity!.readingSeconds,
+        practiceSeconds: result.dailyActivity!.practiceSeconds,
+        revisionSeconds: result.dailyActivity!.revisionSeconds,
+        focusSessionCount: result.dailyActivity!.focusSessionCount,
+        qualifiesStreak: result.dailyActivity!.qualifiesStreak,
+        goalCompleted: result.dailyActivity!.goalCompleted,
+        progressPercent: Math.min(100, Math.round((result.dailyActivity!.focusSeconds / Math.max(1, result.dailyActivity!.targetMinutes * 60)) * 100)),
+        lastActivityAt: result.dailyActivity!.lastActivityAt,
+        serverTime: result.session.serverTime,
+      } : current);
+    }
+    queryClient.setQueryData<StreakSnapshot>(focusKeys.streak, (current) => current ? {
+      ...current,
+      currentStreak: result.streak.currentStreak,
+      longestStreak: result.streak.longestStreak,
+      lastQualifiedDate: result.streak.lastQualifiedDate,
+      serverTime: result.session.serverTime,
+    } : current);
+    markRelatedDataStale();
+  };
+
+  const toggle = useMutation<ToggleResult, Error, void, FocusMutationContext>({
+    onMutate: async () => {
+      if (demo) return { previous: { session: null, serverTime: new Date().toISOString() } };
+      await queryClient.cancelQueries({ queryKey: focusKeys.active });
+      const previous = queryClient.getQueryData<ActiveFocusPayload>(focusKeys.active)
+        ?? { session: null, serverTime: new Date().toISOString() };
+      const current = previous.session;
+      if (current) {
+        queryClient.setQueryData(focusKeys.active, { session: null, serverTime: new Date().toISOString() });
+      } else {
+        const now = new Date().toISOString();
+        queryClient.setQueryData(focusKeys.active, {
+          session: {
+            id: `pending-${Date.now()}`,
+            source,
+            sourceId: null,
+            plannedDurationSeconds: null,
+            status: 'ACTIVE' as const,
+            startedAt: now,
+            lastHeartbeatAt: now,
+            checkedOutAt: null,
+            abandonedAt: null,
+            durationSeconds: null,
+            elapsedSeconds: 0,
+            serverTime: now,
+          },
+          serverTime: now,
+        });
+      }
+      return { previous };
+    },
     mutationFn: async () => {
       if (demo) {
         const wasActive = demoStudy.checkedIn;
         const seconds = demoStudy.sessionSeconds;
         const points = wasActive ? demoAward(demoStudy.todayMinutes, fallbackTargetMinutes) : 0;
         demoStudy.toggleSession();
-        return wasActive ? { seconds, points } : null;
+        return wasActive ? { kind: 'completed', seconds, points } : { kind: 'started' };
       }
       const current = active.data?.session;
-      if (!current) { await startFocusSession(source); return null; }
+      if (!current) {
+        const result = await startFocusSession(source);
+        queryClient.setQueryData(focusKeys.active, { session: result.session, serverTime: result.session.serverTime });
+        return { kind: 'started' };
+      }
       const result = await checkoutFocusSession(current.id);
+      applyCheckoutResult(result);
       const earnedPoints = result.rewardClaim?.status === 'PENDING' ? result.rewardClaim.points : 0;
-      if (result.rewardClaim?.status === 'PENDING') await claimReward(result.rewardClaim.id);
-      return { seconds: result.session.durationSeconds ?? 0, points: earnedPoints };
+      if (result.rewardClaim?.status === 'PENDING') {
+        void claimReward(result.rewardClaim.id)
+          .then(({ wallet: updatedWallet }) => queryClient.setQueryData(focusKeys.wallet, updatedWallet))
+          .catch(() => { void queryClient.invalidateQueries({ queryKey: focusKeys.wallet }); });
+      }
+      return { kind: 'completed', seconds: result.session.durationSeconds ?? 0, points: earnedPoints };
     },
-    onSuccess: async () => { if (!demo) await refresh(); },
+    onError: (_error, _variables, context) => {
+      if (context?.previous) queryClient.setQueryData(focusKeys.active, context.previous);
+    },
   });
 
   const recover = useMutation({
@@ -66,10 +136,14 @@ export function useStudySession(source: Extract<FocusSource, 'HOME' | 'TRACKER'>
       if (demo) return demoRecover();
       const date = recovery.data?.data[0]?.date;
       if (!date) return false;
-      await recoverStreak(date);
+      const result = await recoverStreak(date);
+      queryClient.setQueryData(focusKeys.streak, result.streak);
+      void queryClient.invalidateQueries({ queryKey: focusKeys.wallet });
+      void queryClient.invalidateQueries({ queryKey: focusKeys.recovery });
+      void queryClient.invalidateQueries({ queryKey: ['student', 'streak', 'calendar'] });
+      void queryClient.invalidateQueries({ queryKey: ['student', 'tracker'], refetchType: 'none' });
       return true;
     },
-    onSuccess: async () => { if (!demo) await refresh(); },
   });
 
   const remoteSession = active.data?.session;
@@ -84,6 +158,17 @@ export function useStudySession(source: Extract<FocusSource, 'HOME' | 'TRACKER'>
     return () => clearInterval(interval);
   }, [demo, remoteSession]);
 
+  const toggleSession = async () => {
+    if (interactionLock.current) return null;
+    interactionLock.current = true;
+    try {
+      const result = await toggle.mutateAsync();
+      return result.kind === 'completed' ? { seconds: result.seconds, points: result.points } : null;
+    } finally {
+      interactionLock.current = false;
+    }
+  };
+
   if (demo) return {
       ...demoStudy,
       points: demoPoints,
@@ -94,7 +179,7 @@ export function useStudySession(source: Extract<FocusSource, 'HOME' | 'TRACKER'>
       recoveryAvailable: false,
       isPending: toggle.isPending || recover.isPending,
       error: null as string | null,
-      toggleSession: () => toggle.mutateAsync(),
+      toggleSession,
       recoverStreak: () => recover.mutate(),
     };
   const startedAt = remoteSession ? new Date(remoteSession.startedAt).getTime() : 0;
@@ -111,6 +196,6 @@ export function useStudySession(source: Extract<FocusSource, 'HOME' | 'TRACKER'>
     targetMinutes, recoveryAvailable: Boolean(recovery.data?.data.length),
     isPending: toggle.isPending || recover.isPending,
     error: requestError instanceof Error ? requestError.message : requestError ? 'Focus data is temporarily unavailable.' : null,
-    toggleSession: () => toggle.mutateAsync(), recoverStreak: () => recover.mutate(),
+    toggleSession, recoverStreak: () => recover.mutate(),
   };
 }

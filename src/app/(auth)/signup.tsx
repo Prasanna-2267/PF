@@ -159,7 +159,7 @@ export default function SignupScreen() {
 
             <View style={styles.formArea}>
               <Text style={styles.formTitle}>Create your account</Text>
-              <Text style={styles.formSubtitle}>Email and mobile will be verified separately.</Text>
+              <Text style={styles.formSubtitle}>Your email will be verified before account creation.</Text>
 
               <View style={styles.fields}>
                 <SignupField label="Full name" fieldKey="name" icon={UserRound} value={name} onChangeText={setName} placeholder="Your full name" autoComplete="name" textContentType="name" returnKeyType="next" error={errors.name} focusedField={focusedField} setFocusedField={setFocusedField} />

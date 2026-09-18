@@ -73,7 +73,10 @@ function ExpoGoProtectedPdf({ source, onLoadComplete, onError }: ProtectedPdfRea
     originWhitelist={[`${viewerOrigin}/*`]}
     javaScriptEnabled
     domStorageEnabled={false}
-    cacheEnabled={false}
+    // Keep the public, immutable PDF.js runtime and worker warm between note
+    // opens. The protected viewer HTML and PDF responses still send no-store,
+    // so enabling the WebView cache does not persist learner documents.
+    cacheEnabled
     thirdPartyCookiesEnabled={false}
     sharedCookiesEnabled={false}
     allowFileAccess={false}
