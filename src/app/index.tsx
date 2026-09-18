@@ -5,6 +5,7 @@ import { ArrowRight, BookOpenCheck, ShieldCheck, Sparkles } from 'lucide-react-n
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
+import { PoweredByNeuralWebLabs } from '@/components/powered-by-neuralweb-labs';
 import { font, radius, spacing } from '@/constants/theme';
 import { useAuthStore } from '@/lib/auth-store';
 
@@ -51,6 +52,7 @@ export default function WelcomeScreen() {
           </Pressable>
           <Pressable accessibilityRole="button" onPress={() => router.push('/signup')} style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}><Text style={styles.secondaryText}>Create new account</Text></Pressable>
           <Text style={styles.legal}>Private by design · Built for consistent learners</Text>
+          <View style={styles.poweredBy}><PoweredByNeuralWebLabs surface="warm" /></View>
         </View>
       </View>
     </SafeAreaView>
@@ -69,5 +71,5 @@ const styles = StyleSheet.create({
   eyebrow: { color: '#F4C762', fontFamily: font.bold, fontSize: 8, letterSpacing: 1.4 }, title: { marginTop: 8, color: '#FFFFFF', fontFamily: font.extraBold, fontSize: 31, lineHeight: 37, letterSpacing: -1 }, description: { maxWidth: 390, marginTop: 10, color: '#ADB2BC', fontFamily: font.regular, fontSize: 12, lineHeight: 19 },
   valueRow: { minHeight: 39, marginTop: 12, flexDirection: 'row', alignItems: 'center', gap: 9 }, valueItem: { flexDirection: 'row', alignItems: 'center', gap: 5 }, valueText: { color: '#D6D8DD', fontFamily: font.semibold, fontSize: 8 }, valueDot: { width: 3, height: 3, borderRadius: 2, backgroundColor: '#5E6169' },
   primaryShell: { marginTop: 12, borderRadius: 16, ...Platform.select({ web: { boxShadow: '0 7px 18px rgba(255, 154, 61, 0.24)' }, default: { shadowColor: '#FF9A3D', shadowOpacity: .24, shadowRadius: 18, shadowOffset: { width: 0, height: 7 }, elevation: 6 } }) }, primaryButton: { minHeight: 55, borderRadius: 16, paddingLeft: 18, paddingRight: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, primaryText: { color: '#17120B', fontFamily: font.extraBold, fontSize: 13 }, arrowWell: { width: 39, height: 39, borderRadius: 13, backgroundColor: 'rgba(255,255,255,.38)', alignItems: 'center', justifyContent: 'center' },
-  secondaryButton: { minHeight: 49, marginTop: 9, borderWidth: 1, borderColor: 'rgba(255,255,255,.1)', borderRadius: 15, backgroundColor: 'rgba(9,10,13,.58)', alignItems: 'center', justifyContent: 'center' }, secondaryText: { color: '#D5D7DC', fontFamily: font.bold, fontSize: 11 }, legal: { marginTop: 11, color: '#666B74', fontFamily: font.medium, fontSize: 7.5, textAlign: 'center' }, pressed: { opacity: .82, transform: [{ scale: .99 }] },
+  secondaryButton: { minHeight: 49, marginTop: 9, borderWidth: 1, borderColor: 'rgba(255,255,255,.1)', borderRadius: 15, backgroundColor: 'rgba(9,10,13,.58)', alignItems: 'center', justifyContent: 'center' }, secondaryText: { color: '#D5D7DC', fontFamily: font.bold, fontSize: 11 }, legal: { marginTop: 11, color: '#666B74', fontFamily: font.medium, fontSize: 7.5, textAlign: 'center' }, poweredBy: { marginTop: 1, marginBottom: -10 }, pressed: { opacity: .82, transform: [{ scale: .99 }] },
 });

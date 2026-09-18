@@ -17,6 +17,7 @@ import { StatusBar } from 'expo-status-bar';
 import { ArrowLeft, ArrowRight, Building2, Check, CheckCircle2, Eye, EyeOff, LockKeyhole, Mail, Phone, QrCode, UserRound } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { PoweredByNeuralWebLabs } from '@/components/powered-by-neuralweb-labs';
 import { font, spacing } from '@/constants/theme';
 import { beginStudentRegistration, getAuthErrorMessage, validateAcademyCode } from '@/lib/auth-session';
 import { useSignupDraftStore } from '@/lib/signup-draft-store';
@@ -195,6 +196,7 @@ export default function SignupScreen() {
             </View>
 
             <View style={styles.signinRow}><Text style={styles.signinText}>Already have an account?</Text><Pressable accessibilityRole="button" hitSlop={8} onPress={() => router.push('/login')}><Text style={styles.signinLink}>Sign in</Text></Pressable></View>
+            <View style={styles.poweredBy}><PoweredByNeuralWebLabs surface="warm" /></View>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -260,5 +262,5 @@ const styles = StyleSheet.create({
   academyBlock: { marginTop: 15, padding: 13, borderWidth: 1, borderColor: 'rgba(244,197,93,.22)', borderRadius: 15, backgroundColor: 'rgba(13,14,18,.88)' }, academyHeading: { flexDirection: 'row', alignItems: 'center', gap: 9 }, academyCopy: { flex: 1, minWidth: 0 }, academyTitle: { color: palette.text, fontFamily: font.bold, fontSize: 11 }, academyHint: { marginTop: 2, color: palette.faint, fontFamily: font.regular, fontSize: 8.5 }, academyCodeRow: { marginTop: 11, flexDirection: 'row', gap: 8 }, academyInput: { flex: 1, minHeight: 43, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: palette.line, color: palette.text, fontFamily: font.bold, fontSize: 11, letterSpacing: 1.1 }, applyCode: { minWidth: 72, borderRadius: 12, backgroundColor: palette.gold, alignItems: 'center', justifyContent: 'center' }, applyCodeText: { color: '#17120B', fontFamily: font.extraBold, fontSize: 10 }, applyDisabled: { opacity: .38 }, scanAcademy: { minHeight: 62, marginTop: 12, paddingHorizontal: 11, borderWidth: 1, borderColor: 'rgba(244,197,93,.28)', borderRadius: 14, backgroundColor: 'rgba(244,197,93,.07)', flexDirection: 'row', alignItems: 'center', gap: 10 }, scanAcademyIcon: { width: 42, height: 42, borderRadius: 13, backgroundColor: 'rgba(244,197,93,.12)', alignItems: 'center', justifyContent: 'center' }, scanAcademyCopy: { flex: 1, minWidth: 0 }, scanAcademyText: { color: palette.text, fontFamily: font.bold, fontSize: 11 }, scanAcademyHint: { marginTop: 3, color: palette.muted, fontFamily: font.regular, fontSize: 8.5 }, academyVerified: { minHeight: 52, marginTop: 10, paddingHorizontal: 10, borderRadius: 12, backgroundColor: 'rgba(121,214,169,.08)', flexDirection: 'row', alignItems: 'center', gap: 9 }, academyVerifiedTitle: { color: palette.text, fontFamily: font.bold, fontSize: 11 }, academyVerifiedText: { marginTop: 2, color: palette.success, fontFamily: font.regular, fontSize: 8 }, changeAcademy: { color: palette.gold, fontFamily: font.bold, fontSize: 9 },
   primaryShell: { marginTop: 16, borderRadius: 15, ...Platform.select({ web: { boxShadow: '0 7px 16px rgba(255, 154, 61, 0.22)' }, default: { shadowColor: '#FF9A3D', shadowOpacity: 0.22, shadowRadius: 16, shadowOffset: { width: 0, height: 7 }, elevation: 5 } }) },
   primaryButton: { minHeight: 53, borderRadius: 15, paddingLeft: 17, paddingRight: 7, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, primaryText: { color: '#17120B', fontFamily: font.extraBold, fontSize: 13 }, arrowWell: { width: 39, height: 39, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.36)', alignItems: 'center', justifyContent: 'center' },
-  signinRow: { minHeight: 49, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 6 }, signinText: { color: palette.muted, fontFamily: font.regular, fontSize: 10 }, signinLink: { color: palette.gold, fontFamily: font.bold, fontSize: 10 }, pressed: { opacity: 0.82, transform: [{ scale: 0.99 }] },
+  signinRow: { minHeight: 49, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 6 }, signinText: { color: palette.muted, fontFamily: font.regular, fontSize: 10 }, signinLink: { color: palette.gold, fontFamily: font.bold, fontSize: 10 }, poweredBy: { marginTop: 1 }, pressed: { opacity: 0.82, transform: [{ scale: 0.99 }] },
 });

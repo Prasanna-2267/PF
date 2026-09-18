@@ -28,7 +28,7 @@ export async function clearUserScopedCache(options: { clearQueries?: boolean } =
     practiceChallengeClaims: [],
   });
   useLessonReaderStore.setState({ byLessonId: {}, recentlyOpened: [] });
-  useLearnerProfileStore.setState({ profile: emptyLearnerProfile() });
+  useLearnerProfileStore.setState({ profile: emptyLearnerProfile(), hydrated: false });
   useAdminAccessStore.setState({ grants: [] });
   await AsyncStorage.multiRemove([...USER_SCOPED_ASYNC_STORAGE_KEYS]);
 }

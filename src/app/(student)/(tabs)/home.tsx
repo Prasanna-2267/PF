@@ -75,6 +75,7 @@ export default function HomeScreen() {
   const dark = theme.canvas === themes.dark.canvas;
   const router = useRouter();
   const profile = useLearnerProfileStore((state) => state.profile);
+  const profileHydrated = useLearnerProfileStore((state) => state.hydrated);
   const fallbackTargetMinutes = targetMinutesFrom(profile.dailyTarget);
   const study = useStudySession('HOME', fallbackTargetMinutes);
   const isFirstLogin = useAuthStore((state) => Boolean(state.user?.isFirstLogin));
@@ -92,7 +93,9 @@ export default function HomeScreen() {
   const planPercent = Math.min(100, Math.round((study.todayMinutes / dailyTargetMinutes) * 100));
   const completedPlanSegments = Math.round((planPercent / 100) * 12);
   const momentumLabel = planPercent >= 100 ? 'Goal complete' : planPercent >= 60 ? 'Strong momentum' : planPercent >= 30 ? 'Building rhythm' : 'Start your focus';
-  const examDays = daysUntilExam(profile.examDate, currentDate);
+  // Wait for the authoritative learner preference so the focus animation
+  // always finishes on the student's real remaining-day count.
+  const examDays = profileHydrated ? daysUntilExam(profile.examDate, currentDate) : null;
   const examPressure = examDays === null ? 0 : Math.max(0, Math.min(100, Math.round(100 - (Math.min(examDays, 365) / 365) * 100)));
   const recoveryAvailable = study.recoveryAvailable;
   const today = new Intl.DateTimeFormat('en-IN', { weekday: 'long', day: 'numeric', month: 'long' }).format(currentDate).toUpperCase();
@@ -160,7 +163,7 @@ export default function HomeScreen() {
       <View style={styles.planFooter}><View style={[styles.momentumChip, { backgroundColor: theme.primarySoft }]}><Sparkles color={theme.primaryStrong} size={13} /><Text style={[styles.momentumText, { color: theme.primaryStrong }]}>{momentumLabel}</Text></View><Pressable accessibilityRole="button" onPress={() => router.push('/tracker')} style={({ pressed }) => [styles.trackerLink, pressed && styles.pressed]}><Text style={[styles.textLink, { color: theme.primaryStrong }]}>Open tracker</Text><ArrowUpRight color={theme.primaryStrong} size={14} /></Pressable></View>
     </Surface>
 
-    <AnimatedExamCard examDays={examDays} examName={profile.examName} category={profile.category} examDate={profile.examDate} pressure={examPressure} />
+    <AnimatedExamCard examDays={examDays} examName={profileHydrated ? profile.examName : ''} category={profileHydrated ? profile.category : ''} examDate={profileHydrated ? profile.examDate : ''} pressure={examPressure} />
 
     <Surface style={styles.syllabusCard}><View style={[styles.snapshotIcon, { backgroundColor: theme.primarySoft }]}><Target color={theme.primaryStrong} size={20} /></View><View style={styles.syllabusCopy}><Text style={[styles.cardEyebrow, { color: theme.primary }]}>LEARNING PROGRESS</Text><Text style={[styles.syllabusTitle, { color: theme.fg }]}>Syllabus completion</Text><Text style={[styles.snapshotLabel, { color: theme.muted }]}>Keep completing lessons to move this forward.</Text></View><Text style={[styles.syllabusValue, { color: theme.fg }]}>{demoStudy.syllabusPercent}%</Text><View style={styles.syllabusProgress}><ProgressBar value={demoStudy.syllabusPercent} /></View></Surface>
     </View>
@@ -323,12 +326,43 @@ function CheckoutCelebration({ visible, streak, seconds, pointsEarned, onClose }
 function AnimatedExamCard({ examDays, examName, category, examDate, pressure }: { examDays: number | null; examName: string; category: string; examDate: string; pressure: number }) {
   const { theme } = useAppTheme();
   const dark = theme.canvas === themes.dark.canvas;
+  const [countdown] = useState(() => new Animated.Value(366));
+  const [displayExamDays, setDisplayExamDays] = useState<number | null>(examDays === null ? null : 366);
+
+  useFocusEffect(useCallback(() => {
+    if (examDays === null) {
+      setDisplayExamDays(null);
+      return undefined;
+    }
+
+    const start = 366;
+    const distance = Math.abs(start - examDays);
+    countdown.stopAnimation();
+    countdown.setValue(start);
+    setDisplayExamDays(start);
+    const listenerId = countdown.addListener(({ value }) => setDisplayExamDays(Math.round(value)));
+    const animation = Animated.timing(countdown, {
+      toValue: examDays,
+      duration: Math.max(900, Math.min(2_600, distance * 7)),
+      easing: Easing.linear,
+      useNativeDriver: false,
+    });
+    animation.start(({ finished }) => {
+      if (finished) setDisplayExamDays(examDays);
+    });
+
+    return () => {
+      animation.stop();
+      countdown.removeListener(listenerId);
+      setDisplayExamDays(366);
+    };
+  }, [countdown, examDays]));
 
   return <LinearGradient colors={dark ? ['#251D10', '#16130E', '#111316'] : ['#FFFAED', '#FFFDF7']} style={[styles.examCard, { borderColor: dark ? '#433522' : '#E8DDC4' }]}>
     <View style={styles.examAccent} />
     <View style={styles.examTop}><View style={[styles.examIcon, { backgroundColor: theme.goldSoft }]}><CalendarDays color={theme.goldStrong} size={21} /></View><View style={[styles.pressurePill, { backgroundColor: theme.goldSoft }]}><Text style={[styles.pressureText, { color: theme.goldStrong }]}>PRESSURE {pressure}/100</Text></View></View>
     <Text style={[styles.examEyebrow, { color: theme.goldStrong }]}>{[examName, category].filter(Boolean).join(' · ').toUpperCase() || 'EXAM'}</Text>
-    <View style={styles.examCountRow}><Text style={[styles.examDays, { color: theme.fg }]}>{examDays ?? '—'}</Text><View><Text style={[styles.examDaysLabel, { color: theme.fg }]}>days</Text><Text style={[styles.examDaysSubLabel, { color: theme.muted }]}>remaining</Text></View></View>
+    <View style={styles.examCountRow}><Text style={[styles.examDays, { color: theme.fg }]}>{displayExamDays ?? '—'}</Text><View><Text style={[styles.examDaysLabel, { color: theme.fg }]}>days</Text><Text style={[styles.examDaysSubLabel, { color: theme.muted }]}>remaining</Text></View></View>
     <View style={styles.examFooter}><Text style={[styles.examDate, { color: theme.muted }]}>{examDate ? `Exam date · ${examDate}` : 'Exam date not set'}</Text></View>
     <View style={styles.progressGap}><ProgressBar value={pressure} color={theme.gold} /></View>
   </LinearGradient>;

@@ -15,6 +15,7 @@ import { StatusBar } from 'expo-status-bar';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { PoweredByNeuralWebLabs } from '@/components/powered-by-neuralweb-labs';
 import { font, radius, spacing } from '@/constants/theme';
 import { getAuthErrorMessage, loginWithPassword } from '@/lib/auth-session';
 
@@ -144,6 +145,8 @@ export default function LoginScreen() {
             <Pressable accessibilityRole="button" hitSlop={8} onPress={() => router.push('/signup')}><Text style={styles.createLink}>Create an account</Text></Pressable>
           </View>
 
+          <View style={styles.poweredBy}><PoweredByNeuralWebLabs surface="warm" /></View>
+
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -204,6 +207,7 @@ const styles = StyleSheet.create({
   createRow: { minHeight: 48, marginTop: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 6 },
   createText: { color: palette.muted, fontFamily: font.regular, fontSize: 10 },
   createLink: { color: palette.gold, fontFamily: font.bold, fontSize: 10 },
+  poweredBy: { marginTop: 'auto', paddingTop: 4 },
   demoHint: { marginTop: 'auto', paddingTop: 8, color: palette.faint, fontFamily: font.medium, fontSize: 7.5, letterSpacing: 0.15, textAlign: 'center' },
   pressed: { opacity: 0.82, transform: [{ scale: 0.99 }] },
 });

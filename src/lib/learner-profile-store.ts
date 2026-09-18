@@ -49,7 +49,8 @@ export function normalizeExamDate(value: string) {
   return trimmed;
 }
 
-export const useLearnerProfileStore = create<{ profile: LearnerProfile; updateProfile: (profile: LearnerProfile) => void }>((set) => ({
+export const useLearnerProfileStore = create<{ profile: LearnerProfile; hydrated: boolean; updateProfile: (profile: LearnerProfile) => void }>((set) => ({
   profile: defaultProfile,
-  updateProfile: (profile) => set({ profile: { ...profile, examDate: normalizeExamDate(profile.examDate) } }),
+  hydrated: false,
+  updateProfile: (profile) => set({ profile: { ...profile, examDate: normalizeExamDate(profile.examDate) }, hydrated: true }),
 }));
