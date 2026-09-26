@@ -9,7 +9,6 @@ Set these values in the build environment before creating a release build:
 ```text
 EXPO_PUBLIC_API_BASE_URL=https://api.example.com/api
 EXPO_PUBLIC_STORE_BASE_URL=https://www.example.com
-EXPO_PUBLIC_ALLOW_SCREEN_CAPTURE=false
 EXPO_PUBLIC_EAS_PROJECT_ID=<Expo project UUID>
 ```
 

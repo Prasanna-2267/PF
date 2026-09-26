@@ -17,7 +17,11 @@
         "foregroundImage": "./assets/images/android-icon-eye-foreground.png",
         "monochromeImage": "./assets/images/android-icon-eye-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "output": "static",
@@ -49,12 +53,20 @@
           "defaultChannel": "learning-reminders"
         }
       ],
-      "@config-plugins/react-native-pdf",
-      "expo-image"
+      "./plugins/with-react-native-pdf.js",
+      "expo-image",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "fb51552a-edd0-4daa-bce8-0666b0b6be0b"
+      }
+    },
+    "owner": "parallax-flow"
   }
 }

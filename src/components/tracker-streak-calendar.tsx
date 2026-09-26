@@ -6,8 +6,6 @@ import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui';
 import { font } from '@/constants/theme';
 import { getStreakCalendar } from '@/lib/focus-api';
-import { useRewardStore } from '@/lib/reward-store';
-import { isDemoSession } from '@/lib/student-session';
 import { useAppTheme } from '@/providers/app-providers';
 
 const nativeDriver = Platform.OS !== 'web';
@@ -15,15 +13,13 @@ const weekDays = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
 export function TrackerStreakCalendar() {
   const { theme } = useAppTheme();
-  const demo = isDemoSession();
-  const demoStreak = useRewardStore((state) => state.streak);
   const currentDate = useMemo(() => new Date(), []);
   const [visibleMonth, setVisibleMonth] = useState(() => new Date(currentDate.getFullYear(), currentDate.getMonth(), 1));
   const year = visibleMonth.getFullYear();
   const month = visibleMonth.getMonth();
   const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
-  const remote = useQuery({ queryKey: ['student', 'streak', 'calendar', monthKey], queryFn: () => getStreakCalendar(monthKey), enabled: !demo });
-  const streak = demo ? demoStreak : remote.data?.streak.currentStreak ?? 0;
+  const remote = useQuery({ queryKey: ['student', 'streak', 'calendar', monthKey], queryFn: () => getStreakCalendar(monthKey) });
+  const streak = remote.data?.streak.currentStreak ?? 0;
   const [flameMotion] = useState(() => new Animated.Value(0));
   const [entrance] = useState(() => new Animated.Value(0));
 
@@ -41,15 +37,9 @@ export function TrackerStreakCalendar() {
     if (index < mondayOffset) return null;
     const day = index - mondayOffset + 1;
     const date = `${monthKey}-${String(day).padStart(2, '0')}`;
-    if (!demo) {
-      const remoteCell = remote.data?.cells.find((cell) => cell.date === date);
-      const active = remoteCell?.status === 'active' || remoteCell?.status === 'protected';
-      return { day, active, missed: remoteCell?.status === 'missed', today: date === `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`, future: remoteCell?.status === 'future' };
-    }
-    const difference = sameMonth ? currentDate.getDate() - day : -1;
-    const active = sameMonth ? difference >= 0 && difference < streak : year < currentDate.getFullYear() || month < currentDate.getMonth() ? day % 6 === 2 || day % 9 === 0 : false;
-    const missed = !active && (sameMonth ? day < currentDate.getDate() : true) && (day + month) % 7 === 3;
-    return { day, active, missed, today: sameMonth && day === currentDate.getDate(), future: sameMonth && day > currentDate.getDate() };
+    const remoteCell = remote.data?.cells.find((cell) => cell.date === date);
+    const active = remoteCell?.status === 'active' || remoteCell?.status === 'protected';
+    return { day, active, missed: remoteCell?.status === 'missed', today: date === `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`, future: remoteCell?.status === 'future' };
   });
   const missed = cells.filter((cell) => cell?.missed).length;
   const flameScale = flameMotion.interpolate({ inputRange: [0, 1], outputRange: [.95, 1.08] });
@@ -63,7 +53,7 @@ export function TrackerStreakCalendar() {
       <View style={styles.calendarHeader}><View><Text style={[styles.month, { color: theme.fg }]}>{monthLabel}</Text><Text style={[styles.monthHint, { color: theme.muted }]}>Learning activity by day</Text></View><View style={styles.monthActions}><Pressable accessibilityLabel="Previous month" onPress={() => setVisibleMonth(new Date(year, month - 1, 1))} style={[styles.monthButton, { backgroundColor: theme.surface }]}><ChevronLeft size={17} color={theme.muted} /></Pressable><Pressable accessibilityLabel="Next month" onPress={() => setVisibleMonth(new Date(year, month + 1, 1))} style={[styles.monthButton, { backgroundColor: theme.surface }]}><ChevronRight size={17} color={theme.muted} /></Pressable></View></View>
       <View style={styles.weekRow}>{weekDays.map((day, index) => <Text key={day} style={[styles.weekDay, { color: index > 4 ? theme.goldStrong : theme.faint }]}>{day}</Text>)}</View>
       <View style={styles.grid}>{cells.map((cell, index) => <View key={`${year}-${month}-${index}`} style={styles.dayCell}>{cell ? <View style={styles.dayBadge}>{cell.active ? <Flame size={cell.today ? 35 : 31} fill={cell.today ? '#FF8614' : '#F0C878'} color={cell.today ? '#FF8614' : '#F0C878'} strokeWidth={1} /> : null}<View style={styles.dayNumberLayer}><Text style={[styles.dayNumber, { color: cell.active ? '#170D05' : cell.missed ? theme.danger : cell.future ? theme.faint : theme.muted }, cell.active && styles.activeDayNumber]}>{cell.day}</Text>{cell.missed ? <View style={[styles.missedDot, { backgroundColor: theme.danger }]} /> : null}</View></View> : null}</View>)}</View>
-      <View style={[styles.footer, { borderTopColor: theme.line }]}><View style={styles.legend}><Flame size={14} fill={theme.goldStrong} color={theme.goldStrong} /><Text style={[styles.legendStrong, { color: theme.goldStrong }]}>{streak} active</Text></View><View style={styles.legend}><View style={[styles.missedLegend, { backgroundColor: theme.danger }]} /><Text style={[styles.legendText, { color: theme.muted }]}>{missed} missed</Text></View><Text style={[styles.best, { color: theme.faint }]}>Best · {demo ? 12 : remote.data?.streak.longestStreak ?? 0} days</Text></View>
+      <View style={[styles.footer, { borderTopColor: theme.line }]}><View style={styles.legend}><Flame size={14} fill={theme.goldStrong} color={theme.goldStrong} /><Text style={[styles.legendStrong, { color: theme.goldStrong }]}>{streak} active</Text></View><View style={styles.legend}><View style={[styles.missedLegend, { backgroundColor: theme.danger }]} /><Text style={[styles.legendText, { color: theme.muted }]}>{missed} missed</Text></View><Text style={[styles.best, { color: theme.faint }]}>Best · {remote.data?.streak.longestStreak ?? 0} days</Text></View>
     </View>
   </Card></Animated.View>;
 }

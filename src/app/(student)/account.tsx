@@ -97,7 +97,7 @@ export default function AccountScreen() {
   const token = useAuthStore((s) => s.accessToken);
   const setUser = useAuthStore((s) => s.setUser);
   const profileStore = useLearnerProfileStore();
-  const live = Boolean(token && !token.startsWith("ui-only-"));
+  const live = Boolean(token);
   const [account, setAccount] = useState<StudentAccount | null>(null);
   const [notifications, setNotifications] = useState(defaults);
   const [loading, setLoading] = useState(live);
@@ -923,11 +923,6 @@ function AccountEditor({
                   {resendCountdown.label}
                 </Text>
               </Pressable>
-              {challenge.developmentCode ? (
-                <Text style={[styles.devCode, { color: theme.goldStrong }]}>
-                  Development code: {challenge.developmentCode}
-                </Text>
-              ) : null}
             </>
           ) : editor === "exam" ? (
             <>

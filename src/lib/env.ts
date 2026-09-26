@@ -1,8 +1,6 @@
 import Constants from 'expo-constants';
 import { NativeModules } from 'react-native';
 
-const FALLBACK_API_URL = 'http://10.0.2.2:4000/api';
-
 const isDevelopmentHost = (hostname: string): boolean => (
   hostname === 'localhost'
   || hostname === '127.0.0.1'
@@ -55,15 +53,34 @@ const resolveDevelopmentUrl = (configuredUrl: string, targetPort: number, defaul
   }
 };
 
-const configuredApi = process.env.EXPO_PUBLIC_API_BASE_URL
-  ?? (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined)
-  ?? FALLBACK_API_URL;
+const requireUrl = (name: string, value: string | undefined): string => {
+  if (!value?.trim()) throw new Error(`${name} must be configured for this build.`);
+  try {
+    return new URL(value).toString().replace(/\/$/, '');
+  } catch {
+    throw new Error(`${name} must be a valid absolute URL.`);
+  }
+};
+
+const optionalUrl = (value: string | undefined): string | undefined => {
+  if (!value?.trim()) return undefined;
+  try {
+    return new URL(value).toString().replace(/\/$/, '');
+  } catch {
+    return undefined;
+  }
+};
+
+const configuredApi = requireUrl(
+  'EXPO_PUBLIC_API_BASE_URL',
+  process.env.EXPO_PUBLIC_API_BASE_URL ?? (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined),
+);
 
 export const API_BASE_URL = resolveDevelopmentUrl(configuredApi, 4000, '/api');
 
-const configuredStore = process.env.EXPO_PUBLIC_STORE_BASE_URL
-  ?? API_BASE_URL.replace(/:4000\/api$/, ':5173').replace(/\/api$/, '');
+const configuredStore = requireUrl('EXPO_PUBLIC_STORE_BASE_URL', process.env.EXPO_PUBLIC_STORE_BASE_URL);
 
 export const STORE_BASE_URL = resolveDevelopmentUrl(configuredStore, 5173);
+export const NEURALWEB_LABS_URL = optionalUrl(process.env.EXPO_PUBLIC_NEURALWEB_LABS_URL);
 
 export const API_CONNECTION_HINT = __DEV__ ? API_BASE_URL : undefined;

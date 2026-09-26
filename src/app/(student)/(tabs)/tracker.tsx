@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Easing,
   Platform,
@@ -29,24 +30,13 @@ import { MonthlyReportShortcut } from "@/components/monthly-report-shortcut";
 import { GrandSessionControl, ProgressBar } from "@/components/study-ui";
 import { TrackerStreakCalendar } from "@/components/tracker-streak-calendar";
 import { font, layout, spacing, themes } from "@/constants/theme";
-import { demoStudy, formatMinutes } from "@/lib/demo-study";
+import { formatMinutes } from "@/lib/study-format";
 import { useStudySession } from "@/lib/use-study-session";
-import { isDemoSession } from "@/lib/student-session";
 import { getTrackerSummary, type TrackerSummary } from "@/lib/tracker-api";
 import { ProfileShortcut } from "@/components/profile-shortcut";
 import { useAppTheme } from "@/providers/app-providers";
 
 const nativeDriver = Platform.OS !== "web";
-
-const week = [
-  { day: "M", minutes: 95 },
-  { day: "T", minutes: 132 },
-  { day: "W", minutes: 48 },
-  { day: "T", minutes: 164 },
-  { day: "F", minutes: 118 },
-  { day: "S", minutes: 76 },
-  { day: "S", minutes: 78 },
-];
 
 function formatTrackedSeconds(totalSeconds: number) {
   const seconds = Math.max(0, Math.round(totalSeconds));
@@ -64,33 +54,27 @@ function formatBarSeconds(totalSeconds: number) {
   return `${Math.round((totalSeconds / 3600) * 10) / 10}h`;
 }
 
-function ConsistencyChart({ remote, activeFocusSeconds = 0 }: { remote?: TrackerSummary; activeFocusSeconds?: number }) {
+function ConsistencyChart({ remote, activeFocusSeconds = 0 }: { remote: TrackerSummary; activeFocusSeconds?: number }) {
   const { theme } = useAppTheme();
-  const chartWeek = remote
-    ? remote.consistency
+  const chartWeek = remote.consistency
         .slice(-7)
         .map((entry, index, entries) => ({
           day: new Date(`${entry.date}T12:00:00`).toLocaleDateString("en-US", {
             weekday: "narrow",
           }),
           seconds: entry.totalSeconds + (index === entries.length - 1 ? activeFocusSeconds : 0),
-        }))
-    : week.map((entry) => ({ day: entry.day, seconds: entry.minutes * 60 }));
-  const totalSeconds = remote
-    ? remote.summary.totalSeconds + activeFocusSeconds
-    : chartWeek.reduce((sum, entry) => sum + entry.seconds, 0);
+        }));
+  const totalSeconds = remote.summary.totalSeconds + activeFocusSeconds;
   const maxSeconds = Math.max(
     180 * 60,
     ...chartWeek.map((entry) => entry.seconds),
-    (remote?.consistency.at(-1)?.targetMinutes ?? 0) * 60,
+    (remote.consistency.at(-1)?.targetMinutes ?? 0) * 60,
   );
-  const change = remote?.summary.changePercent ?? 12;
-  const bestSeconds = remote
-    ? Math.max(0, ...chartWeek.map((entry) => entry.seconds))
-    : 164 * 60;
-  const today = remote?.consistency.at(-1);
+  const change = remote.summary.changePercent;
+  const bestSeconds = Math.max(0, ...chartWeek.map((entry) => entry.seconds));
+  const today = remote.consistency.at(-1);
   const liveGoalReached = Boolean(today && !today.goalCompleted && today.totalSeconds + activeFocusSeconds >= today.targetMinutes * 60);
-  const goalDays = (remote?.summary.goalDays ?? 5) + (liveGoalReached ? 1 : 0);
+  const goalDays = remote.summary.goalDays + (liveGoalReached ? 1 : 0);
   return (
     <Card style={styles.chartCard}>
       <View style={styles.chartHeading}>
@@ -103,7 +87,7 @@ function ConsistencyChart({ remote, activeFocusSeconds = 0 }: { remote?: Tracker
           </Text>
           <Text style={[styles.chartSummary, { color: theme.muted }]}>
             {formatTrackedSeconds(totalSeconds)} total ·{" "}
-            {formatTrackedSeconds(remote ? totalSeconds / 7 : 102 * 60)}{" "}
+            {formatTrackedSeconds(totalSeconds / 7)}{" "}
             daily average
           </Text>
         </View>
@@ -133,7 +117,7 @@ function ConsistencyChart({ remote, activeFocusSeconds = 0 }: { remote?: Tracker
       <View style={styles.chartArea}>
         <View style={[styles.goalLine, { borderTopColor: theme.lineStrong }]}>
           <Text style={[styles.goalLabel, { color: theme.faint }]}>
-            {formatMinutes(remote?.consistency.at(-1)?.targetMinutes ?? 120)}{" "}
+            {formatMinutes(remote.consistency.at(-1)?.targetMinutes ?? 0)}{" "}
             goal
           </Text>
         </View>
@@ -206,7 +190,7 @@ function ConsistencyChart({ remote, activeFocusSeconds = 0 }: { remote?: Tracker
         />
         <Insight
           icon={<CalendarClock color={theme.success} size={16} />}
-          value={`${remote?.streak.current ?? 6} days`}
+          value={`${remote.streak.current} days`}
           label="Current streak"
         />
       </View>
@@ -745,12 +729,10 @@ function ReadinessHubMark() {
 export default function TrackerScreen() {
   const { theme } = useAppTheme();
   const dark = theme.canvas === themes.dark.canvas;
-  const study = useStudySession("TRACKER", demoStudy.targetMinutes);
-  const demo = isDemoSession();
+  const study = useStudySession("TRACKER");
   const tracker = useQuery({
     queryKey: ["student", "tracker", "summary", 7],
     queryFn: () => getTrackerSummary(7),
-    enabled: !demo,
     staleTime: 30_000,
     refetchInterval: 60_000,
     refetchOnMount: "always",
@@ -759,10 +741,11 @@ export default function TrackerScreen() {
   const { width } = useWindowDimensions();
   const wide = width >= layout.tabletBreakpoint;
   const remaining = Math.max(0, study.targetMinutes - study.todayMinutes);
-  const examDays = trackerData?.exam.daysRemaining ?? (demo ? demoStudy.exam.daysLeft : null);
-  const examPressure =
-    trackerData?.exam.pressurePercent ?? (demo ? demoStudy.exam.pressure : 0);
-  const examDate = trackerData?.exam.date
+  if (tracker.isLoading || study.isLoading) return <SafeAreaView edges={["top", "left", "right"]} style={[styles.safe, { backgroundColor: theme.canvas }]}><View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12 }}><ActivityIndicator color={theme.primaryStrong} /><Text style={{ color: theme.muted, fontFamily: font.medium }}>Loading your tracker…</Text></View></SafeAreaView>;
+  if (!trackerData) return <SafeAreaView edges={["top", "left", "right"]} style={[styles.safe, { backgroundColor: theme.canvas }]}><View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.xl }}><Text style={{ color: theme.danger, fontFamily: font.medium, textAlign: "center" }}>{tracker.error instanceof Error ? tracker.error.message : "Your tracker could not be loaded. Please try again."}</Text></View></SafeAreaView>;
+  const examDays = trackerData.exam.daysRemaining;
+  const examPressure = trackerData.exam.pressurePercent ?? 0;
+  const examDate = trackerData.exam.date
     ? new Date(
         `${trackerData.exam.date.slice(0, 10)}T12:00:00`,
       ).toLocaleDateString("en-IN", {
@@ -770,7 +753,7 @@ export default function TrackerScreen() {
         month: "short",
         year: "numeric",
       })
-    : demo ? demoStudy.exam.date : "Not set";
+    : "Not set";
   return (
     <SafeAreaView
       edges={["top", "left", "right"]}
@@ -817,7 +800,7 @@ export default function TrackerScreen() {
                 numberOfLines={1}
                 style={[styles.examName, { color: theme.fg }]}
               >
-                {trackerData?.course.name ?? (demo ? demoStudy.exam.label : "Your exam")}
+                {trackerData.course.name}
               </Text>
             </View>
             <View
@@ -941,28 +924,23 @@ export default function TrackerScreen() {
                 <ReadinessCard
                   icon={<BookCheck size={18} color={theme.primaryStrong} />}
                   label="SYLLABUS"
-                  value={`${trackerData?.readiness.syllabusPercent ?? demoStudy.syllabusPercent}%`}
+                  value={`${trackerData.readiness.syllabusPercent}%`}
                   detail={
                     trackerData
                       ? `${trackerData.readiness.completedNotes}/${trackerData.readiness.totalNotes} notes completed`
                       : "Coverage completed"
                   }
                   progress={
-                    trackerData?.readiness.syllabusPercent ??
-                    demoStudy.syllabusPercent
+                    trackerData.readiness.syllabusPercent
                   }
                   color={theme.primaryStrong}
                 />
                 <ReadinessCard
                   icon={<RotateCcw size={18} color={theme.goldStrong} />}
                   label="REVISIONS"
-                  value={`${trackerData?.readiness.revisions ?? demoStudy.revisions}`}
+                  value={`${trackerData.readiness.revisions}`}
                   detail="Intentional returns"
-                  progress={
-                    trackerData
-                      ? Math.min(100, trackerData.readiness.revisions * 10)
-                      : 60
-                  }
+                  progress={Math.min(100, trackerData.readiness.revisions * 10)}
                   color={theme.goldStrong}
                 />
               </View>
@@ -1064,33 +1042,21 @@ export default function TrackerScreen() {
               />
             }
             label="STREAK"
-            value={`${trackerData?.streak.current ?? study.streak} days`}
-            detail={`Best run · ${trackerData?.streak.longest ?? study.longestStreak} days`}
+            value={`${trackerData.streak.current} days`}
+            detail={`Best run · ${trackerData.streak.longest} days`}
             color={theme.goldStrong}
             progress={Math.min(
               100,
-              (trackerData?.streak.current ?? study.streak) * 10,
+              trackerData.streak.current * 10,
             )}
           />
           <TrackerMetricCard
             icon={<TrendingUp color={theme.success} size={19} />}
             label="MOMENTUM"
-            value={
-              trackerData
-                ? `${trackerData.summary.changePercent > 0 ? "+" : ""}${trackerData.summary.changePercent}%`
-                : `${demoStudy.momentum}`
-            }
-            detail={
-              trackerData
-                ? `${trackerData.summary.activeDays} active days`
-                : "Strong this week"
-            }
+            value={`${trackerData.summary.changePercent > 0 ? "+" : ""}${trackerData.summary.changePercent}%`}
+            detail={`${trackerData.summary.activeDays} active days`}
             color={theme.success}
-            progress={
-              trackerData
-                ? Math.min(100, (trackerData.summary.activeDays / 7) * 100)
-                : 84
-            }
+            progress={Math.min(100, (trackerData.summary.activeDays / 7) * 100)}
           />
         </View>
       </ScrollView>

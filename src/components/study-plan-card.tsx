@@ -5,8 +5,6 @@ import { CalendarPlus, CheckCircle2, Clock3, ListTodo, MoreHorizontal, Play, Plu
 
 import { Card } from '@/components/ui';
 import { font, radius, spacing } from '@/constants/theme';
-import { homeTodoDateKey, useHomeTodoStore } from '@/lib/home-todo-store';
-import { isDemoSession } from '@/lib/student-session';
 import { addStudyTask, clearCompletedStudyTasks, getTodayStudyPlan, hideStudyTask, regenerateStudyPlan, updateStudyTask, type StudyPlan, type StudyTask } from '@/lib/study-plan-api';
 import { useAppTheme } from '@/providers/app-providers';
 
@@ -40,21 +38,13 @@ const withTaskAction = (plan: StudyPlan, id: string, action: 'start' | 'complete
 
 export function StudyPlanCard() {
   const { theme } = useAppTheme();
-  const demo = isDemoSession();
   const queryClient = useQueryClient();
-  const demoTodos = useHomeTodoStore((state) => state.todos);
-  const syncDemo = useHomeTodoStore((state) => state.syncToday);
-  const addDemo = useHomeTodoStore((state) => state.addTodo);
-  const toggleDemo = useHomeTodoStore((state) => state.toggleTodo);
-  const removeDemo = useHomeTodoStore((state) => state.removeTodo);
-  const clearDemo = useHomeTodoStore((state) => state.clearCompleted);
-  const remote = useQuery({ queryKey: planKey, queryFn: getTodayStudyPlan, enabled: !demo });
+  const remote = useQuery({ queryKey: planKey, queryFn: getTodayStudyPlan });
   const [text, setText] = useState('');
   const [selected, setSelected] = useState<StudyTask | null>(null);
   const [entrance] = useState(() => new Animated.Value(0));
   const mutationLock = useRef(false);
 
-  useEffect(() => { if (demo) syncDemo(homeTodoDateKey()); }, [demo, syncDemo]);
   useEffect(() => { Animated.timing(entrance, { toValue: 1, duration: 460, easing: Easing.out(Easing.cubic), useNativeDriver: nativeDriver }).start(); }, [entrance]);
   const commit = (plan: StudyPlan) => queryClient.setQueryData(planKey, plan);
   const mutation = useMutation<StudyPlan, Error, PlanMutation, { previous?: StudyPlan }>({
@@ -75,7 +65,7 @@ export function StudyPlanCard() {
     mutation.mutate(input);
     return true;
   };
-  const tasks: VisibleTask[] = demo ? demoTodos.map((task) => ({ ...task })) : (remote.data?.tasks ?? []).filter((task) => !['SKIPPED', 'RESCHEDULED', 'REPLACED'].includes(task.status)).map((task) => ({ id: task.id, title: task.title, completed: task.status === 'COMPLETED', reason: task.reason, plannedMinutes: task.plannedMinutes, source: task.source, remote: task }));
+  const tasks: VisibleTask[] = (remote.data?.tasks ?? []).filter((task) => !['SKIPPED', 'RESCHEDULED', 'REPLACED'].includes(task.status)).map((task) => ({ id: task.id, title: task.title, completed: task.status === 'COMPLETED', reason: task.reason, plannedMinutes: task.plannedMinutes, source: task.source, remote: task }));
   const completed = tasks.filter((task) => task.completed).length;
   const percent = tasks.length ? Math.round((completed / tasks.length) * 100) : 0;
   const translateY = entrance.interpolate({ inputRange: [0, 1], outputRange: [15, 0] });
@@ -84,7 +74,6 @@ export function StudyPlanCard() {
   const submit = () => {
     const title = text.trim();
     if (!title) return;
-    if (demo) { addDemo(title); setText(''); return; }
     const started = runMutation({
       execute: () => addStudyTask(title),
       optimistic: (plan) => {
@@ -96,23 +85,20 @@ export function StudyPlanCard() {
     if (started) setText('');
   };
   const toggle = (task: VisibleTask) => {
-    if (demo) toggleDemo(task.id);
-    else {
-      const action = task.completed ? 'reopen' : 'complete';
-      runMutation({ execute: () => updateStudyTask(task.id, action), optimistic: (plan) => withTaskAction(plan, task.id, action) });
-    }
+    const action = task.completed ? 'reopen' : 'complete';
+    runMutation({ execute: () => updateStudyTask(task.id, action), optimistic: (plan) => withTaskAction(plan, task.id, action) });
   };
 
-  if (!demo && remote.isError) return <Card style={styles.error}><ListTodo color={theme.danger} size={22} /><Text style={[styles.errorTitle, { color: theme.fg }]}>Your study plan is unavailable</Text><Text style={[styles.errorText, { color: theme.muted }]}>Nothing was replaced with demo data. Try loading the real plan again.</Text><Pressable onPress={() => remote.refetch()} style={[styles.retry, { backgroundColor: theme.primary }]}><Text style={[styles.retryText, { color: theme.primaryFg }]}>Try again</Text></Pressable></Card>;
+  if (remote.isError) return <Card style={styles.error}><ListTodo color={theme.danger} size={22} /><Text style={[styles.errorTitle, { color: theme.fg }]}>Your study plan is unavailable</Text><Text style={[styles.errorText, { color: theme.muted }]}>The plan could not be loaded. Check your connection and try again.</Text><Pressable onPress={() => remote.refetch()} style={[styles.retry, { backgroundColor: theme.primary }]}><Text style={[styles.retryText, { color: theme.primaryFg }]}>Try again</Text></Pressable></Card>;
 
   return <Animated.View style={{ opacity: entrance, transform: [{ translateY }] }}><Card style={styles.card}>
     <View pointerEvents="none" style={[styles.glow, { backgroundColor: theme.primarySoft }]} />
-    <View style={styles.header}><View style={[styles.icon, { backgroundColor: theme.primarySoft }]}><ListTodo color={theme.primaryStrong} size={21} /></View><View style={styles.headingCopy}><Text style={[styles.eyebrow, { color: theme.primary }]}>TODAY’S ACTIONS</Text><Text style={[styles.title, { color: theme.fg }]}>Study to-do list</Text><Text style={[styles.intro, { color: theme.muted }]}>{completed === tasks.length && tasks.length ? 'Everything planned is complete.' : demo ? 'Keep today clear, small and achievable.' : `${remote.data?.summary.plannedMinutes ?? 0} focused minutes planned for today.`}</Text></View>{!demo ? <Pressable accessibilityLabel="Refresh remaining plan" disabled={mutation.isPending} onPress={() => runMutation({ execute: regenerateStudyPlan })} style={[styles.refresh, { backgroundColor: theme.sunken, borderColor: theme.line }]}><RefreshCw size={15} color={theme.muted} /></Pressable> : null}<View style={[styles.score, { backgroundColor: percent === 100 && tasks.length ? theme.successSoft : theme.sunken, borderColor: percent === 100 && tasks.length ? theme.success : theme.line }]}><Text style={[styles.scoreValue, { color: percent === 100 && tasks.length ? theme.success : theme.fg }]}>{completed}/{tasks.length}</Text><Text style={[styles.scoreLabel, { color: theme.muted }]}>DONE</Text></View></View>
+    <View style={styles.header}><View style={[styles.icon, { backgroundColor: theme.primarySoft }]}><ListTodo color={theme.primaryStrong} size={21} /></View><View style={styles.headingCopy}><Text style={[styles.eyebrow, { color: theme.primary }]}>TODAY’S ACTIONS</Text><Text style={[styles.title, { color: theme.fg }]}>Study to-do list</Text><Text style={[styles.intro, { color: theme.muted }]}>{completed === tasks.length && tasks.length ? 'Everything planned is complete.' : `${remote.data?.summary.plannedMinutes ?? 0} focused minutes planned for today.`}</Text></View><Pressable accessibilityLabel="Refresh remaining plan" disabled={mutation.isPending} onPress={() => runMutation({ execute: regenerateStudyPlan })} style={[styles.refresh, { backgroundColor: theme.sunken, borderColor: theme.line }]}><RefreshCw size={15} color={theme.muted} /></Pressable><View style={[styles.score, { backgroundColor: percent === 100 && tasks.length ? theme.successSoft : theme.sunken, borderColor: percent === 100 && tasks.length ? theme.success : theme.line }]}><Text style={[styles.scoreValue, { color: percent === 100 && tasks.length ? theme.success : theme.fg }]}>{completed}/{tasks.length}</Text><Text style={[styles.scoreLabel, { color: theme.muted }]}>DONE</Text></View></View>
     <View style={[styles.progressTrack, { backgroundColor: theme.sunken }]}><View style={[styles.progressFill, { width: `${percent}%`, backgroundColor: percent === 100 && tasks.length ? theme.success : theme.primary }]} /></View>
     <View style={[styles.composer, { backgroundColor: theme.sunken, borderColor: theme.line }]}><TextInput value={text} onChangeText={setText} onSubmitEditing={submit} placeholder="Add a study task…" placeholderTextColor={theme.faint} returnKeyType="done" style={[styles.input, { color: theme.fg }]} /><Pressable disabled={!text.trim() || mutation.isPending} accessibilityRole="button" accessibilityLabel="Add study task" onPress={submit} style={[styles.add, { backgroundColor: text.trim() ? theme.primary : theme.line }]}><Plus color={text.trim() ? theme.primaryFg : theme.faint} size={18} strokeWidth={2.8} /></Pressable></View>
-    {!demo && remote.isPending ? <View style={styles.loading}><Sparkles size={18} color={theme.primaryStrong} /><Text style={[styles.loadingText, { color: theme.muted }]}>Building a realistic plan for today…</Text></View> : <View style={styles.list}>{tasks.map((task) => <View key={task.id} style={[styles.row, { borderTopColor: theme.line }]}><Pressable accessibilityRole="checkbox" accessibilityState={{ checked: task.completed, disabled: mutation.isPending }} disabled={mutation.isPending} onPress={() => toggle(task)} style={[styles.check, { backgroundColor: task.completed ? theme.success : theme.sunken, borderColor: task.completed ? theme.success : theme.lineStrong }]}>{task.completed ? <CheckCircle2 color={theme.primaryFg} size={17} strokeWidth={2.8} /> : null}</Pressable><View style={styles.taskCopy}>{task.source ? <View style={styles.meta}><Text style={[styles.source, { color: task.source === 'REVISION_DUE' ? theme.goldStrong : theme.primaryStrong }]}>{sourceLabel(task.source)}</Text>{task.plannedMinutes ? <><View style={[styles.dot, { backgroundColor: theme.lineStrong }]} /><Clock3 size={10} color={theme.faint} /><Text style={[styles.minutes, { color: theme.faint }]}>{task.plannedMinutes}m</Text></> : null}</View> : null}<Text numberOfLines={2} style={[styles.taskTitle, { color: task.completed ? theme.faint : theme.fg }, task.completed && styles.done]}>{task.title}</Text>{task.reason && !task.completed ? <Text numberOfLines={1} style={[styles.reason, { color: theme.muted }]}>{task.reason}</Text> : null}</View>{demo ? <Pressable accessibilityLabel={`Delete ${task.title}`} onPress={() => removeDemo(task.id)} hitSlop={7} style={styles.more}><Trash2 color={theme.faint} size={16} /></Pressable> : <Pressable accessibilityLabel={`Manage ${task.title}`} onPress={() => setSelected(task.remote ?? null)} style={[styles.more, { backgroundColor: theme.sunken }]}><MoreHorizontal color={theme.muted} size={17} /></Pressable>}</View>)}</View>}
-    {!tasks.length && !remote.isPending ? <View style={[styles.empty, { backgroundColor: theme.sunken }]}><Sparkles color={theme.primaryStrong} size={18} /><Text style={[styles.emptyText, { color: theme.muted }]}>Your active list is clear. Add one meaningful task for today.</Text></View> : completed > 0 ? <Pressable accessibilityRole="button" disabled={mutation.isPending} onPress={() => demo ? clearDemo() : runMutation({ execute: clearCompletedStudyTasks, optimistic: (plan) => withPlanTasks(plan, plan.tasks.filter((task) => task.status !== 'COMPLETED')) })} style={styles.clear}><Text style={[styles.clearText, { color: theme.muted }]}>Clear completed</Text></Pressable> : null}
-    {!demo && remote.data ? <Text style={[styles.engineNote, { color: theme.faint }]}>Plan engine · {remote.data.algorithmVersion} · estimates update when academic workload metadata becomes available.</Text> : null}
+    {remote.isPending ? <View style={styles.loading}><Sparkles size={18} color={theme.primaryStrong} /><Text style={[styles.loadingText, { color: theme.muted }]}>Building a realistic plan for today…</Text></View> : <View style={styles.list}>{tasks.map((task) => <View key={task.id} style={[styles.row, { borderTopColor: theme.line }]}><Pressable accessibilityRole="checkbox" accessibilityState={{ checked: task.completed, disabled: mutation.isPending }} disabled={mutation.isPending} onPress={() => toggle(task)} style={[styles.check, { backgroundColor: task.completed ? theme.success : theme.sunken, borderColor: task.completed ? theme.success : theme.lineStrong }]}>{task.completed ? <CheckCircle2 color={theme.primaryFg} size={17} strokeWidth={2.8} /> : null}</Pressable><View style={styles.taskCopy}>{task.source ? <View style={styles.meta}><Text style={[styles.source, { color: task.source === 'REVISION_DUE' ? theme.goldStrong : theme.primaryStrong }]}>{sourceLabel(task.source)}</Text>{task.plannedMinutes ? <><View style={[styles.dot, { backgroundColor: theme.lineStrong }]} /><Clock3 size={10} color={theme.faint} /><Text style={[styles.minutes, { color: theme.faint }]}>{task.plannedMinutes}m</Text></> : null}</View> : null}<Text numberOfLines={2} style={[styles.taskTitle, { color: task.completed ? theme.faint : theme.fg }, task.completed && styles.done]}>{task.title}</Text>{task.reason && !task.completed ? <Text numberOfLines={1} style={[styles.reason, { color: theme.muted }]}>{task.reason}</Text> : null}</View><Pressable accessibilityLabel={`Manage ${task.title}`} onPress={() => setSelected(task.remote ?? null)} style={[styles.more, { backgroundColor: theme.sunken }]}><MoreHorizontal color={theme.muted} size={17} /></Pressable></View>)}</View>}
+    {!tasks.length && !remote.isPending ? <View style={[styles.empty, { backgroundColor: theme.sunken }]}><Sparkles color={theme.primaryStrong} size={18} /><Text style={[styles.emptyText, { color: theme.muted }]}>Your active list is clear. Add one meaningful task for today.</Text></View> : completed > 0 ? <Pressable accessibilityRole="button" disabled={mutation.isPending} onPress={() => runMutation({ execute: clearCompletedStudyTasks, optimistic: (plan) => withPlanTasks(plan, plan.tasks.filter((task) => task.status !== 'COMPLETED')) })} style={styles.clear}><Text style={[styles.clearText, { color: theme.muted }]}>Clear completed</Text></Pressable> : null}
+    {remote.data ? <Text style={[styles.engineNote, { color: theme.faint }]}>Plan engine · {remote.data.algorithmVersion} · estimates update when academic workload metadata becomes available.</Text> : null}
   </Card><TaskActions task={selected} date={remote.data?.localDate} busy={mutation.isPending} onClose={() => setSelected(null)} onAction={(action, options) => { if (!selected) return; const taskId = selected.id; runMutation({ execute: () => action === 'hide' ? hideStudyTask(taskId) : updateStudyTask(taskId, action, options), optimistic: (plan) => withTaskAction(plan, taskId, action), afterSuccess: () => setSelected(null) }); }} /></Animated.View>;
 }
 

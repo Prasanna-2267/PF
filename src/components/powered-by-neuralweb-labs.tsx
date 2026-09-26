@@ -4,8 +4,8 @@ import MaskedView from '@react-native-masked-view/masked-view';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { font } from '@/constants/theme';
+import { NEURALWEB_LABS_URL } from '@/lib/env';
 
-const NEURALWEB_LABS_URL = 'https://neuralweblabs.com/';
 const BRAND_WIDTH = 190;
 const SPLASH_BRAND_WIDTH = 228;
 const WARM_BRAND_WIDTH = 162;
@@ -35,7 +35,8 @@ export function PoweredByNeuralWebLabs({ surface = 'dark' }: { surface?: 'dark' 
     <Pressable
       accessibilityRole="link"
       accessibilityLabel="Powered by NeuralWeb Labs"
-      onPress={() => void Linking.openURL(NEURALWEB_LABS_URL)}
+      disabled={!NEURALWEB_LABS_URL}
+      onPress={() => { if (NEURALWEB_LABS_URL) void Linking.openURL(NEURALWEB_LABS_URL); }}
       style={({ pressed }) => [styles.touchTarget, pressed && styles.pressed]}
     >
       <MaskedView

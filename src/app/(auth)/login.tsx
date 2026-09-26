@@ -208,6 +208,5 @@ const styles = StyleSheet.create({
   createText: { color: palette.muted, fontFamily: font.regular, fontSize: 10 },
   createLink: { color: palette.gold, fontFamily: font.bold, fontSize: 10 },
   poweredBy: { marginTop: 'auto', paddingTop: 4 },
-  demoHint: { marginTop: 'auto', paddingTop: 8, color: palette.faint, fontFamily: font.medium, fontSize: 7.5, letterSpacing: 0.15, textAlign: 'center' },
   pressed: { opacity: 0.82, transform: [{ scale: 0.99 }] },
 });

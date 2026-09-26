@@ -6,10 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowUpRight, BookOpenCheck, RotateCcw, Sparkles } from 'lucide-react-native';
 
 import { font, themes } from '@/constants/theme';
-import { allLessonEntries } from '@/lib/demo-catalog';
-import { useLessonReaderStore } from '@/lib/lesson-reader-store';
 import { useAppTheme } from '@/providers/app-providers';
-import { isDemoSession } from '@/lib/student-session';
 import { getRevisionChapters } from '@/lib/tracker-api';
 
 const nativeDriver = Platform.OS !== 'web';
@@ -18,13 +15,10 @@ export function RevisionTrackerShortcut() {
   const router = useRouter();
   const { theme } = useAppTheme();
   const dark = theme.canvas === themes.dark.canvas;
-  const demo = isDemoSession();
-  const remote = useQuery({ queryKey: ['student', 'revisions', 'chapters', 'summary'], queryFn: () => getRevisionChapters('all'), enabled: !demo });
-  const stored = useLessonReaderStore((state) => state.byLessonId);
+  const remote = useQuery({ queryKey: ['student', 'revisions', 'chapters', 'summary'], queryFn: () => getRevisionChapters('all') });
   const [motion] = useState(() => new Animated.Value(0));
-  const entries = allLessonEntries();
-  const tracked = demo ? entries.filter((entry) => (stored[entry.lesson.id]?.revisions ?? entry.lesson.revisions ?? 0) > 0).length : remote.data?.summary.returnedNotes ?? 0;
-  const returns = demo ? entries.reduce((sum, entry) => sum + (stored[entry.lesson.id]?.revisions ?? entry.lesson.revisions ?? 0), 0) : remote.data?.summary.totalRevisions ?? 0;
+  const tracked = remote.data?.summary.returnedNotes ?? 0;
+  const returns = remote.data?.summary.totalRevisions ?? 0;
 
   useEffect(() => {
     const loop = Animated.loop(Animated.sequence([Animated.timing(motion, { toValue: 1, duration: 1300, easing: Easing.inOut(Easing.sin), useNativeDriver: nativeDriver }), Animated.timing(motion, { toValue: 0, duration: 1300, easing: Easing.inOut(Easing.sin), useNativeDriver: nativeDriver })]));

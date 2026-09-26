@@ -1,15 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Animated, Easing, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useQuery } from '@tanstack/react-query';
 import { BookOpenCheck, CalendarClock, Check, Clock3, RotateCcw, Sparkles } from 'lucide-react-native';
 
-import { initialReaderStatus } from '@/components/note-management';
 import { font, layout, radius, themes } from '@/constants/theme';
-import { allLessonEntries } from '@/lib/demo-catalog';
-import { useLessonReaderStore } from '@/lib/lesson-reader-store';
 import { useAppTheme } from '@/providers/app-providers';
-import { isDemoSession } from '@/lib/student-session';
 import { getRevisionChapters } from '@/lib/tracker-api';
 
 const nativeDriver = Platform.OS !== 'web';
@@ -24,28 +20,9 @@ export function RevisionChapterTracker() {
   const { width } = useWindowDimensions();
   const wide = width >= layout.tabletBreakpoint;
   const dark = theme.canvas === themes.dark.canvas;
-  const stored = useLessonReaderStore((state) => state.byLessonId);
-  const demo = isDemoSession();
-  const remote = useQuery({ queryKey: ['student', 'revisions', 'chapters'], queryFn: () => getRevisionChapters('all'), enabled: !demo });
+  const remote = useQuery({ queryKey: ['student', 'revisions', 'chapters'], queryFn: () => getRevisionChapters('all') });
   const [filter, setFilter] = useState<RevisionFilter>('all');
-  const definitions = useMemo(() => {
-    const grouped = new Map<string, Omit<ChapterStat, 'revisions' | 'completed' | 'percent'>>();
-    allLessonEntries().forEach(({ subject, unit, topic, lesson }) => {
-      const id = `${subject.id}-${unit.id}-${topic?.id ?? 'unit'}`;
-      const current = grouped.get(id) ?? { id, subjectId: subject.id, subject: subject.title, accent: subject.accent, chapter: topic?.title ?? unit.title, lessonIds: [] };
-      current.lessonIds.push(lesson.id);
-      grouped.set(id, current);
-    });
-    return [...grouped.values()];
-  }, []);
-  const lessonEntries = useMemo(() => new Map(allLessonEntries().map((entry) => [entry.lesson.id, entry.lesson])), []);
-  const demoChapters: ChapterStat[] = definitions.map((chapter) => {
-    const statuses = chapter.lessonIds.map((id) => stored[id] ?? initialReaderStatus(lessonEntries.get(id)!));
-    const revisions = statuses.reduce((sum, status) => sum + status.revisions, 0);
-    const completed = statuses.filter((status) => status.read).length;
-    return { ...chapter, revisions, completed, percent: Math.min(100, Math.round((revisions / Math.max(chapter.lessonIds.length * 3, 1)) * 100)) };
-  });
-  const chapters: ChapterStat[] = demo ? demoChapters : (remote.data?.chapters ?? []).map((chapter) => ({
+  const chapters: ChapterStat[] = (remote.data?.chapters ?? []).map((chapter) => ({
     id: chapter.id,
     subjectId: chapter.subject.id,
     subject: chapter.subject.title,

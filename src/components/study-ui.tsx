@@ -3,7 +3,7 @@ import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from 'r
 import { LinearGradient } from 'expo-linear-gradient';
 import { Play, Square } from 'lucide-react-native';
 import { font, radius, spacing } from '@/constants/theme';
-import { formatDuration } from '@/lib/demo-study';
+import { formatDuration } from '@/lib/study-format';
 import { useAppTheme } from '@/providers/app-providers';
 
 const nativeDriver = Platform.OS !== 'web';

@@ -26,7 +26,6 @@ export type AccountChallenge = {
   maskedTarget: string;
   expiresAt: string;
   resendAfter: string;
-  developmentCode?: string;
 };
 
 export const getStudentAccount = async () =>

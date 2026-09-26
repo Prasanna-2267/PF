@@ -1,22 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 
 type ProtectedPdfReaderProps = {
-  source?: { uri: string; headers?: Record<string, string> };
+  source: { uri: string; headers?: Record<string, string> };
   onLoadComplete: (pages: number) => void;
   onError: (error: string) => void;
 };
 
-const sampleFivePagePdf = require('../../assets/sample-notes/study-preview.pdf');
 type PdfComponents = Pick<typeof import('react-pdf'), 'Document' | 'Page'>;
 
 export function ProtectedPdfReader({ source, onLoadComplete, onError }: ProtectedPdfReaderProps) {
   const [pageWidth, setPageWidth] = useState(360);
   const [documentPages, setDocumentPages] = useState(0);
   const [pdfComponents, setPdfComponents] = useState<PdfComponents | null>(null);
-  const sourceUri = source?.uri;
-  const sourceHeadersKey = JSON.stringify(Object.entries(source?.headers ?? {}).sort(([a], [b]) => a.localeCompare(b)));
+  const sourceUri = source.uri;
+  const sourceHeadersKey = JSON.stringify(Object.entries(source.headers ?? {}).sort(([a], [b]) => a.localeCompare(b)));
   const documentFile = useMemo(() => {
-    if (!sourceUri) return sampleFivePagePdf;
     const httpHeaders = sourceHeadersKey ? Object.fromEntries(JSON.parse(sourceHeadersKey) as [string, string][]) : undefined;
     return { url: sourceUri, httpHeaders };
   }, [sourceHeadersKey, sourceUri]);
@@ -33,7 +31,7 @@ export function ProtectedPdfReader({ source, onLoadComplete, onError }: Protecte
   useEffect(() => {
     let mounted = true;
     void import('react-pdf').then(({ Document, Page, pdfjs }) => {
-      pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+      pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
       if (mounted) setPdfComponents({ Document, Page });
     }).catch((error: unknown) => onError(error instanceof Error ? error.message : 'The PDF renderer could not start.'));
     return () => { mounted = false; };
@@ -46,7 +44,7 @@ export function ProtectedPdfReader({ source, onLoadComplete, onError }: Protecte
     <Document
       file={documentFile}
       loading={<div style={styles.status}>Opening protected PDF…</div>}
-      error={<div style={styles.status}>Unable to open the sample PDF.</div>}
+      error={<div style={styles.status}>Unable to open this PDF.</div>}
       onLoadSuccess={({ numPages }) => { setDocumentPages(numPages); onLoadComplete(numPages); }}
       onLoadError={(error) => onError(error.message)}
     >

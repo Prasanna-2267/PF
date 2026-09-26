@@ -5,7 +5,6 @@ import { ArrowRight, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { font, spacing } from '@/constants/theme';
-import { useAdminCourseStore } from '@/lib/admin-course-store';
 import { getAuthErrorMessage } from '@/lib/auth-session';
 import { useAuthStore } from '@/lib/auth-store';
 import { deviceTimezone, useLearnerProfileStore } from '@/lib/learner-profile-store';
@@ -45,7 +44,6 @@ type LearnerOnboardingModalProps = {
 };
 
 export function LearnerOnboardingModal({ visible, onComplete }: LearnerOnboardingModalProps) {
-  const localCourses = useAdminCourseStore((state) => state.courses);
   const accessToken = useAuthStore((state) => state.accessToken);
   const user = useAuthStore((state) => state.user);
   const setUser = useAuthStore((state) => state.setUser);
@@ -67,16 +65,8 @@ export function LearnerOnboardingModal({ visible, onComplete }: LearnerOnboardin
   const [requestError, setRequestError] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
-  const hasServerSession = Boolean(accessToken && !accessToken.startsWith('ui-only-'));
-  const loadingCourses = hasServerSession && serverCourses === null;
-  const courses = hasServerSession ? (serverCourses ?? []) : localCourses.map((entry) => ({
-    id: entry.id,
-    code: entry.name.toUpperCase(),
-    name: entry.name,
-    slug: entry.id,
-    description: entry.categories.slice(0, 2).map((category) => category.name).join(' · '),
-    academy: null,
-  }));
+  const loadingCourses = serverCourses === null;
+  const courses = serverCourses ?? [];
   const course = courses.find((entry) => entry.id === courseId);
   const calendarDays = useMemo(() => monthCells(calendarYear, calendarMonth), [calendarMonth, calendarYear]);
   const canMoveBack = calendarYear > today.getFullYear() || calendarMonth > today.getMonth();
@@ -103,24 +93,21 @@ export function LearnerOnboardingModal({ visible, onComplete }: LearnerOnboardin
   };
 
   useEffect(() => {
-    if (!visible || !hasServerSession) return;
+    if (!visible || !accessToken) return;
     let active = true;
     void loadPreferenceOptions()
       .then((options) => { if (active) setServerCourses(options); })
       .catch((error: unknown) => { if (active) { setServerCourses([]); setRequestError(getAuthErrorMessage(error)); } })
     return () => { active = false; };
-  }, [hasServerSession, visible]);
+  }, [accessToken, visible]);
 
   const finish = async () => {
     setSubmitted(true);
     if (!ready || !course) return;
-    const monthEntry = months[calendarMonth]!;
-    const examDate = `${selectedDay} ${monthEntry[0]} ${calendarYear}`;
     setRequestError('');
     setSaving(true);
     try {
-      if (hasServerSession) {
-        const preference = await putLearnerPreferences({
+      const preference = await putLearnerPreferences({
           selectedCourseId: course.id,
           examMonth: calendarMonth + 1,
           examYear: calendarYear,
@@ -129,19 +116,9 @@ export function LearnerOnboardingModal({ visible, onComplete }: LearnerOnboardin
           timezone: savedProfile.timezone.trim() || deviceTimezone(),
           language: savedProfile.language.trim() || 'English',
           reminderTime: '19:00',
-        });
-        updateProfile(learnerProfileFromPreference(preference, savedProfile));
-        if (user) setUser({ ...user, activeStageId: preference.selectedCourseId });
-      } else {
-        updateProfile({
-          ...savedProfile,
-          examName: course.name,
-          category: course.code,
-          examDate,
-          dailyTarget: dailyTargetMinutes % 60 === 0 ? `${dailyTargetMinutes / 60} ${dailyTargetMinutes === 60 ? 'hour' : 'hours'}` : `${Math.floor(dailyTargetMinutes / 60)}h ${dailyTargetMinutes % 60}m`,
-        });
-        if (user) setUser({ ...user, activeStageId: course.id });
-      }
+      });
+      updateProfile(learnerProfileFromPreference(preference, savedProfile));
+      if (user) setUser({ ...user, activeStageId: preference.selectedCourseId });
       onComplete();
     } catch (error: unknown) {
       setRequestError(getAuthErrorMessage(error));

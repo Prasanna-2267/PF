@@ -107,8 +107,6 @@ export default function SignupScreen() {
           registrationId: registration.registrationId,
           name: name.trim(),
           email: email.trim().toLowerCase(),
-          demoRole: 'student',
-          ...(registration.developmentCode ? { developmentCode: registration.developmentCode } : {}),
           resendAfter: registration.email.resendAfter,
           ...(admissionProof ? { admissionProof } : {}),
           ...(academyName ? { academyName } : {}),

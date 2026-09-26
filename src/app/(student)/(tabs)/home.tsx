@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Animated, Easing, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View, useWindowDimensions, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Animated, Easing, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View, useWindowDimensions, type ViewStyle } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowUpRight, Award, CalendarDays, CheckCircle2, ChevronRight, Coins, Eye, Flame, Gift, Heart, Megaphone, Share2, ShieldCheck, Sparkles, Target, X } from 'lucide-react-native';
@@ -9,14 +10,14 @@ import { GrandSessionControl, ProgressBar } from '@/components/study-ui';
 import { StudyPlanCard } from '@/components/study-plan-card';
 import { font, layout, radius, spacing, themes } from '@/constants/theme';
 import { useAuthStore } from '@/lib/auth-store';
-import { demoStudy, formatDuration, formatMinutes } from '@/lib/demo-study';
+import { formatDuration, formatMinutes } from '@/lib/study-format';
 import { useLearnerProfileStore } from '@/lib/learner-profile-store';
-import { parseDailyTarget, parseExamDate } from '@/lib/learner-preferences';
-import { monthlyHeartLimit } from '@/lib/reward-store';
+import { parseExamDate } from '@/lib/learner-preferences';
 import { useStudySession } from '@/lib/use-study-session';
 import { getNotificationFeed, markNotificationRead, type LearnerNotification } from '@/lib/notification-api';
 import { ProfileShortcut } from '@/components/profile-shortcut';
 import { useAppTheme } from '@/providers/app-providers';
+import { getTrackerSummary } from '@/lib/tracker-api';
 
 const nativeDriver = Platform.OS !== 'web';
 const dayMs = 86_400_000;
@@ -51,10 +52,6 @@ const welcomeQuotes = [
   'The goal is closer than yesterday.',
 ] as const;
 
-function targetMinutesFrom(value: string) {
-  return parseDailyTarget(value) ?? demoStudy.targetMinutes;
-}
-
 function daysUntilExam(value: string, now: Date): number | null {
   const parsed = parseExamDate(value);
   if (!parsed) return null;
@@ -76,8 +73,8 @@ export default function HomeScreen() {
   const router = useRouter();
   const profile = useLearnerProfileStore((state) => state.profile);
   const profileHydrated = useLearnerProfileStore((state) => state.hydrated);
-  const fallbackTargetMinutes = targetMinutesFrom(profile.dailyTarget);
-  const study = useStudySession('HOME', fallbackTargetMinutes);
+  const study = useStudySession('HOME');
+  const trackerSummary = useQuery({ queryKey: ['student', 'tracker'], queryFn: () => getTrackerSummary() });
   const isFirstLogin = useAuthStore((state) => Boolean(state.user?.isFirstLogin));
   const welcomeQuoteIndex = useAuthStore((state) => state.user?.welcomeQuoteIndex ?? 0);
   const welcomeTitle = isFirstLogin ? 'Welcome' : 'Welcome back';
@@ -139,6 +136,8 @@ export default function HomeScreen() {
     if (url && url !== '/(student)/(tabs)/home') router.push(url as never);
   }, [announcement, dismissAnnouncement, router]);
 
+  if (study.isLoading) return <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safe, { backgroundColor: theme.canvas }]}><View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}><ActivityIndicator color={theme.primaryStrong} /><Text style={{ color: theme.muted, fontFamily: font.medium }}>Loading your dashboard…</Text></View></SafeAreaView>;
+
   return <><SafeAreaView edges={['top', 'left', 'right']} style={[styles.safe, { backgroundColor: theme.canvas }]}><ScrollView contentContainerStyle={[styles.content, wide && styles.contentWide]} showsVerticalScrollIndicator={false}>
     <RewardHeader points={study.points} hearts={study.hearts} streak={study.streak} onPress={() => setShowRewards(true)} />
     {announcement ? <Pressable accessibilityLabel={`Announcement: ${announcement.title}`} onPress={openAnnouncement} style={({ pressed }) => [styles.announcement, { backgroundColor: theme.primarySoft, borderColor: theme.primary }, pressed && styles.pressed]}><View style={[styles.announcementIcon, { backgroundColor: theme.primary }]}><Megaphone color={theme.primaryFg} size={18} /></View><View style={styles.announcementCopy}><Text style={[styles.announcementEyebrow, { color: theme.primaryStrong }]}>ANNOUNCEMENT</Text><Text numberOfLines={1} style={[styles.announcementTitle, { color: theme.fg }]}>{announcement.title}</Text><Text numberOfLines={2} style={[styles.announcementBody, { color: theme.muted }]}>{announcement.body}</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Dismiss announcement" hitSlop={8} onPress={(event) => { event.stopPropagation(); dismissAnnouncement(); }} style={styles.announcementDismiss}><X color={theme.muted} size={16} /></Pressable><ChevronRight color={theme.primaryStrong} size={17} /></Pressable> : null}
@@ -165,12 +164,12 @@ export default function HomeScreen() {
 
     <AnimatedExamCard examDays={examDays} examName={profileHydrated ? profile.examName : ''} category={profileHydrated ? profile.category : ''} examDate={profileHydrated ? profile.examDate : ''} pressure={examPressure} />
 
-    <Surface style={styles.syllabusCard}><View style={[styles.snapshotIcon, { backgroundColor: theme.primarySoft }]}><Target color={theme.primaryStrong} size={20} /></View><View style={styles.syllabusCopy}><Text style={[styles.cardEyebrow, { color: theme.primary }]}>LEARNING PROGRESS</Text><Text style={[styles.syllabusTitle, { color: theme.fg }]}>Syllabus completion</Text><Text style={[styles.snapshotLabel, { color: theme.muted }]}>Keep completing lessons to move this forward.</Text></View><Text style={[styles.syllabusValue, { color: theme.fg }]}>{demoStudy.syllabusPercent}%</Text><View style={styles.syllabusProgress}><ProgressBar value={demoStudy.syllabusPercent} /></View></Surface>
+    {trackerSummary.data ? <Surface style={styles.syllabusCard}><View style={[styles.snapshotIcon, { backgroundColor: theme.primarySoft }]}><Target color={theme.primaryStrong} size={20} /></View><View style={styles.syllabusCopy}><Text style={[styles.cardEyebrow, { color: theme.primary }]}>LEARNING PROGRESS</Text><Text style={[styles.syllabusTitle, { color: theme.fg }]}>Syllabus completion</Text><Text style={[styles.snapshotLabel, { color: theme.muted }]}>Keep completing lessons to move this forward.</Text></View><Text style={[styles.syllabusValue, { color: theme.fg }]}>{trackerSummary.data.readiness.syllabusPercent}%</Text><View style={styles.syllabusProgress}><ProgressBar value={trackerSummary.data.readiness.syllabusPercent} /></View></Surface> : null}
     </View>
     </View>
 
     <StudyPlanCard />
-  </ScrollView></SafeAreaView><CheckoutCelebration visible={showCelebration} streak={study.streak} seconds={completedSeconds} pointsEarned={earnedPoints} onClose={() => setShowCelebration(false)} /><RewardWallet visible={showRewards} points={study.points} hearts={study.hearts} streak={study.streak} canRecover={recoveryAvailable} onRecover={() => study.recoverStreak()} onClose={() => setShowRewards(false)} /></>;
+  </ScrollView></SafeAreaView><CheckoutCelebration visible={showCelebration} streak={study.streak} seconds={completedSeconds} pointsEarned={earnedPoints} onClose={() => setShowCelebration(false)} /><RewardWallet visible={showRewards} points={study.points} hearts={study.hearts} heartCap={study.heartCap} streak={study.streak} canRecover={recoveryAvailable} onRecover={() => study.recoverStreak()} onClose={() => setShowRewards(false)} /></>;
 }
 
 function HeroAmbientMotion() {
@@ -229,7 +228,7 @@ function RewardHeader({ points, hearts, streak, onPress }: { points: number; hea
   </View></View>;
 }
 
-function RewardWallet({ visible, points, hearts, streak, canRecover, onRecover, onClose }: { visible: boolean; points: number; hearts: number; streak: number; canRecover: boolean; onRecover: () => void; onClose: () => void }) {
+function RewardWallet({ visible, points, hearts, heartCap, streak, canRecover, onRecover, onClose }: { visible: boolean; points: number; hearts: number; heartCap: number; streak: number; canRecover: boolean; onRecover: () => void; onClose: () => void }) {
   const { theme } = useAppTheme();
   const recoveryEnabled = canRecover && hearts > 0;
   return <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
@@ -237,11 +236,11 @@ function RewardWallet({ visible, points, hearts, streak, canRecover, onRecover, 
       <View style={[styles.walletHandle, { backgroundColor: theme.lineStrong }]} />
       <View style={styles.walletHeading}><View style={styles.walletHeadingCopy}><Text style={[styles.walletEyebrow, { color: theme.primary }]}>MOMENTUM WALLET</Text><Text style={[styles.walletTitle, { color: theme.fg }]}>Rewards that protect progress</Text><Text style={[styles.walletSubtitle, { color: theme.muted }]}>Complete a focused day to earn points. Recovery hearts save a streak after a missed day.</Text></View><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={[styles.walletClose, { backgroundColor: theme.sunken }]}><X size={18} color={theme.muted} /></Pressable></View>
 
-      <View style={styles.walletBalances}><View style={[styles.walletBalance, { backgroundColor: theme.sunken, borderColor: theme.line }]}><Flame size={18} fill={theme.goldStrong} color={theme.goldStrong} /><Text style={[styles.walletBalanceValue, { color: theme.fg }]}>{streak}</Text><Text style={[styles.walletBalanceLabel, { color: theme.muted }]}>Day streak</Text></View><View style={[styles.walletBalance, { backgroundColor: theme.sunken, borderColor: theme.line }]}><Coins size={19} color={theme.goldStrong} /><Text style={[styles.walletBalanceValue, { color: theme.fg }]}>{points}</Text><Text style={[styles.walletBalanceLabel, { color: theme.muted }]}>Points</Text></View><View style={[styles.walletBalance, { backgroundColor: theme.sunken, borderColor: theme.line }]}><Heart size={18} fill="#F36F94" color="#FF91AD" /><Text style={[styles.walletBalanceValue, { color: theme.fg }]}>{hearts}/{monthlyHeartLimit}</Text><Text style={[styles.walletBalanceLabel, { color: theme.muted }]}>Hearts</Text></View></View>
+      <View style={styles.walletBalances}><View style={[styles.walletBalance, { backgroundColor: theme.sunken, borderColor: theme.line }]}><Flame size={18} fill={theme.goldStrong} color={theme.goldStrong} /><Text style={[styles.walletBalanceValue, { color: theme.fg }]}>{streak}</Text><Text style={[styles.walletBalanceLabel, { color: theme.muted }]}>Day streak</Text></View><View style={[styles.walletBalance, { backgroundColor: theme.sunken, borderColor: theme.line }]}><Coins size={19} color={theme.goldStrong} /><Text style={[styles.walletBalanceValue, { color: theme.fg }]}>{points}</Text><Text style={[styles.walletBalanceLabel, { color: theme.muted }]}>Points</Text></View><View style={[styles.walletBalance, { backgroundColor: theme.sunken, borderColor: theme.line }]}><Heart size={18} fill="#F36F94" color="#FF91AD" /><Text style={[styles.walletBalanceValue, { color: theme.fg }]}>{hearts}/{heartCap}</Text><Text style={[styles.walletBalanceLabel, { color: theme.muted }]}>Hearts</Text></View></View>
 
       <View style={styles.pointsRules}><View style={[styles.pointsRule, { backgroundColor: theme.surface, borderColor: theme.line }]}><View style={[styles.ruleIcon, { backgroundColor: theme.primarySoft }]}><Target size={17} color={theme.primaryStrong} /></View><View style={styles.ruleCopy}><Text style={[styles.ruleTitle, { color: theme.fg }]}>Below your daily target</Text><Text style={[styles.ruleDetail, { color: theme.muted }]}>Complete the day with less study time than planned.</Text></View><Text style={[styles.rulePoints, { color: theme.primaryStrong }]}>+10</Text></View><View style={[styles.pointsRule, { backgroundColor: theme.surface, borderColor: theme.line }]}><View style={[styles.ruleIcon, { backgroundColor: theme.goldSoft }]}><Award size={17} color={theme.goldStrong} /></View><View style={styles.ruleCopy}><Text style={[styles.ruleTitle, { color: theme.fg }]}>Meet or exceed your target</Text><Text style={[styles.ruleDetail, { color: theme.muted }]}>Reach the full planned study time before checkout.</Text></View><Text style={[styles.rulePoints, { color: theme.goldStrong }]}>+20</Text></View></View>
 
-      <View style={[styles.recoveryCard, { backgroundColor: canRecover ? theme.dangerSoft : theme.successSoft, borderColor: canRecover ? theme.danger : theme.success }]}><View style={[styles.recoveryIcon, { backgroundColor: theme.surface }]}>{canRecover ? <Heart size={21} fill="#F36F94" color="#FF91AD" /> : <ShieldCheck size={21} color={theme.success} />}</View><View style={styles.recoveryCopy}><Text style={[styles.recoveryTitle, { color: theme.fg }]}>{canRecover ? 'Your streak needs recovery' : 'Your streak is protected'}</Text><Text style={[styles.recoveryDetail, { color: theme.muted }]}>{canRecover ? `Use one of this month’s ${monthlyHeartLimit} hearts to restore continuity.` : `Hearts are only used after a missed day and reset to ${monthlyHeartLimit} each month.`}</Text></View></View>
+      <View style={[styles.recoveryCard, { backgroundColor: canRecover ? theme.dangerSoft : theme.successSoft, borderColor: canRecover ? theme.danger : theme.success }]}><View style={[styles.recoveryIcon, { backgroundColor: theme.surface }]}>{canRecover ? <Heart size={21} fill="#F36F94" color="#FF91AD" /> : <ShieldCheck size={21} color={theme.success} />}</View><View style={styles.recoveryCopy}><Text style={[styles.recoveryTitle, { color: theme.fg }]}>{canRecover ? 'Your streak needs recovery' : 'Your streak is protected'}</Text><Text style={[styles.recoveryDetail, { color: theme.muted }]}>{canRecover ? `Use one of this month’s ${heartCap} hearts to restore continuity.` : `Hearts are only used after a missed day and reset to ${heartCap} each month.`}</Text></View></View>
       <Pressable disabled={!recoveryEnabled} accessibilityRole="button" onPress={onRecover} style={({ pressed }) => [styles.recoverButton, { backgroundColor: recoveryEnabled ? theme.primary : theme.sunken, borderColor: recoveryEnabled ? theme.primary : theme.line }, !recoveryEnabled && styles.rewardDisabled, pressed && styles.balancePressed]}><Heart size={17} fill={recoveryEnabled ? theme.primaryFg : theme.faint} color={recoveryEnabled ? theme.primaryFg : theme.faint} /><Text style={[styles.recoverButtonText, { color: recoveryEnabled ? theme.primaryFg : theme.muted }]}>{canRecover ? hearts ? 'Use 1 heart to restore streak' : 'No hearts left this month' : 'No recovery needed today'}</Text></Pressable>
       <Text style={[styles.walletFootnote, { color: theme.faint }]}>Daily points can be earned once per calendar day.</Text>
     </View></View>

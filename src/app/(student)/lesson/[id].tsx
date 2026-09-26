@@ -5,7 +5,6 @@ import * as ScreenCapture from 'expo-screen-capture';
 import { ArrowLeft, LockKeyhole } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { font, themes } from '@/constants/theme';
-import { findLesson } from '@/lib/demo-catalog';
 import { getAuthErrorMessage } from '@/lib/auth-session';
 import { useAuthStore } from '@/lib/auth-store';
 import { closeNoteViewerSession, createNoteViewerSession, heartbeatNoteViewerSession, loadNoteViewerManifest, protectedContentSource, updateNoteViewerProgress, type ContentAttachedLink, type NoteViewerSession } from '@/lib/note-viewer-api';
@@ -18,7 +17,6 @@ import { noteKeys } from '@/lib/student-content-api';
 import { ContentAttachedLinks } from '@/components/content-attached-links';
 
 const captureProtectionKey = 'protected-lesson';
-const allowDemoScreenShare = process.env.EXPO_PUBLIC_ALLOW_SCREEN_CAPTURE === 'true';
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function PdfWatermarks({ email }: { email: string }) {
@@ -29,19 +27,18 @@ function PdfWatermarks({ email }: { email: string }) {
 
 export default function LessonScreen() {
   const { id, returnTo } = useLocalSearchParams();
-  const { lesson } = findLesson(id);
   const router = useRouter();
   const { theme } = useAppTheme();
   const dark = theme.canvas === themes.dark.canvas;
   const user = useAuthStore((state) => state.user);
   const accessToken = useAuthStore((state) => state.accessToken);
-  const email = user?.email ?? 'demo.student@parallaxflow.app';
-  const [pages, setPages] = useState(5);
+  const email = user?.email ?? '';
+  const [pages, setPages] = useState(0);
   const [readerError, setReaderError] = useState<{ routeId: string; message: string } | null>(null);
   const [viewerState, setViewerState] = useState<{ routeId: string; session?: NoteViewerSession; error?: string } | null>(null);
   const [attachedLinkState, setAttachedLinkState] = useState<{ routeId: string; links: ContentAttachedLink[] } | null>(null);
   const routeId = Array.isArray(id) ? id[0] : id;
-  const hasServerSession = Boolean(accessToken && !accessToken.startsWith('ui-only-'));
+  const hasServerSession = Boolean(accessToken);
   const shouldOpenProtectedViewer = Boolean(hasServerSession && routeId && uuidPattern.test(routeId));
   const viewerSession = viewerState?.routeId === routeId ? viewerState.session ?? null : null;
   const attachedLinks = attachedLinkState?.routeId === routeId ? attachedLinkState.links : [];
@@ -49,7 +46,7 @@ export default function LessonScreen() {
   const opening = shouldOpenProtectedViewer && viewerState?.routeId !== routeId;
   const viewerSource = viewerSession ? protectedContentSource(viewerSession.contentUrl) : undefined;
   const isImage = Boolean(viewerSession?.note.mimeType?.startsWith('image/'));
-  const isPdf = !viewerSession || viewerSession.note.mimeType === 'application/pdf';
+  const isPdf = viewerSession?.note.mimeType === 'application/pdf';
   const fileKind = isImage ? 'Protected image · pinch to zoom' : isPdf ? `${pages} page PDF · continuous scroll · pinch to zoom` : `Protected ${viewerSession?.note.mimeType?.split('/').pop()?.toUpperCase() ?? 'file'} preview`;
   const returnPath = Array.isArray(returnTo) ? returnTo[0] : returnTo;
   const goBackToNotes = () => {
@@ -64,7 +61,7 @@ export default function LessonScreen() {
     setReaderError(null);
     if (viewerSession) void updateNoteViewerProgress(viewerSession.viewerSessionId, { currentPage: 1, progressPercent: 1 }).catch(() => undefined);
   }, [viewerSession]);
-  const handleReaderError = useCallback((message: string) => setReaderError({ routeId: routeId ?? 'sample', message }), [routeId]);
+  const handleReaderError = useCallback((message: string) => setReaderError({ routeId: routeId ?? 'unknown', message }), [routeId]);
 
   useEffect(() => {
     if (!shouldOpenProtectedViewer || !routeId) return;
@@ -110,12 +107,6 @@ export default function LessonScreen() {
       if (Platform.OS === 'ios') void ScreenCapture.disableAppSwitcherProtectionAsync();
     };
 
-    if (allowDemoScreenShare) {
-      // Also clears a secure flag left behind by Fast Refresh or a previous route instance.
-      releaseProtection();
-      return releaseProtection;
-    }
-
     void ScreenCapture.preventScreenCaptureAsync(captureProtectionKey);
     if (Platform.OS === 'ios') void ScreenCapture.enableAppSwitcherProtectionAsync(1);
     return releaseProtection;
@@ -125,13 +116,13 @@ export default function LessonScreen() {
     <View style={[styles.top, { backgroundColor: dark ? 'rgba(18,22,24,0.96)' : theme.surface, borderBottomColor: theme.line }]}>
       <Pressable accessibilityRole="button" accessibilityLabel="Back to notes" onPress={goBackToNotes} style={[styles.topButton, { backgroundColor: theme.sunken, borderColor: theme.line }]}><ArrowLeft color={theme.fg} size={20} /></Pressable>
       <View style={styles.topCopy}>
-        <Text numberOfLines={1} style={[styles.topTitle, { color: theme.fg }]}>{viewerSession?.note.title ?? lesson.title}</Text>
+        <Text numberOfLines={1} style={[styles.topTitle, { color: theme.fg }]}>{viewerSession?.note.title ?? 'Opening note…'}</Text>
         <Text numberOfLines={1} style={[styles.topSub, { color: theme.muted }]}>{fileKind}</Text>
       </View>
       <View accessibilityLabel="Protected PDF" style={[styles.protectedBadge, { backgroundColor: theme.primarySoft, borderColor: dark ? 'rgba(124,156,255,0.32)' : theme.line }]}><LockKeyhole color={theme.primaryStrong} size={17} /><Text style={[styles.protectedText, { color: theme.primaryStrong }]}>Protected</Text></View>
     </View>
     <View style={[styles.reader, { backgroundColor: dark ? '#090B0D' : theme.sunken }]}>
-      {opening ? <View style={styles.opening}><ActivityIndicator color={theme.primaryStrong} /><Text style={[styles.openingText, { color: theme.muted }]}>Preparing your protected note…</Text></View> : !error && isImage && viewerSource ? <ProtectedImageReader source={viewerSource} onLoadComplete={() => handleLoadComplete(1)} onError={handleReaderError} /> : !error && isPdf ? <ProtectedPdfReader source={viewerSource} onLoadComplete={handleLoadComplete} onError={handleReaderError} /> : !error && viewerSource ? <ProtectedFileReader source={viewerSource} onLoadComplete={() => handleLoadComplete(1)} onError={handleReaderError} /> : null}
+      {opening ? <View style={styles.opening}><ActivityIndicator color={theme.primaryStrong} /><Text style={[styles.openingText, { color: theme.muted }]}>Preparing your protected note…</Text></View> : !error && isImage && viewerSource ? <ProtectedImageReader source={viewerSource} onLoadComplete={() => handleLoadComplete(1)} onError={handleReaderError} /> : !error && isPdf && viewerSource ? <ProtectedPdfReader source={viewerSource} onLoadComplete={handleLoadComplete} onError={handleReaderError} /> : !error && viewerSource ? <ProtectedFileReader source={viewerSource} onLoadComplete={() => handleLoadComplete(1)} onError={handleReaderError} /> : null}
       <PdfWatermarks email={email} />
       {error ? <View style={[styles.error, { backgroundColor: theme.canvas }]}><Text style={[styles.errorTitle, { color: theme.fg }]}>Unable to open this note</Text><Text style={[styles.errorCopy, { color: theme.muted }]}>{error}</Text></View> : null}
     </View>

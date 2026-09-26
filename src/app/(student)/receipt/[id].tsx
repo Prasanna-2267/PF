@@ -5,16 +5,12 @@ import { ArrowLeft, CheckCircle2, ReceiptText } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppButton } from '@/components/ui';
 import { font, spacing } from '@/constants/theme';
-import { useAuthStore } from '@/lib/auth-store';
-import { orders } from '@/lib/demo-commerce';
 import { getReceipt, type Money, type Receipt } from '@/lib/student-content-api';
-import { isDemoSession } from '@/lib/student-session';
 import { useAppTheme } from '@/providers/app-providers';
 
 export default function ReceiptScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const demo = useAuthStore((state) => isDemoSession(state.accessToken, state.user?.id));
-  return demo ? <DemoReceipt id={id} /> : <RemoteReceipt id={id} />;
+  return <RemoteReceipt id={id} />;
 }
 
 function RemoteReceipt({ id }: { id: string }) {
@@ -68,13 +64,6 @@ function ReceiptView({ receipt, onBack }: { receipt: Receipt; onBack: () => void
 
   function Meta({ label, value }: { label: string; value: string }) { return <View style={styles.meta}><Text style={[styles.metaLabel, { color: theme.muted }]}>{label}</Text><Text style={[styles.metaText, { color: theme.fg }]}>{value}</Text></View>; }
   function TotalRow({ label, value, success = false }: { label: string; value: string; success?: boolean }) { return <View style={styles.totalRow}><Text style={[styles.totalLabel, { color: success ? theme.success : theme.muted }]}>{label}</Text><Text style={[styles.totalValue, { color: success ? theme.success : theme.fg }]}>{value}</Text></View>; }
-}
-
-function DemoReceipt({ id }: { id: string }) {
-  const router = useRouter();
-  const { theme } = useAppTheme();
-  const order = orders.find((entry) => entry.id === id) ?? orders[0];
-  return <SafeAreaView style={[styles.safe, { backgroundColor: theme.canvas }]}><ScrollView contentContainerStyle={styles.content}><Pressable onPress={() => router.back()} style={[styles.back, { backgroundColor: theme.surface, borderColor: theme.line }]}><ArrowLeft size={20} color={theme.fg} /></Pressable><View style={styles.heading}><View style={[styles.receiptIcon, { backgroundColor: theme.primarySoft }]}><ReceiptText size={25} color={theme.primary} /></View><Text style={[styles.pageTitle, { color: theme.fg }]}>Receipt</Text></View><View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.line }]}><Text style={[styles.receiptNumber, { color: theme.fg }]}>{order.id}</Text><Text style={[styles.date, { color: theme.muted }]}>{order.date}</Text><View style={[styles.rule, { backgroundColor: theme.line }]} /><Text style={[styles.itemTitle, { color: theme.fg }]}>{order.items}</Text><View style={[styles.grandTotal, { borderTopColor: theme.line }]}><Text style={[styles.totalLabel, { color: theme.muted }]}>Total paid</Text><Text style={[styles.totalAmount, { color: theme.fg }]}>{order.amount}</Text></View></View></ScrollView></SafeAreaView>;
 }
 
 function money(value: Money) { return new Intl.NumberFormat('en-IN', { style: 'currency', currency: value?.currency ?? 'INR', maximumFractionDigits: 2 }).format(value?.amount ?? 0); }

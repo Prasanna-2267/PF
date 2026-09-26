@@ -25,7 +25,7 @@ export default function VerifyOtpScreen() {
   const router = useRouter();
   const { launchTo } = useRocketLaunch();
   const scrollRef = useRef<ScrollView>(null);
-  const params = useLocalSearchParams<{ name?: string; email?: string; registrationId?: string; developmentCode?: string; resendAfter?: string; admissionProof?: string; academyName?: string }>();
+  const params = useLocalSearchParams<{ name?: string; email?: string; registrationId?: string; resendAfter?: string; admissionProof?: string; academyName?: string }>();
   const emailAttempt = useRef(0);
   const registrationCompleted = useRef(false);
   const [emailCode, setEmailCode] = useState('');
@@ -34,7 +34,6 @@ export default function VerifyOtpScreen() {
   const [stageVersion, setStageVersion] = useState(0);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [verificationError, setVerificationError] = useState('');
-  const [developmentCode, setDevelopmentCode] = useState(param(params.developmentCode, ''));
   const [resendAfter, setResendAfter] = useState(param(params.resendAfter, ''));
   const resendCountdown = useResendCountdown(resendAfter);
   const identity = { email: param(params.email, '') };
@@ -100,7 +99,6 @@ export default function VerifyOtpScreen() {
     try {
       if (!registrationId) throw new Error('This registration session is missing. Return to signup and try again.');
       const delivery = await sendStudentRegistrationOtp(registrationId, 'email');
-      setDevelopmentCode(delivery.developmentCode ?? '');
       setResendAfter(delivery.resendAfter ?? new Date(Date.now() + 30_000).toISOString());
       setResent(true);
       setTimeout(() => setResent(false), 2200);
@@ -128,7 +126,7 @@ export default function VerifyOtpScreen() {
 
         <View style={styles.progressDots}><View style={[styles.progressDot, { backgroundColor: emailStatus === 'verified' ? palette.green : palette.orange }]} /></View>
         {verificationError ? <Text accessibilityLiveRegion="polite" style={styles.verificationError}>{verificationError}</Text> : null}
-        <Text style={styles.demoHint}>{__DEV__ && developmentCode ? `Development verification code: ${developmentCode}` : 'Verification starts automatically after the fourth digit.'}</Text>
+        <Text style={styles.verificationHint}>Verification starts automatically after the fourth digit.</Text>
       </ScrollView>
     </KeyboardAvoidingView>
     <LearnerOnboardingModal visible={showOnboarding} onComplete={completePersonalisation} />
@@ -250,5 +248,5 @@ const styles = StyleSheet.create({
   message: { minHeight: 92, alignItems: 'center', justifyContent: 'center' }, cardTitle: { color: palette.fg, fontFamily: font.extraBold, fontSize: 20, letterSpacing: -.45, textAlign: 'center' }, cardDescription: { maxWidth: 285, marginTop: 10, color: palette.muted, fontFamily: font.regular, fontSize: 10, lineHeight: 16, textAlign: 'center' },
   codeRow: { width: '100%', marginTop: 15, flexDirection: 'row', gap: 10 }, codeInput: { width: '100%', height: 58, borderWidth: 1, borderColor: palette.fieldLine, borderRadius: 14, backgroundColor: palette.field, color: palette.fg, fontFamily: font.extraBold, fontSize: 21, textAlign: 'center' }, codeInputActive: { shadowColor: palette.active, shadowOpacity: .55, shadowRadius: 10, shadowOffset: { width: 0, height: 0 }, elevation: 5 },
   resendRow: { minHeight: 52, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', gap: 8 }, resendQuestion: { color: palette.faint, fontFamily: font.medium, fontSize: 9 }, resendText: { color: palette.fg, fontFamily: font.bold, fontSize: 10 }, resendTextDisabled: { color: palette.faint }, successLoader: { height: 100, alignItems: 'center', justifyContent: 'center', gap: 7 }, finalTick: { width: 52, height: 52, borderRadius: 26, backgroundColor: palette.green, alignItems: 'center', justifyContent: 'center', shadowColor: palette.green, shadowOpacity: .48, shadowRadius: 14, shadowOffset: { width: 0, height: 0 }, elevation: 6 }, successStatus: { color: palette.green, fontFamily: font.bold, fontSize: 8, letterSpacing: .45 },
-  progressDots: { width: 90, height: 20, alignSelf: 'center', flexDirection: 'row', alignItems: 'center' }, progressDot: { width: 7, height: 7, borderRadius: 4 }, progressLine: { flex: 1, height: 1, marginHorizontal: 7 }, verificationError: { maxWidth: 330, alignSelf: 'center', marginBottom: 6, color: '#FF7A80', fontFamily: font.semibold, fontSize: 9, lineHeight: 14, textAlign: 'center' }, demoHint: { color: palette.faint, fontFamily: font.medium, fontSize: 7.5, textAlign: 'center' }, pressed: { opacity: .68, transform: [{ scale: .98 }] },
+  progressDots: { width: 90, height: 20, alignSelf: 'center', flexDirection: 'row', alignItems: 'center' }, progressDot: { width: 7, height: 7, borderRadius: 4 }, progressLine: { flex: 1, height: 1, marginHorizontal: 7 }, verificationError: { maxWidth: 330, alignSelf: 'center', marginBottom: 6, color: '#FF7A80', fontFamily: font.semibold, fontSize: 9, lineHeight: 14, textAlign: 'center' }, verificationHint: { color: palette.faint, fontFamily: font.medium, fontSize: 7.5, textAlign: 'center' }, pressed: { opacity: .68, transform: [{ scale: .98 }] },
 });
