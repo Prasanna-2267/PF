@@ -53,6 +53,7 @@
           "defaultChannel": "learning-reminders"
         }
       ],
+      "./plugins/with-android-secure-by-default.js",
       "./plugins/with-react-native-pdf.js",
       "expo-image",
       "expo-web-browser"

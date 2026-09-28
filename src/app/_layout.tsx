@@ -3,6 +3,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { Slot } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { AppLaunchScreen } from '@/components/app-launch-screen';
+import { AndroidScreenProtection } from '@/components/android-screen-protection';
 import { restoreSession } from '@/lib/auth-session';
 import { AppProviders } from '@/providers/app-providers';
 
@@ -30,5 +31,5 @@ export default function RootLayout() {
   }, [nativeSplashHidden]);
   if (!nativeSplashHidden) return null;
   if (!sessionRestored || !launchRevealComplete) return <AppLaunchScreen />;
-  return <AppProviders><Slot /></AppProviders>;
+  return <AppProviders><AndroidScreenProtection /><Slot /></AppProviders>;
 }

@@ -22,7 +22,7 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}
 function PdfWatermarks({ email }: { email: string }) {
   const { theme } = useAppTheme();
   const entries = useMemo(() => Array.from({ length: 9 }, (_, index) => index), []);
-  return <View style={styles.watermarkLayer}>{entries.map((entry) => <Text key={entry} style={[styles.watermark, { color: `${theme.primary}66` }]}>{email}</Text>)}</View>;
+  return <View style={styles.watermarkLayer}>{entries.map((entry) => <Text key={entry} style={[styles.watermark, { color: `${theme.primary}5C` }]}>{email}</Text>)}</View>;
 }
 
 export default function LessonScreen() {

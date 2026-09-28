@@ -26,7 +26,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui";
 import { RevisionTrackerShortcut } from "@/components/revision-tracker-shortcut";
-import { MonthlyReportShortcut } from "@/components/monthly-report-shortcut";
+
 import { GrandSessionControl, ProgressBar } from "@/components/study-ui";
 import { TrackerStreakCalendar } from "@/components/tracker-streak-calendar";
 import { font, layout, spacing, themes } from "@/constants/theme";
@@ -37,6 +37,8 @@ import { ProfileShortcut } from "@/components/profile-shortcut";
 import { useAppTheme } from "@/providers/app-providers";
 
 const nativeDriver = Platform.OS !== "web";
+const SECONDS_PER_DAY = 24 * 60 * 60;
+const CONSISTENCY_TRACK_HEIGHT = 108;
 
 function formatTrackedSeconds(totalSeconds: number) {
   const seconds = Math.max(0, Math.round(totalSeconds));
@@ -65,14 +67,18 @@ function ConsistencyChart({ remote, activeFocusSeconds = 0 }: { remote: TrackerS
           seconds: entry.totalSeconds + (index === entries.length - 1 ? activeFocusSeconds : 0),
         }));
   const totalSeconds = remote.summary.totalSeconds + activeFocusSeconds;
-  const maxSeconds = Math.max(
-    180 * 60,
-    ...chartWeek.map((entry) => entry.seconds),
-    (remote.consistency.at(-1)?.targetMinutes ?? 0) * 60,
-  );
+
   const change = remote.summary.changePercent;
   const bestSeconds = Math.max(0, ...chartWeek.map((entry) => entry.seconds));
   const today = remote.consistency.at(-1);
+  const targetMinutes = Math.max(0, Math.min(24 * 60, today?.targetMinutes ?? 0));
+  const targetMarkerBottom = Math.max(
+    1,
+    Math.min(
+      CONSISTENCY_TRACK_HEIGHT - 1,
+      Math.round((targetMinutes * 60 / SECONDS_PER_DAY) * CONSISTENCY_TRACK_HEIGHT),
+    ),
+  );
   const liveGoalReached = Boolean(today && !today.goalCompleted && today.totalSeconds + activeFocusSeconds >= today.targetMinutes * 60);
   const goalDays = remote.summary.goalDays + (liveGoalReached ? 1 : 0);
   return (
@@ -115,18 +121,23 @@ function ConsistencyChart({ remote, activeFocusSeconds = 0 }: { remote: TrackerS
         </View>
       </View>
       <View style={styles.chartArea}>
-        <View style={[styles.goalLine, { borderTopColor: theme.lineStrong }]}>
-          <Text style={[styles.goalLabel, { color: theme.faint }]}>
-            {formatMinutes(remote.consistency.at(-1)?.targetMinutes ?? 0)}{" "}
-            goal
-          </Text>
+        <View pointerEvents="none" style={[styles.goalLegend, { backgroundColor: theme.elevated, borderColor: theme.line }]}>
+          <View style={[styles.goalLegendMark, { backgroundColor: theme.goldStrong }]} />
+          <Target size={9} strokeWidth={2.4} color={theme.goldStrong} />
+          <Text style={[styles.goalLegendLabel, { color: theme.muted }]}>DAILY GOAL</Text>
+          <Text style={[styles.goalLegendValue, { color: theme.goldStrong }]}>{formatMinutes(targetMinutes)}</Text>
         </View>
         <View style={styles.bars}>
           {chartWeek.map((entry, index) => {
-            const height = Math.max(
-              10,
-              Math.round((entry.seconds / maxSeconds) * 104),
-            );
+            const height = entry.seconds <= 0
+              ? 0
+              : Math.max(
+                  3,
+                  Math.min(
+                    CONSISTENCY_TRACK_HEIGHT,
+                    Math.round((entry.seconds / SECONDS_PER_DAY) * CONSISTENCY_TRACK_HEIGHT),
+                  ),
+                );
             const today = index === chartWeek.length - 1;
             return (
               <View key={`${entry.day}-${index}`} style={styles.barColumn}>
@@ -149,6 +160,18 @@ function ConsistencyChart({ remote, activeFocusSeconds = 0 }: { remote: TrackerS
                     }
                     style={[styles.barFill, { height }]}
                   />
+                  <View
+                    style={[
+                      styles.goalTickGlow,
+                      { bottom: targetMarkerBottom - 3, backgroundColor: theme.goldStrong },
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.goalTick,
+                      { bottom: targetMarkerBottom - 1, backgroundColor: theme.goldStrong },
+                    ]}
+                  />
                 </View>
                 <Text
                   style={[
@@ -158,14 +181,16 @@ function ConsistencyChart({ remote, activeFocusSeconds = 0 }: { remote: TrackerS
                 >
                   {entry.day}
                 </Text>
-                {today ? (
-                  <View
-                    style={[
-                      styles.todayDot,
-                      { backgroundColor: theme.primary },
-                    ]}
-                  />
-                ) : null}
+                <View style={styles.todayMarkerSlot}>
+                  {today ? (
+                    <View
+                      style={[
+                        styles.todayDot,
+                        { backgroundColor: theme.primary },
+                      ]}
+                    />
+                  ) : null}
+                </View>
               </View>
             );
           })}
@@ -953,7 +978,7 @@ export default function TrackerScreen() {
               ]}
             >
               <RevisionTrackerShortcut />
-              <MonthlyReportShortcut />
+
             </View>
           </View>
         </LinearGradient>
@@ -1577,20 +1602,32 @@ const styles = StyleSheet.create({
   },
   trendText: { fontFamily: font.bold, fontSize: 10 },
   chartArea: { height: 164, marginTop: 18, position: "relative" },
-  goalLine: {
+  goalLegend: {
     position: "absolute",
-    top: 42,
-    left: 0,
-    right: 0,
-    borderTopWidth: 1,
-    borderStyle: "dashed",
+    right: 2,
+    top: -17,
+    zIndex: 3,
+    minHeight: 19,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
   },
-  goalLabel: {
-    position: "absolute",
-    right: 0,
-    top: -15,
-    fontFamily: font.medium,
-    fontSize: 8,
+  goalLegendMark: {
+    width: 8,
+    height: 2,
+    borderRadius: 1,
+  },
+  goalLegendLabel: {
+    fontFamily: font.bold,
+    fontSize: 5.5,
+    letterSpacing: 0.45,
+  },
+  goalLegendValue: {
+    fontFamily: font.bold,
+    fontSize: 7,
   },
   bars: {
     flex: 1,
@@ -1603,20 +1640,38 @@ const styles = StyleSheet.create({
     flex: 1,
     height: "100%",
     alignItems: "center",
-    justifyContent: "flex-end",
+    justifyContent: "flex-start",
   },
-  barValue: { fontFamily: font.semibold, fontSize: 8, marginBottom: 5 },
+  barValue: { height: 13, lineHeight: 10, fontFamily: font.semibold, fontSize: 8, marginBottom: 5 },
   barTrack: {
     width: "74%",
     maxWidth: 28,
-    height: 108,
+    height: CONSISTENCY_TRACK_HEIGHT,
     borderRadius: 9,
     overflow: "hidden",
     justifyContent: "flex-end",
   },
   barFill: { width: "100%", borderRadius: 9 },
-  dayLabel: { fontFamily: font.bold, fontSize: 9, marginTop: 6 },
-  todayDot: { width: 4, height: 4, borderRadius: 2, marginTop: 2 },
+  goalTickGlow: {
+    position: "absolute",
+    left: 2,
+    right: 2,
+    height: 6,
+    borderRadius: 3,
+    opacity: 0.16,
+    zIndex: 2,
+  },
+  goalTick: {
+    position: "absolute",
+    left: 2,
+    right: 2,
+    height: 2,
+    borderRadius: 1,
+    zIndex: 3,
+  },
+  dayLabel: { fontFamily: font.bold, fontSize: 9, lineHeight: 11, marginTop: 6 },
+  todayMarkerSlot: { height: 8, alignItems: "center", justifyContent: "center" },
+  todayDot: { width: 4, height: 4, borderRadius: 2 },
   chartInsights: {
     minHeight: 73,
     borderTopWidth: 0,

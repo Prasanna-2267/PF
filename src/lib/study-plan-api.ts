@@ -3,12 +3,14 @@ import { api } from '@/lib/api';
 export type StudyTaskStatus = 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'SKIPPED' | 'RESCHEDULED' | 'REPLACED';
 export type StudyTask = {
   id: string;
-  type: 'READ_NOTE' | 'CONTINUE_NOTE' | 'REVISE_NOTE' | 'MANUAL';
-  source: 'SYLLABUS_PLAN' | 'REVISION_DUE' | 'CONTINUE_RESOURCE' | 'CARRY_OVER' | 'MANUAL';
+  type: 'READ_NOTE' | 'CONTINUE_NOTE' | 'REVISE_NOTE' | 'PRACTICE_WEAK_CONCEPT' | 'MANUAL';
+  source: 'SYLLABUS_PLAN' | 'REVISION_DUE' | 'CONTINUE_RESOURCE' | 'CARRY_OVER' | 'WEAK_CONCEPT' | 'MANUAL';
   status: StudyTaskStatus;
   estimateSource: 'ADMIN' | 'FALLBACK_V1' | 'LEARNER';
   title: string;
   reason: string;
+  chapterName: string | null;
+  conceptName: string | null;
   plannedMinutes: number;
   actualMinutes: number | null;
   priority: number;

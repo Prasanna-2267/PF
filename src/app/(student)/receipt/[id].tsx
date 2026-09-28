@@ -69,7 +69,7 @@ function ReceiptView({ receipt, onBack }: { receipt: Receipt; onBack: () => void
 function money(value: Money) { return new Intl.NumberFormat('en-IN', { style: 'currency', currency: value?.currency ?? 'INR', maximumFractionDigits: 2 }).format(value?.amount ?? 0); }
 function dateTime(value: string) { return new Date(value).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }); }
 function friendly(value: string | null) { return value ? value.replaceAll('_', ' ').toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Not recorded'; }
-function resourceLabel(value: string) { return ({ PACKAGE: 'Study package', PREMIUM_NOTES: 'Premium note', QUESTION_BANK: 'Question Bank', MONTHLY_REPORT: 'Monthly report' }[value] ?? friendly(value)); }
+function resourceLabel(value: string) { return ({ PACKAGE: 'Study package', PREMIUM_NOTES: 'Premium note', QUESTION_BANK: 'Question Bank' }[value] ?? friendly(value)); }
 function orderStatus(status: string, refundStatus?: string) { if (refundStatus === 'FULL' || status === 'REFUNDED') return 'Refunded'; if (refundStatus === 'PARTIAL') return 'Partially Refunded'; return friendly(status); }
 
 const styles = StyleSheet.create({

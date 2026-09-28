@@ -1,5 +1,8 @@
 import type { LearnerProfile } from '@/lib/learner-profile-store';
 
+export const MIN_DAILY_TARGET_MINUTES = 15;
+export const MAX_DAILY_TARGET_MINUTES = 24 * 60;
+
 export type PreferenceCourse = {
   id: string;
   code: string;
@@ -73,7 +76,7 @@ export function parseDailyTarget(value: string): number | null {
   const minutes = normalized.match(/(\d+)\s*(?:m|min)/)?.[1];
   const total = Math.round((hours ? Number(hours) * 60 : 0) + (minutes ? Number(minutes) : 0));
   if (!total && /^\d+$/.test(normalized)) return Number(normalized);
-  return total >= 15 && total <= 720 ? total : null;
+  return total >= MIN_DAILY_TARGET_MINUTES && total <= MAX_DAILY_TARGET_MINUTES ? total : null;
 }
 
 export function parseReminderTime(value: string): string | null {

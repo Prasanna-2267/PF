@@ -31,11 +31,11 @@ export function ProtectedPdfReader({ source, onLoadComplete, onError }: Protecte
   useEffect(() => {
     let mounted = true;
     void import('react-pdf').then(({ Document, Page, pdfjs }) => {
-      pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+      pdfjs.GlobalWorkerOptions.workerSrc = new URL('/api/protected-viewer/assets/pdf.worker.min.mjs', sourceUri).toString();
       if (mounted) setPdfComponents({ Document, Page });
     }).catch((error: unknown) => onError(error instanceof Error ? error.message : 'The PDF renderer could not start.'));
     return () => { mounted = false; };
-  }, [onError]);
+  }, [onError, sourceUri]);
 
   if (!pdfComponents) return <div style={styles.viewer}><div style={styles.status}>Opening protected PDF…</div></div>;
   const { Document, Page } = pdfComponents;

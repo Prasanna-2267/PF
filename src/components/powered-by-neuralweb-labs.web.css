@@ -1,0 +1,45 @@
+.pf-mobile-powered-brand {
+  align-self: center;
+  display: inline-block;
+  color: transparent !important;
+  background: linear-gradient(110deg, #397ce2 0%, #7baaff 25%, #ffffff 50%, #7baaff 75%, #397ce2 100%);
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  font-family: Manrope-ExtraBold, Manrope, sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .03em;
+  line-height: 16px;
+  text-align: center;
+  text-decoration: none !important;
+  animation: pf-mobile-powered-brand-wave 3s infinite linear;
+}
+
+.pf-mobile-powered-brand strong { color: inherit; font: inherit; }
+
+.pf-mobile-powered-brand--warm {
+  background-image: linear-gradient(110deg, #ff7a35 0%, #f0b84e 25%, #fff1b8 50%, #ffb13b 75%, #ff7a35 100%);
+  font-size: 10px;
+  letter-spacing: .03em;
+}
+
+.pf-mobile-powered-brand--light {
+  background-image: linear-gradient(110deg, #176392 0%, #5fa6d0 25%, #fff4ce 50%, #c17a16 75%, #176392 100%);
+}
+
+.pf-mobile-powered-brand:hover,
+.pf-mobile-powered-brand:focus-visible {
+  color: transparent !important;
+  text-decoration: none !important;
+  filter: brightness(1.3);
+}
+
+@keyframes pf-mobile-powered-brand-wave {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pf-mobile-powered-brand { animation: none; background-position: 50% 0; }
+}

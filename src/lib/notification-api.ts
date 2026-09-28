@@ -3,18 +3,13 @@ import { api } from '@/lib/api';
 export type NotificationPreferences = {
   pushEnabled: boolean;
   broadcastEnabled: boolean;
-  dailyPlanEnabled: boolean;
-  streakRiskEnabled: boolean;
   securityEnabled: boolean;
   accountEnabled: boolean;
-  quietHoursEnabled: boolean;
-  quietHoursStart: string;
-  quietHoursEnd: string;
 };
 
 export type LearnerNotification = {
   id: string;
-  category: 'BROADCAST' | 'DAILY_PLAN' | 'STREAK_RISK' | 'SECURITY' | 'ACCOUNT' | string;
+  category: 'BROADCAST' | 'REVISION_DUE' | 'RESOURCE_EXPIRY' | 'SECURITY' | 'ACCOUNT' | string;
   title: string;
   body: string;
   data: Record<string, unknown> | null;

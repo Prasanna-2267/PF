@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -36,7 +37,7 @@ import {
   logoutSession,
 } from "@/lib/auth-session";
 import { useAuthStore } from "@/lib/auth-store";
-import { learnerProfileFromPreference } from "@/lib/learner-preferences";
+import { MAX_DAILY_TARGET_MINUTES, MIN_DAILY_TARGET_MINUTES, learnerProfileFromPreference } from "@/lib/learner-preferences";
 import { useLearnerProfileStore } from "@/lib/learner-profile-store";
 import {
   getNotificationPreferences,
@@ -66,13 +67,8 @@ import { PoweredByNeuralWebLabs } from "@/components/powered-by-neuralweb-labs";
 const defaults: NotificationPreferences = {
   pushEnabled: true,
   broadcastEnabled: true,
-  dailyPlanEnabled: true,
-  streakRiskEnabled: true,
   securityEnabled: true,
   accountEnabled: true,
-  quietHoursEnabled: false,
-  quietHoursStart: "22:00",
-  quietHoursEnd: "07:00",
 };
 const months = [
   "Jan",
@@ -105,6 +101,7 @@ export default function AccountScreen() {
   const [editor, setEditor] = useState<Editor>(null);
   const [customTargetHours, setCustomTargetHours] = useState("");
   const [customTargetMinutes, setCustomTargetMinutes] = useState("");
+  const customTargetMinutesInput = useRef<TextInput>(null);
   const [savingTarget, setSavingTarget] = useState(false);
 
   const refresh = async () => {
@@ -211,13 +208,14 @@ export default function AccountScreen() {
       return;
     }
     const total = hours * 60 + minutes;
-    if (total < 15 || total > 720) {
+    if (total < MIN_DAILY_TARGET_MINUTES || total > MAX_DAILY_TARGET_MINUTES) {
       Alert.alert(
         "Invalid study time",
-        "Choose a daily target between 15 minutes and 12 hours.",
+        "Choose a daily target between 15 minutes and 24 hours.",
       );
       return;
     }
+    Keyboard.dismiss();
     void saveStudyTarget(total);
   };
   const completeSignOut = () => {
@@ -243,6 +241,7 @@ export default function AccountScreen() {
     >
       <ScrollView
         contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.hero}>
@@ -360,7 +359,7 @@ export default function AccountScreen() {
                 {targetLabel}
               </Text>
               <Text style={[styles.rowHint, { color: theme.faint }]}>
-                A streak day completes only after this target is reached.
+                Complete a focus session to continue your streak. This target guides your daily progress.
               </Text>
             </View>
           </View>
@@ -414,9 +413,13 @@ export default function AccountScreen() {
                 accessibilityLabel="Custom daily study hours"
                 editable={live && !savingTarget}
                 keyboardType="number-pad"
+                returnKeyType="next"
+                blurOnSubmit={false}
+                maxLength={2}
+                selectTextOnFocus
                 value={customTargetHours}
-                onChangeText={setCustomTargetHours}
-                onSubmitEditing={applyCustomStudyTarget}
+                onChangeText={(value) => setCustomTargetHours(value.replace(/\D/g, "").slice(0, 2))}
+                onSubmitEditing={() => customTargetMinutesInput.current?.focus()}
                 placeholder="Hours"
                 placeholderTextColor={theme.faint}
                 style={[
@@ -429,11 +432,15 @@ export default function AccountScreen() {
                 ]}
               />
               <TextInput
+                ref={customTargetMinutesInput}
                 accessibilityLabel="Custom daily study minutes"
                 editable={live && !savingTarget}
                 keyboardType="number-pad"
+                returnKeyType="done"
+                maxLength={2}
+                selectTextOnFocus
                 value={customTargetMinutes}
-                onChangeText={setCustomTargetMinutes}
+                onChangeText={(value) => setCustomTargetMinutes(value.replace(/\D/g, "").slice(0, 2))}
                 onSubmitEditing={applyCustomStudyTarget}
                 placeholder="Minutes"
                 placeholderTextColor={theme.faint}
@@ -488,21 +495,6 @@ export default function AccountScreen() {
                 "broadcastEnabled",
                 "Announcements",
                 "Updates from Parallax Flow",
-              ],
-              [
-                "dailyPlanEnabled",
-                "Daily study plan",
-                "Your planned work at reminder time",
-              ],
-              [
-                "streakRiskEnabled",
-                "Streak at risk",
-                "A final nudge before the day closes",
-              ],
-              [
-                "quietHoursEnabled",
-                "Quiet hours",
-                `${notifications.quietHoursStart}–${notifications.quietHoursEnd}`,
               ],
             ] as const
           ).map(([key, label, hint], index, all) => (
