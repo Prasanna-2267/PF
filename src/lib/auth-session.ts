@@ -335,6 +335,20 @@ export async function loginWithPassword(email: string, password: string): Promis
   return hydrated.user;
 }
 
+export type PasswordResetChallenge = { challengeId: string; expiresAt: string };
+
+export async function requestPasswordReset(email: string): Promise<PasswordResetChallenge> {
+  const response = await authHttp.post<PasswordResetChallenge>('/auth/password-reset/request', { email }, {
+    headers: await authRequestHeaders(),
+  });
+  return response.data;
+}
+
+export async function confirmPasswordReset(input: { challengeId: string; code: string; newPassword: string; confirmPassword: string }): Promise<void> {
+  await authHttp.post('/auth/password-reset/confirm', input, {
+    headers: await authRequestHeaders(),
+  });
+}
 export async function beginStudentRegistration(input: { fullName: string; phone: string; email: string; password: string; devicePolicyAccepted: true }): Promise<RegistrationChallengeResult> {
   const response = await authHttp.post<RegistrationChallengeResult>('/auth/registrations', input, {
     headers: await authRequestHeaders(),

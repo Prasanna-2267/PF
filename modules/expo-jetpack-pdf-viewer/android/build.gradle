@@ -1,0 +1,23 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.parallaxflow'
+version = '1.0.0'
+
+android {
+  namespace 'expo.modules.jetpackpdfviewer'
+  compileSdkExtension 19
+
+  defaultConfig {
+    versionCode 1
+    minSdk 28
+    versionName '1.0.0'
+  }
+}
+
+dependencies {
+  implementation 'androidx.appcompat:appcompat:1.7.1'
+  implementation 'androidx.pdf:pdf-viewer-fragment:1.0.0-beta01'
+}

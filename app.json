@@ -55,6 +55,7 @@
       ],
       "./plugins/with-android-secure-by-default.js",
       "./plugins/with-react-native-pdf.js",
+      "./plugins/with-jetpack-pdf-viewer.js",
       "expo-image",
       "expo-web-browser"
     ],
